@@ -138,8 +138,8 @@
     }
   }
 
-  banner.addEventListener("click", skipMessage);
-
+banner.style.pointerEvents = "none";
+  
   document.addEventListener("keydown", (e) => {
     const isTypingChat = document.activeElement?.closest(".chat-message") || document.activeElement?.tagName === "TEXTAREA";
     const sheetOpen = document.querySelector(".app.window-app.sheet")?.classList.contains("minimized") === false;
