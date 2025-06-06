@@ -61,7 +61,7 @@
     imgElem = document.createElement("img");
     imgElem.id = "vn-chat-image";
     imgElem.style.position = "fixed";
-    imgElem.style.bottom = "5%";
+    imgElem.style.bottom = "0";
     imgElem.style.left = "0";
     imgElem.style.width = "31vw";
     imgElem.style.height = "31vw";
@@ -107,15 +107,13 @@
     if (entry.name !== currentSpeaker) {
       imgElem.style.opacity = "0";
       imgElem.style.left = "-35vw";
-      setTimeout(() => {
-        if (entry.image) {
-          imgElem.src = entry.image;
+      if (entry.image) {
+        imgElem.src = entry.image;
+        setTimeout(() => {
           imgElem.style.left = "0";
           imgElem.style.opacity = "1";
-        } else {
-          imgElem.style.opacity = "0";
-        }
-      }, 100);
+        }, 50);
+      }
       currentSpeaker = entry.name;
     }
 
@@ -135,6 +133,7 @@
       setTimeout(() => {
         banner.style.display = "none";
         currentSpeaker = null;
+        currentMessage = null;
       }, 250);
     }
   }
