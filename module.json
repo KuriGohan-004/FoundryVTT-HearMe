@@ -1,0 +1,19 @@
+{
+  "name": "chat-sound-notification",
+  "title": "Hear Me- Chat Sound Notification",
+  "description": "Plays a sound when a chat is sent.",
+  "version": "1.0.0",
+  "author": "Kuri_Kame",
+  "minimumCoreVersion": "10",
+  "compatibleCoreVersion": "11",
+  "scripts": ["chat-sound.js"],
+  "esmodules": [],
+  "styles": [],
+  "packs": [],
+  "languages": [],
+  "system": "",
+  "url": "",
+  "manifest": "",
+  "download": "",
+  "flags": {}
+}
