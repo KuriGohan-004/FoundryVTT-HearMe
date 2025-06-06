@@ -2,12 +2,13 @@
   // Create or reuse the banner container in the DOM
   let banner = document.getElementById("vn-chat-banner");
   if (!banner) {
+    // Main banner container
     banner = document.createElement("div");
     banner.id = "vn-chat-banner";
     banner.style.position = "fixed";
     banner.style.bottom = "0";
-    banner.style.left = "0";
-    banner.style.width = "75%";
+    banner.style.left = "100";
+    banner.style.width = "55%";
     banner.style.background = "rgba(0,0,0,0.75)";
     banner.style.color = "white";
     banner.style.fontFamily = "Arial, sans-serif";
@@ -19,8 +20,20 @@
     banner.style.userSelect = "none";
     banner.style.backdropFilter = "blur(4px)";
     banner.style.boxShadow = "0 -2px 10px rgba(0,0,0,0.7)";
-    banner.style.maxHeight = "75vh";
+    banner.style.maxHeight = "85vh";
     banner.style.overflowY = "auto";
+    banner.style.marginLeft = "10px";
+
+    // Speaker image (above the text box)
+    const imageElem = document.createElement("img");
+    imageElem.id = "vn-chat-image";
+    imageElem.style.width = "128px";
+    imageElem.style.height = "128px";
+    imageElem.style.objectFit = "cover";
+    imageElem.style.border = "2px solid white";
+    imageElem.style.borderRadius = "8px";
+    imageElem.style.marginBottom = "10px";
+    banner.appendChild(imageElem);
 
     // Speaker name
     const nameElem = document.createElement("div");
@@ -42,13 +55,19 @@
   let hideTimeout = null;
   const showDuration = 10000; // ms to show message before fading
 
-  // Helper: Show banner with name and message
-  function showBanner(name, msg) {
+  // Helper: Show banner with name, message, and image
+  async function showBanner(name, msg, actor) {
     const nameElem = document.getElementById("vn-chat-name");
     const msgElem = document.getElementById("vn-chat-msg");
+    const imageElem = document.getElementById("vn-chat-image");
 
     nameElem.textContent = name;
-    msgElem.innerHTML = msg;  // chat messages may contain HTML formatting
+    msgElem.innerHTML = msg;
+
+    // Get image: prefer token image, fallback to actor image
+    let imageSrc = actor.token?.texture?.src || actor.img;
+    if (!imageSrc) imageSrc = "icons/svg/mystery-man.svg";  // fallback image
+    imageElem.src = imageSrc;
 
     banner.style.display = "flex";
     banner.style.opacity = "1";
@@ -63,23 +82,18 @@
 
   // Hook to listen for new chat messages
   Hooks.on("createChatMessage", (message) => {
-    if (!message.visible) return; // ignore hidden messages
+    if (!message.visible) return;
 
-    // We want only messages where the speaker is an Actor (character)
     const speaker = message.speaker;
-    if (!speaker || !speaker.actor) return; // ignore player/OOC/system messages
-
-    // Optional: Ignore rolls or other system messages
+    if (!speaker || !speaker.actor) return;
     if (message.isRoll) return;
 
-    // Get actor's name (display name or actor name)
     const actor = game.actors.get(speaker.actor);
     if (!actor) return;
 
     const speakerName = actor.name;
-    // Message text, cleaned for display
     const chatContent = message.content;
 
-    showBanner(speakerName, chatContent);
+    showBanner(speakerName, chatContent, actor);
   });
 })();
