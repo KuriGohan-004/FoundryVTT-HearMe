@@ -1,13 +1,23 @@
 {
-  "name": "chat-sound-notification",
-  "title": "Chat Sound Notification",
-  "description": "Plays a sound when a chat message arrives.",
+  "id": "hearme-chat-notification",
+  "title": "HearMe Chat Notifications",
+  "description": "Make a noise when someone sends a chat message.",
   "version": "1.0.0",
-  "author": "YourName",
-  "minimumCoreVersion": "10",
-  "compatibleCoreVersion": "11",
-  "scripts": ["scripts/chat-sound.js"],
-  "url": "https://github.com/YourUsername/chat-sound-notification",
-  "manifest": "https://raw.githubusercontent.com/KuriGohan-004/FoundryVTT-HearMe/refs/heads/main/module.json",
-  "download": "https://github.com/KuriGohan-004/FoundryVTT-HearMe/refs/heads/main.zip"
+  "compatibility": {
+    "minimum": "12",
+    "verified": "12"
+  },
+  "authors": [
+    {
+      "name": "Kuri_Kame",
+      "flags": {}
+    }
+  ],
+  "esmodules": [
+    "scripts/chat-sound.js"
+  ],
+  "url": "https://github.com/KuriGohan-004/FoundryVTT-HearMe",
+  "manifest": "https://github.com/KuriGohan-004/FoundryVTT-HearMe/edit/main/module.json",
+  "download": "https://github.com/KuriGohan-004/FoundryVTT-HearMe/refs/heads/main.zip",
+  "license": "MIT"
 }
