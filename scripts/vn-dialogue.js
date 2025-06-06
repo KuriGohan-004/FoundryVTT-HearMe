@@ -1,29 +1,29 @@
 (() => {
-  // Create or reuse the image element
+  // Create or reuse the speaker image element
   let imageElem = document.getElementById("vn-chat-image");
   if (!imageElem) {
     imageElem = document.createElement("img");
     imageElem.id = "vn-chat-image";
     imageElem.style.position = "fixed";
-    imageElem.style.bottom = "75vh";  // placed just above the banner
-    imageElem.style.left = "10px";    // 10px margin to the left
-    imageElem.style.width = "128px";
-    imageElem.style.height = "128px";
+    imageElem.style.bottom = "0";        // bottom-aligned
+    imageElem.style.left = "10px";       // margin from the left
+    imageElem.style.width = "384px";     // 3x size
+    imageElem.style.height = "384px";
     imageElem.style.objectFit = "cover";
-    imageElem.style.zIndex = 99998;   // just behind the banner
-    imageElem.style.display = "none"; // hidden initially
+    imageElem.style.zIndex = 99998;      // behind the text box
+    imageElem.style.display = "none";
     document.body.appendChild(imageElem);
   }
 
-  // Create or reuse the banner container
+  // Create or reuse the VN chat banner
   let banner = document.getElementById("vn-chat-banner");
   if (!banner) {
     banner = document.createElement("div");
     banner.id = "vn-chat-banner";
     banner.style.position = "fixed";
     banner.style.bottom = "0";
-    banner.style.left = "20%";           // shifted right 20% of screen
-    banner.style.width = "75%";
+    banner.style.left = "20%";           // shifted 20% to the right
+    banner.style.width = "40%";          // reduced width
     banner.style.background = "rgba(0,0,0,0.75)";
     banner.style.color = "white";
     banner.style.fontFamily = "Arial, sans-serif";
@@ -35,7 +35,7 @@
     banner.style.userSelect = "none";
     banner.style.backdropFilter = "blur(4px)";
     banner.style.boxShadow = "0 -2px 10px rgba(0,0,0,0.7)";
-    banner.style.maxHeight = "75vh";
+    banner.style.maxHeight = "25vh";     // ¼ screen height
     banner.style.overflowY = "auto";
 
     // Speaker name
@@ -49,7 +49,7 @@
     // Message text
     const msgElem = document.createElement("div");
     msgElem.id = "vn-chat-msg";
-    msgElem.style.fontSize = "3em";  // larger font size
+    msgElem.style.fontSize = "2.2em";    // updated font size
     banner.appendChild(msgElem);
 
     document.body.appendChild(banner);
@@ -66,7 +66,7 @@
     nameElem.textContent = name;
     msgElem.innerHTML = msg;
 
-    // Get image source: token or actor
+    // Get speaker image (token preferred, fallback to actor)
     let imageSrc = actor.token?.texture?.src || actor.img || "icons/svg/mystery-man.svg";
     imageElem.src = imageSrc;
     imageElem.style.display = "block";
