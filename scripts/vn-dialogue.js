@@ -1,4 +1,5 @@
 (() => {
+  // IMAGE ELEMENT
   let imageElem = document.getElementById("vn-chat-image");
   if (!imageElem) {
     imageElem = document.createElement("img");
@@ -17,12 +18,13 @@
     document.body.appendChild(imageElem);
   }
 
+  // CHAT BANNER ELEMENT
   let banner = document.getElementById("vn-chat-banner");
   if (!banner) {
     banner = document.createElement("div");
     banner.id = "vn-chat-banner";
     banner.style.position = "fixed";
-    banner.style.bottom = "5%";            // <-- raised 5% from bottom
+    banner.style.bottom = "5%";
     banner.style.left = "20%";
     banner.style.width = "60%";
     banner.style.background = "rgba(0,0,0,0.75)";
@@ -54,17 +56,34 @@
     msgElem.style.whiteSpace = "pre-wrap";
     banner.appendChild(msgElem);
 
+    const iconElem = document.createElement("div");
+    iconElem.id = "vn-chat-icon";
+    iconElem.textContent = "↓";
+    iconElem.style.fontSize = "2em";
+    iconElem.style.position = "absolute";
+    iconElem.style.bottom = "8px";
+    iconElem.style.right = "16px";
+    iconElem.style.opacity = "0.7";
+    iconElem.style.display = "none";
+    iconElem.style.pointerEvents = "none";
+    banner.appendChild(iconElem);
+
     document.body.appendChild(banner);
   }
 
   const nameElem = document.getElementById("vn-chat-name");
   const msgElem = document.getElementById("vn-chat-msg");
+  const iconElem = document.getElementById("vn-chat-icon");
 
   let messageQueue = [];
   let typing = false;
   let currentMessage = null;
   let typeIndex = 0;
   let typewriterTimeout = null;
+
+  function updateNextArrow() {
+    iconElem.style.display = messageQueue.length > 0 ? "block" : "none";
+  }
 
   function typewriterEffect(html, callback) {
     msgElem.innerHTML = "";
@@ -97,7 +116,7 @@
       buffer += part.value;
       msgElem.innerHTML = buffer;
       typeIndex++;
-      typewriterTimeout = setTimeout(typeNext, 20); // fast typing
+      typewriterTimeout = setTimeout(typeNext, 20);
     }
 
     typeNext();
@@ -114,7 +133,7 @@
     imageElem.style.opacity = "1";
 
     typewriterEffect(entry.msg, () => {
-      // Finished typing — wait for E key
+      updateNextArrow();
     });
   }
 
@@ -122,14 +141,14 @@
     if (typing) {
       clearTimeout(typewriterTimeout);
       typing = false;
-      msgElem.innerHTML = currentMessage.msg; // Show full message instantly
+      msgElem.innerHTML = currentMessage.msg;
+      updateNextArrow();
       return;
     }
 
     if (messageQueue.length > 0) {
       displayMessage(messageQueue.shift());
     } else {
-      // Hide everything
       banner.style.transition = "opacity 0.5s";
       imageElem.style.transition = "opacity 0.5s";
       banner.style.opacity = "0";
@@ -139,7 +158,23 @@
         imageElem.style.display = "none";
       }, 500);
       currentMessage = null;
+      iconElem.style.display = "none";
     }
+  }
+
+  function isVNInputAllowed() {
+    const active = document.activeElement;
+    const isTyping = active && (
+      active.tagName === "INPUT" ||
+      active.tagName === "TEXTAREA" ||
+      active.isContentEditable
+    );
+
+    const sheetOpen = Object.values(ui.windows).some(app =>
+      app.rendered && app.element?.hasClass("sheet")
+    );
+
+    return !isTyping && !sheetOpen;
   }
 
   Hooks.on("createChatMessage", (message) => {
@@ -158,11 +193,12 @@
       displayMessage(entry);
     } else {
       messageQueue.push(entry);
+      updateNextArrow();
     }
   });
 
   window.addEventListener("keydown", (ev) => {
-    if (ev.key === "e" || ev.key === "E") {
+    if ((ev.key === "e" || ev.key === "E") && isVNInputAllowed()) {
       advanceMessage();
     }
   });
