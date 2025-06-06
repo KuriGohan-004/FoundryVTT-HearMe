@@ -1,38 +1,70 @@
+// === INIT SOUND SETTING ===
+Hooks.once("init", () => {
+  game.settings.register("hearme-chat-notification", "pingSound", {
+    name: "Chat Notification Sound",
+    hint: "The sound to play when a new VN chat message is displayed.",
+    scope: "world",
+    config: true,
+    type: String,
+    default: "modules/hearme-chat-notification/ui/chat-ping.ogg",
+    filePicker: "audio"
+  });
+});
+
 (() => {
   let banner = document.getElementById("vn-chat-banner");
   let imgElem = document.getElementById("vn-chat-image");
   let arrowElem = document.getElementById("vn-chat-arrow");
-  let timerBar = document.getElementById("vn-chat-timerbar");
+  let timerBar = null;
   let currentSpeaker = null;
   let currentMessage = null;
   let messageQueue = [];
   let typing = false;
-  let autoSkipTimer = null;
+  let autoSkipTimeout = null;
+  let documentVisible = true;
+
+  const playChatSound = () => {
+    const soundPath = game.settings.get("hearme-chat-notification", "pingSound");
+    if (!soundPath) return;
+
+    if (game.audio?.context?.state === "suspended") {
+      game.audio.context.resume();
+    }
+
+    AudioHelper.play({
+      src: soundPath,
+      volume: 0.8,
+      autoplay: true,
+      loop: false,
+    }, true);
+  };
 
   if (!banner) {
     banner = document.createElement("div");
     banner.id = "vn-chat-banner";
-    banner.style.position = "fixed";
-    banner.style.bottom = "5%";
-    banner.style.left = "20%";
-    banner.style.width = "60%";
-    banner.style.background = "rgba(0,0,0,0.75)";
-    banner.style.color = "white";
-    banner.style.fontFamily = "Arial, sans-serif";
-    banner.style.padding = "12px 20px";
-    banner.style.zIndex = 100; // Lowered to appear beneath sheets
-    banner.style.display = "none";
-    banner.style.flexDirection = "column";
-    banner.style.alignItems = "flex-start";
-    banner.style.userSelect = "none";
-    banner.style.backdropFilter = "blur(4px)";
-    banner.style.boxShadow = "0 -2px 10px rgba(0,0,0,0.7)";
-    banner.style.minHeight = "25vh";
-    banner.style.maxHeight = "50vh";
-    banner.style.overflowY = "auto";
-    banner.style.transition = "opacity 0.25s ease";
-    banner.style.opacity = "0";
-    banner.style.pointerEvents = "none";
+    Object.assign(banner.style, {
+      position: "fixed",
+      bottom: "5%",
+      left: "20%",
+      width: "60%",
+      background: "rgba(0,0,0,0.75)",
+      color: "white",
+      fontFamily: "Arial, sans-serif",
+      padding: "12px 20px",
+      zIndex: 99,
+      display: "none",
+      flexDirection: "column",
+      alignItems: "flex-start",
+      userSelect: "none",
+      backdropFilter: "blur(4px)",
+      boxShadow: "0 -2px 10px rgba(0,0,0,0.7)",
+      minHeight: "25vh",
+      maxHeight: "50vh",
+      overflowY: "auto",
+      transition: "opacity 0.25s ease",
+      opacity: "0",
+      pointerEvents: "none"
+    });
 
     const nameElem = document.createElement("div");
     nameElem.id = "vn-chat-name";
@@ -49,24 +81,29 @@
     arrowElem = document.createElement("div");
     arrowElem.id = "vn-chat-arrow";
     arrowElem.innerHTML = "&#8595;";
-    arrowElem.style.position = "absolute";
-    arrowElem.style.bottom = "8px";
-    arrowElem.style.right = "16px";
-    arrowElem.style.fontSize = "1.5em";
-    arrowElem.style.opacity = "0.5";
-    arrowElem.style.display = "none";
+    Object.assign(arrowElem.style, {
+      position: "absolute",
+      bottom: "8px",
+      right: "16px",
+      fontSize: "1.5em",
+      opacity: "0.5",
+      display: "none"
+    });
     banner.appendChild(arrowElem);
 
     timerBar = document.createElement("div");
-    timerBar.id = "vn-chat-timerbar";
-    timerBar.style.position = "absolute";
-    timerBar.style.left = "0";
-    timerBar.style.bottom = "0";
-    timerBar.style.height = "6px";
-    timerBar.style.background = "white";
-    timerBar.style.width = "100%";
-    timerBar.style.transition = "width linear";
-    timerBar.style.pointerEvents = "none";
+    timerBar.id = "vn-chat-timer";
+    Object.assign(timerBar.style, {
+      position: "absolute",
+      bottom: "0",
+      left: "0",
+      height: "5px",
+      width: "100%",
+      background: "white",
+      transformOrigin: "left",
+      transform: "scaleX(1)",
+      transition: "transform linear"
+    });
     banner.appendChild(timerBar);
 
     document.body.appendChild(banner);
@@ -75,33 +112,24 @@
   if (!imgElem) {
     imgElem = document.createElement("img");
     imgElem.id = "vn-chat-image";
-    imgElem.style.position = "fixed";
-    imgElem.style.bottom = "0";
-    imgElem.style.left = "0";
-    imgElem.style.width = "31vw";
-    imgElem.style.height = "31vw";
-    imgElem.style.objectFit = "contain";
-    imgElem.style.zIndex = 99; // Lower than sheet
-    imgElem.style.transition = "left 0.5s ease, opacity 0.5s ease";
-    imgElem.style.opacity = "0";
-    imgElem.style.pointerEvents = "none";
-    imgElem.style.border = "none";
+    Object.assign(imgElem.style, {
+      position: "fixed",
+      bottom: "0",
+      left: "0",
+      width: "31vw",
+      height: "31vw",
+      objectFit: "contain",
+      zIndex: 98,
+      transition: "left 0.5s ease, opacity 0.5s ease",
+      opacity: "0",
+      pointerEvents: "none",
+      border: "none"
+    });
     document.body.appendChild(imgElem);
   }
 
   function updateNextArrow() {
     arrowElem.style.display = messageQueue.length > 0 ? "block" : "none";
-  }
-
-  function clearAutoSkipTimer() {
-    if (autoSkipTimer) {
-      clearTimeout(autoSkipTimer);
-      autoSkipTimer = null;
-    }
-    if (timerBar) {
-      timerBar.style.transition = "none";
-      timerBar.style.width = "0%";
-    }
   }
 
   function typeText(element, text, speed = 20, callback) {
@@ -121,9 +149,30 @@
     typeChar();
   }
 
-  function displayMessage(entry) {
-    clearAutoSkipTimer();
+  function startAutoSkipTimer(textLength) {
+    clearTimeout(autoSkipTimeout);
+    timerBar.style.transition = "none";
+    timerBar.style.transform = "scaleX(1)";
 
+    const duration = 5000 + textLength * 50;
+
+    setTimeout(() => {
+      timerBar.style.transition = `transform ${duration}ms linear`;
+      timerBar.style.transform = "scaleX(0)";
+    }, 10);
+
+    autoSkipTimeout = setTimeout(() => {
+      const isFocused = document.hasFocus();
+      const sheetOpen = !!document.querySelector(".app.window-app.sheet:not(.minimized)") ||
+                        !!document.querySelector(".app.window-app.journal-entry:not(.minimized)");
+      if (isFocused && !sheetOpen) {
+        skipMessage();
+      }
+    }, duration);
+  }
+
+  function displayMessage(entry) {
+    clearTimeout(autoSkipTimeout);
     currentMessage = entry;
     const nameElem = document.getElementById("vn-chat-name");
     const msgElem = document.getElementById("vn-chat-msg");
@@ -131,6 +180,7 @@
     nameElem.textContent = entry.name;
     banner.style.display = "flex";
     banner.style.opacity = "1";
+    playChatSound();
 
     if (entry.name !== currentSpeaker) {
       imgElem.style.opacity = "0";
@@ -147,34 +197,21 @@
 
     typeText(msgElem, entry.msg, 20, () => {
       updateNextArrow();
-
-      const charCount = entry.msg.length;
-      const delay = 2000 + charCount * 50; // 2s + 0.05s per letter
-
-      if (timerBar) {
-        timerBar.style.transition = "none";
-        timerBar.style.width = "100%";
-        void timerBar.offsetWidth; // force reflow
-        timerBar.style.transition = `width ${delay}ms linear`;
-        timerBar.style.width = "0%";
-      }
-
-      autoSkipTimer = setTimeout(() => {
-        skipMessage();
-      }, delay);
+      if (documentVisible) startAutoSkipTimer(entry.msg.length);
     });
   }
 
   function skipMessage() {
-    clearAutoSkipTimer();
-
     if (typing) return;
+    clearTimeout(autoSkipTimeout);
     if (messageQueue.length > 0) {
       const next = messageQueue.shift();
       displayMessage(next);
     } else {
       banner.style.opacity = "0";
       imgElem.style.opacity = "0";
+      timerBar.style.transition = "none";
+      timerBar.style.transform = "scaleX(1)";
       setTimeout(() => {
         banner.style.display = "none";
         currentSpeaker = null;
@@ -185,7 +222,7 @@
 
   document.addEventListener("keydown", (e) => {
     const isTypingChat = document.activeElement?.closest(".chat-message") || document.activeElement?.tagName === "TEXTAREA";
-    const sheetOpen = document.querySelector(".app.window-app.sheet")?.classList.contains("minimized") === false;
+    const sheetOpen = !!document.querySelector(".app.window-app.sheet:not(.minimized)");
 
     if ((e.key === "q" || e.key === "Q") && !isTypingChat && !sheetOpen) skipMessage();
     if (e.key === "Tab") {
@@ -194,9 +231,12 @@
     }
   });
 
+  document.addEventListener("visibilitychange", () => {
+    documentVisible = !document.hidden;
+  });
+
   Hooks.on("createChatMessage", (message) => {
     if (!message.visible || message.isRoll) return;
-
     const content = message.content.trim();
     let name = "";
     let image = null;
@@ -220,12 +260,7 @@
       image = actor.img;
     }
 
-    const chatText = content;
-    const entry = {
-      name,
-      msg: chatText,
-      image
-    };
+    const entry = { name, msg: content, image };
 
     if (!currentMessage) {
       displayMessage(entry);
