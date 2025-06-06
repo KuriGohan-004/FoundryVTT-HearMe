@@ -11,22 +11,36 @@ Hooks.once("init", () => {
 });
 
 Hooks.on("ready", () => {
-  // Ensure audio context is resumed (if the user is alt-tabbed or page was inactive)
-  if (game.audio?.context?.state === "suspended") {
-    game.audio.context.resume();
-  }
+  // Resume audio context whenever the page becomes visible again
+  const resumeAudio = () => {
+    if (game.audio?.context?.state === "suspended") {
+      game.audio.context.resume();
+    }
+  };
 
-  Hooks.on("createChatMessage", (message) => {
+  // Listen for visibility change events
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) {
+      resumeAudio();
+    }
+  });
+
+  Hooks.on("createChatMessage", async (message) => {
     if (message.isRoll || !message.visible) return;
+
+    resumeAudio(); // Resume audio before playing sound
 
     const soundPath = game.settings.get("hearme-chat-notification", "pingSound");
     if (!soundPath) return;
 
-    AudioHelper.play({
-      src: soundPath,
-      volume: 0.8,
-      autoplay: true,
-      loop: false
-    }, true);
+    AudioHelper.play(
+      {
+        src: soundPath,
+        volume: 0.8,
+        autoplay: true,
+        loop: false,
+      },
+      true
+    );
   });
 });
