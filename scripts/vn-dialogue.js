@@ -7,8 +7,8 @@
     imageElem.style.position = "fixed";
     imageElem.style.bottom = "0";
     imageElem.style.left = "10px";
-    imageElem.style.width = "31vw";
-    imageElem.style.height = "31vw";
+    imageElem.style.width = "31vw";       // Set image width to 31vw
+    imageElem.style.height = "31vw";      // Set image height to 31vw
     imageElem.style.objectFit = "cover";
     imageElem.style.zIndex = 99998;
     imageElem.style.display = "none";
@@ -197,23 +197,27 @@
       const actor = game.actors.get(message.speaker.actor);
       if (!actor) return;
 
+      // Use token name if exists, else actor name
       if (message.speaker.token) {
+        // Find token in current scene by id
         const scene = game.scenes.active;
         const token = scene?.tokens.get(message.speaker.token);
         if (token) {
           name = token.name;
           image = token.texture.src;
         } else {
+          // fallback if token not found
           name = actor.name;
           image = actor.img;
         }
       } else {
+        // No token, fallback to actor info
         name = actor.name;
         image = actor.img;
       }
     }
 
-    // Text to show, stripping "/act " if narration
+    // The actual text to show: if /act, strip the command from the content
     const chatText = isActCommand ? content.replace(/^\/act\s*/, "") : content;
 
     const entry = {
@@ -232,7 +236,7 @@
 
   // Change key listener to Q:
   window.addEventListener("keydown", (ev) => {
-    if ((ev.key === "q" || ev.key === "Q") && isVNInputAllowed()) {
+    if ((ev.key === "tab" || ev.key === "tab") && isVNInputAllowed()) {
       advanceMessage();
     }
   });
