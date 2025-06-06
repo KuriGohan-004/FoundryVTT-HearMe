@@ -6,6 +6,7 @@
   let currentMessage = null;
   let messageQueue = [];
   let typing = false;
+  let autoSkipTimer = null;
 
   if (!banner) {
     banner = document.createElement("div");
@@ -18,7 +19,7 @@
     banner.style.color = "white";
     banner.style.fontFamily = "Arial, sans-serif";
     banner.style.padding = "12px 20px";
-    banner.style.zIndex = 99999;
+    banner.style.zIndex = 50; // LOWERED z-index to appear under character sheets
     banner.style.display = "none";
     banner.style.flexDirection = "column";
     banner.style.alignItems = "flex-start";
@@ -66,7 +67,7 @@
     imgElem.style.width = "31vw";
     imgElem.style.height = "31vw";
     imgElem.style.objectFit = "contain";
-    imgElem.style.zIndex = 99998;
+    imgElem.style.zIndex = 49; // LOWERED z-index to appear under character sheets
     imgElem.style.transition = "left 0.5s ease, opacity 0.5s ease";
     imgElem.style.opacity = "0";
     imgElem.style.pointerEvents = "none";
@@ -76,6 +77,13 @@
 
   function updateNextArrow() {
     arrowElem.style.display = messageQueue.length > 0 ? "block" : "none";
+  }
+
+  function clearAutoSkipTimer() {
+    if (autoSkipTimer) {
+      clearTimeout(autoSkipTimer);
+      autoSkipTimer = null;
+    }
   }
 
   function typeText(element, text, speed = 20, callback) {
@@ -104,6 +112,8 @@
     banner.style.display = "flex";
     banner.style.opacity = "1";
 
+    clearAutoSkipTimer(); // Cancel any pending timers
+
     if (entry.name !== currentSpeaker) {
       imgElem.style.opacity = "0";
       imgElem.style.left = "-35vw";
@@ -119,10 +129,14 @@
 
     typeText(msgElem, entry.msg, 20, () => {
       updateNextArrow();
+      autoSkipTimer = setTimeout(() => {
+        skipMessage(); // Auto skip after 6 seconds
+      }, 6000);
     });
   }
 
   function skipMessage() {
+    clearAutoSkipTimer(); // Stop auto-timer on manual skip
     if (typing) return;
     if (messageQueue.length > 0) {
       const next = messageQueue.shift();
@@ -138,8 +152,8 @@
     }
   }
 
-banner.style.pointerEvents = "none";
-  
+  banner.style.pointerEvents = "none";
+
   document.addEventListener("keydown", (e) => {
     const isTypingChat = document.activeElement?.closest(".chat-message") || document.activeElement?.tagName === "TEXTAREA";
     const sheetOpen = document.querySelector(".app.window-app.sheet")?.classList.contains("minimized") === false;
