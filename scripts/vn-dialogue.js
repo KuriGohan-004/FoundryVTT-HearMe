@@ -7,8 +7,8 @@
     imageElem.style.position = "fixed";
     imageElem.style.bottom = "0";
     imageElem.style.left = "10px";
-    imageElem.style.width = "35vw";
-    imageElem.style.height = "35vw";
+    imageElem.style.width = "31vw";
+    imageElem.style.height = "31vw";
     imageElem.style.objectFit = "cover";
     imageElem.style.zIndex = 99998;
     imageElem.style.display = "none";
@@ -42,6 +42,8 @@
     banner.style.minHeight = "25vh";
     banner.style.maxHeight = "60vh";
     banner.style.height = "auto";
+    banner.style.position = "relative";
+    banner.style.cursor = "pointer";
 
     const nameElem = document.createElement("div");
     nameElem.id = "vn-chat-name";
@@ -78,7 +80,6 @@
   let messageQueue = [];
   let typing = false;
   let currentMessage = null;
-  let typeIndex = 0;
   let typewriterTimeout = null;
 
   function updateNextArrow() {
@@ -89,48 +90,46 @@
     msgElem.innerHTML = "";
     typing = true;
 
-    const temp = document.createElement("div");
-    temp.innerHTML = html;
+    let i = 0;
+    const text = html;
 
-    let nodes = [];
-    temp.childNodes.forEach((node) => {
-      if (node.nodeType === Node.TEXT_NODE) {
-        nodes.push(...node.textContent.split("").map(c => ({ type: "text", value: c })));
-      } else if (node.nodeType === Node.ELEMENT_NODE) {
-        nodes.push({ type: "open", value: node.outerHTML.split(node.innerHTML)[0] });
-        nodes.push(...node.innerHTML.split("").map(c => ({ type: "text", value: c })));
-        nodes.push({ type: "close", value: `</${node.nodeName.toLowerCase()}>` });
-      }
-    });
-
-    let buffer = "";
-    typeIndex = 0;
-
-    function typeNext() {
-      if (typeIndex >= nodes.length) {
+    function type() {
+      if (i <= text.length) {
+        msgElem.innerHTML = text.slice(0, i);
+        i++;
+        typewriterTimeout = setTimeout(type, 15);
+      } else {
         typing = false;
         if (callback) callback();
-        return;
       }
-      const part = nodes[typeIndex];
-      buffer += part.value;
-      msgElem.innerHTML = buffer;
-      typeIndex++;
-      typewriterTimeout = setTimeout(typeNext, 20);
     }
-
-    typeNext();
+    type();
   }
 
   function displayMessage(entry) {
     currentMessage = entry;
-    nameElem.textContent = entry.name;
-    imageElem.src = entry.image || "icons/svg/mystery-man.svg";
+
+    // Show or hide name element depending on if name is empty
+    if (entry.name) {
+      nameElem.style.display = "block";
+      nameElem.textContent = entry.name;
+    } else {
+      nameElem.style.display = "none";
+      nameElem.textContent = "";
+    }
+
+    // Show or hide image element depending on if image is provided
+    if (entry.image) {
+      imageElem.src = entry.image;
+      imageElem.style.display = "block";
+      imageElem.style.opacity = "1";
+    } else {
+      imageElem.style.display = "none";
+      imageElem.src = "";
+    }
 
     banner.style.display = "flex";
     banner.style.opacity = "1";
-    imageElem.style.display = "block";
-    imageElem.style.opacity = "1";
 
     typewriterEffect(entry.msg, () => {
       updateNextArrow();
@@ -178,15 +177,49 @@
   }
 
   Hooks.on("createChatMessage", (message) => {
-    if (!message.visible || !message.speaker?.actor || message.isRoll) return;
+    if (!message.visible || message.isRoll) return;
 
-    const actor = game.actors.get(message.speaker.actor);
-    if (!actor) return;
+    const content = message.content.trim();
+
+    // Check for /act command (narration)
+    const isActCommand = content.startsWith("/act");
+
+    let name = "";
+    let image = null;
+
+    if (isActCommand) {
+      // Narration: no name, no image, just text after /act
+      name = "";
+      image = null;
+    } else {
+      // Normal message, get token name and image if possible
+      if (!message.speaker || !message.speaker.actor) return;
+      const actor = game.actors.get(message.speaker.actor);
+      if (!actor) return;
+
+      if (message.speaker.token) {
+        const scene = game.scenes.active;
+        const token = scene?.tokens.get(message.speaker.token);
+        if (token) {
+          name = token.name;
+          image = token.texture.src;
+        } else {
+          name = actor.name;
+          image = actor.img;
+        }
+      } else {
+        name = actor.name;
+        image = actor.img;
+      }
+    }
+
+    // Text to show, stripping "/act " if narration
+    const chatText = isActCommand ? content.replace(/^\/act\s*/, "") : content;
 
     const entry = {
-      name: actor.name,
-      msg: message.content,
-      image: actor.token?.texture?.src || actor.img
+      name,
+      msg: chatText,
+      image
     };
 
     if (!currentMessage) {
@@ -205,7 +238,6 @@
   });
 
   // Click banner to advance:
-  banner.style.cursor = "pointer";
   banner.addEventListener("click", () => {
     if (isVNInputAllowed()) advanceMessage();
   });
