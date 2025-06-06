@@ -7,7 +7,7 @@
     banner.style.position = "fixed";
     banner.style.bottom = "0";
     banner.style.left = "0";
-    banner.style.width = "100%";
+    banner.style.width = "75%";
     banner.style.background = "rgba(0,0,0,0.75)";
     banner.style.color = "white";
     banner.style.fontFamily = "Arial, sans-serif";
@@ -19,7 +19,7 @@
     banner.style.userSelect = "none";
     banner.style.backdropFilter = "blur(4px)";
     banner.style.boxShadow = "0 -2px 10px rgba(0,0,0,0.7)";
-    banner.style.maxHeight = "25vh";
+    banner.style.maxHeight = "75vh";
     banner.style.overflowY = "auto";
 
     // Speaker name
@@ -33,7 +33,7 @@
     // Message text
     const msgElem = document.createElement("div");
     msgElem.id = "vn-chat-msg";
-    msgElem.style.fontSize = "1em";
+    msgElem.style.fontSize = "3em";
     banner.appendChild(msgElem);
 
     document.body.appendChild(banner);
