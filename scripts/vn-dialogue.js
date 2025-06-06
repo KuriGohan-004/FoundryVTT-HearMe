@@ -2,6 +2,7 @@
   let banner = document.getElementById("vn-chat-banner");
   let imgElem = document.getElementById("vn-chat-image");
   let arrowElem = document.getElementById("vn-chat-arrow");
+  let timerBar = document.getElementById("vn-chat-timerbar");
   let currentSpeaker = null;
   let currentMessage = null;
   let messageQueue = [];
@@ -19,7 +20,7 @@
     banner.style.color = "white";
     banner.style.fontFamily = "Arial, sans-serif";
     banner.style.padding = "12px 20px";
-    banner.style.zIndex = 50; // LOWERED z-index to appear under character sheets
+    banner.style.zIndex = 100; // Lowered to appear beneath sheets
     banner.style.display = "none";
     banner.style.flexDirection = "column";
     banner.style.alignItems = "flex-start";
@@ -31,6 +32,7 @@
     banner.style.overflowY = "auto";
     banner.style.transition = "opacity 0.25s ease";
     banner.style.opacity = "0";
+    banner.style.pointerEvents = "none";
 
     const nameElem = document.createElement("div");
     nameElem.id = "vn-chat-name";
@@ -55,6 +57,18 @@
     arrowElem.style.display = "none";
     banner.appendChild(arrowElem);
 
+    timerBar = document.createElement("div");
+    timerBar.id = "vn-chat-timerbar";
+    timerBar.style.position = "absolute";
+    timerBar.style.left = "0";
+    timerBar.style.bottom = "0";
+    timerBar.style.height = "6px";
+    timerBar.style.background = "white";
+    timerBar.style.width = "100%";
+    timerBar.style.transition = "width linear";
+    timerBar.style.pointerEvents = "none";
+    banner.appendChild(timerBar);
+
     document.body.appendChild(banner);
   }
 
@@ -67,7 +81,7 @@
     imgElem.style.width = "31vw";
     imgElem.style.height = "31vw";
     imgElem.style.objectFit = "contain";
-    imgElem.style.zIndex = 49; // LOWERED z-index to appear under character sheets
+    imgElem.style.zIndex = 99; // Lower than sheet
     imgElem.style.transition = "left 0.5s ease, opacity 0.5s ease";
     imgElem.style.opacity = "0";
     imgElem.style.pointerEvents = "none";
@@ -83,6 +97,10 @@
     if (autoSkipTimer) {
       clearTimeout(autoSkipTimer);
       autoSkipTimer = null;
+    }
+    if (timerBar) {
+      timerBar.style.transition = "none";
+      timerBar.style.width = "0%";
     }
   }
 
@@ -104,6 +122,8 @@
   }
 
   function displayMessage(entry) {
+    clearAutoSkipTimer();
+
     currentMessage = entry;
     const nameElem = document.getElementById("vn-chat-name");
     const msgElem = document.getElementById("vn-chat-msg");
@@ -111,8 +131,6 @@
     nameElem.textContent = entry.name;
     banner.style.display = "flex";
     banner.style.opacity = "1";
-
-    clearAutoSkipTimer(); // Cancel any pending timers
 
     if (entry.name !== currentSpeaker) {
       imgElem.style.opacity = "0";
@@ -129,14 +147,27 @@
 
     typeText(msgElem, entry.msg, 20, () => {
       updateNextArrow();
+
+      const charCount = entry.msg.length;
+      const delay = 2000 + charCount * 50; // 2s + 0.05s per letter
+
+      if (timerBar) {
+        timerBar.style.transition = "none";
+        timerBar.style.width = "100%";
+        void timerBar.offsetWidth; // force reflow
+        timerBar.style.transition = `width ${delay}ms linear`;
+        timerBar.style.width = "0%";
+      }
+
       autoSkipTimer = setTimeout(() => {
-        skipMessage(); // Auto skip after 6 seconds
-      }, 6000);
+        skipMessage();
+      }, delay);
     });
   }
 
   function skipMessage() {
-    clearAutoSkipTimer(); // Stop auto-timer on manual skip
+    clearAutoSkipTimer();
+
     if (typing) return;
     if (messageQueue.length > 0) {
       const next = messageQueue.shift();
@@ -151,8 +182,6 @@
       }, 250);
     }
   }
-
-  banner.style.pointerEvents = "none";
 
   document.addEventListener("keydown", (e) => {
     const isTypingChat = document.activeElement?.closest(".chat-message") || document.activeElement?.tagName === "TEXTAREA";
