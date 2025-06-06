@@ -1,5 +1,4 @@
 (() => {
-  // Create or reuse the speaker image element
   let imageElem = document.getElementById("vn-chat-image");
   if (!imageElem) {
     imageElem = document.createElement("img");
@@ -7,8 +6,8 @@
     imageElem.style.position = "fixed";
     imageElem.style.bottom = "0";
     imageElem.style.left = "10px";
-    imageElem.style.width = "35vw";
-    imageElem.style.height = "35vw";
+    imageElem.style.width = "31vw";
+    imageElem.style.height = "31vw";
     imageElem.style.objectFit = "cover";
     imageElem.style.zIndex = 99998;
     imageElem.style.display = "none";
@@ -18,15 +17,14 @@
     document.body.appendChild(imageElem);
   }
 
-  // Create or reuse the VN chat banner
   let banner = document.getElementById("vn-chat-banner");
   if (!banner) {
     banner = document.createElement("div");
     banner.id = "vn-chat-banner";
     banner.style.position = "fixed";
-    banner.style.bottom = "0";
-    banner.style.left = "20%";              // <-- updated left align
-    banner.style.width = "60%";             // <-- updated width
+    banner.style.bottom = "5%";            // <-- raised 5% from bottom
+    banner.style.left = "20%";
+    banner.style.width = "60%";
     banner.style.background = "rgba(0,0,0,0.75)";
     banner.style.color = "white";
     banner.style.fontFamily = "Arial, sans-serif";
@@ -43,7 +41,6 @@
     banner.style.maxHeight = "60vh";
     banner.style.height = "auto";
 
-    // Speaker name
     const nameElem = document.createElement("div");
     nameElem.id = "vn-chat-name";
     nameElem.style.fontWeight = "bold";
@@ -51,7 +48,6 @@
     nameElem.style.marginBottom = "4px";
     banner.appendChild(nameElem);
 
-    // Message text
     const msgElem = document.createElement("div");
     msgElem.id = "vn-chat-msg";
     msgElem.style.fontSize = "2.2em";
@@ -61,99 +57,113 @@
     document.body.appendChild(banner);
   }
 
-  let hideTimeout = null;
-  let typingTimeout = null;
-  const showDuration = 10000;
-  const typeSpeed = 20; // ms per character
+  const nameElem = document.getElementById("vn-chat-name");
+  const msgElem = document.getElementById("vn-chat-msg");
 
-  // Simple typewriter effect that types HTML safely
-  async function typewriterEffect(element, html) {
-    // Stop any previous typing
-    if (typingTimeout) clearTimeout(typingTimeout);
+  let messageQueue = [];
+  let typing = false;
+  let currentMessage = null;
+  let typeIndex = 0;
+  let typewriterTimeout = null;
 
-    element.innerHTML = ""; // Clear current content
+  function typewriterEffect(html, callback) {
+    msgElem.innerHTML = "";
+    typing = true;
 
     const temp = document.createElement("div");
     temp.innerHTML = html;
 
-    let charArray = [];
+    let nodes = [];
     temp.childNodes.forEach((node) => {
       if (node.nodeType === Node.TEXT_NODE) {
-        charArray.push(...node.textContent.split("").map(c => ({ type: "text", value: c })));
+        nodes.push(...node.textContent.split("").map(c => ({ type: "text", value: c })));
       } else if (node.nodeType === Node.ELEMENT_NODE) {
-        charArray.push({ type: "open", value: node.outerHTML.split(node.innerHTML)[0] });
-        charArray.push(...node.innerHTML.split("").map(c => ({ type: "text", value: c })));
-        charArray.push({ type: "close", value: `</${node.nodeName.toLowerCase()}>` });
+        nodes.push({ type: "open", value: node.outerHTML.split(node.innerHTML)[0] });
+        nodes.push(...node.innerHTML.split("").map(c => ({ type: "text", value: c })));
+        nodes.push({ type: "close", value: `</${node.nodeName.toLowerCase()}>` });
       }
     });
 
-    element.innerHTML = ""; // start fresh
     let buffer = "";
-    let index = 0;
+    typeIndex = 0;
 
     function typeNext() {
-      if (index >= charArray.length) return;
-      const chunk = charArray[index];
-
-      if (chunk.type === "text") {
-        buffer += chunk.value;
-        element.innerHTML = buffer;
-      } else if (chunk.type === "open" || chunk.type === "close") {
-        buffer += chunk.value;
-        element.innerHTML = buffer;
+      if (typeIndex >= nodes.length) {
+        typing = false;
+        if (callback) callback();
+        return;
       }
-
-      index++;
-      typingTimeout = setTimeout(typeNext, typeSpeed);
+      const part = nodes[typeIndex];
+      buffer += part.value;
+      msgElem.innerHTML = buffer;
+      typeIndex++;
+      typewriterTimeout = setTimeout(typeNext, 20); // fast typing
     }
 
     typeNext();
   }
 
-  async function showBanner(name, msg, actor) {
-    const nameElem = document.getElementById("vn-chat-name");
-    const msgElem = document.getElementById("vn-chat-msg");
-
-    nameElem.textContent = name;
-
-    // Get image
-    let imageSrc = actor.token?.texture?.src || actor.img || "icons/svg/mystery-man.svg";
-    imageElem.src = imageSrc;
-    imageElem.style.display = "block";
-    imageElem.style.opacity = "1";
+  function displayMessage(entry) {
+    currentMessage = entry;
+    nameElem.textContent = entry.name;
+    imageElem.src = entry.image || "icons/svg/mystery-man.svg";
 
     banner.style.display = "flex";
     banner.style.opacity = "1";
-    banner.style.height = "auto";
+    imageElem.style.display = "block";
+    imageElem.style.opacity = "1";
 
-    // Typewriter message
-    await typewriterEffect(msgElem, msg);
+    typewriterEffect(entry.msg, () => {
+      // Finished typing — wait for E key
+    });
+  }
 
-    if (hideTimeout) clearTimeout(hideTimeout);
-    hideTimeout = setTimeout(() => {
-      banner.style.transition = "opacity 1s";
-      imageElem.style.transition = "opacity 1s";
+  function advanceMessage() {
+    if (typing) {
+      clearTimeout(typewriterTimeout);
+      typing = false;
+      msgElem.innerHTML = currentMessage.msg; // Show full message instantly
+      return;
+    }
+
+    if (messageQueue.length > 0) {
+      displayMessage(messageQueue.shift());
+    } else {
+      // Hide everything
+      banner.style.transition = "opacity 0.5s";
+      imageElem.style.transition = "opacity 0.5s";
       banner.style.opacity = "0";
       imageElem.style.opacity = "0";
       setTimeout(() => {
         banner.style.display = "none";
         imageElem.style.display = "none";
-      }, 1000);
-    }, showDuration);
+      }, 500);
+      currentMessage = null;
+    }
   }
 
   Hooks.on("createChatMessage", (message) => {
-    if (!message.visible) return;
-    const speaker = message.speaker;
-    if (!speaker || !speaker.actor) return;
-    if (message.isRoll) return;
+    if (!message.visible || !message.speaker?.actor || message.isRoll) return;
 
-    const actor = game.actors.get(speaker.actor);
+    const actor = game.actors.get(message.speaker.actor);
     if (!actor) return;
 
-    const speakerName = actor.name;
-    const chatContent = message.content;
+    const entry = {
+      name: actor.name,
+      msg: message.content,
+      image: actor.token?.texture?.src || actor.img
+    };
 
-    showBanner(speakerName, chatContent, actor);
+    if (!currentMessage) {
+      displayMessage(entry);
+    } else {
+      messageQueue.push(entry);
+    }
+  });
+
+  window.addEventListener("keydown", (ev) => {
+    if (ev.key === "e" || ev.key === "E") {
+      advanceMessage();
+    }
   });
 })();
