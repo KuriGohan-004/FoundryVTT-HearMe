@@ -171,6 +171,7 @@ Hooks.once("init", () => {
     }, duration);
   }
 
+  // Modified displayMessage to play sound only if the message belongs to local user
   function displayMessage(entry) {
     clearTimeout(autoSkipTimeout);
     currentMessage = entry;
@@ -180,7 +181,6 @@ Hooks.once("init", () => {
     nameElem.textContent = entry.name;
     banner.style.display = "flex";
     banner.style.opacity = "1";
-    playChatSound();
 
     if (entry.name !== currentSpeaker) {
       imgElem.style.opacity = "0";
@@ -193,6 +193,10 @@ Hooks.once("init", () => {
         }, 50);
       }
       currentSpeaker = entry.name;
+    }
+
+    if (entry.userId === game.user.id) {
+      playChatSound();
     }
 
     typeText(msgElem, entry.msg, 20, () => {
@@ -231,8 +235,19 @@ Hooks.once("init", () => {
     }
   });
 
-  document.addEventListener("visibilitychange", () => {
-    documentVisible = !document.hidden;
+  // New: Pause/resume auto skip timer on window focus/blur
+  window.addEventListener("blur", () => {
+    documentVisible = false;
+    clearTimeout(autoSkipTimeout);
+    timerBar.style.transition = "none";
+    timerBar.style.transform = "scaleX(1)";
+  });
+
+  window.addEventListener("focus", () => {
+    documentVisible = true;
+    if (currentMessage && !typing) {
+      startAutoSkipTimer(currentMessage.msg.length);
+    }
   });
 
   Hooks.on("createChatMessage", (message) => {
@@ -249,24 +264,22 @@ Hooks.once("init", () => {
       const scene = game.scenes.active;
       const token = scene?.tokens.get(message.speaker.token);
       if (token) {
-        name = token.name;
-        image = token.texture.src;
-      } else {
-        name = actor.name;
-        image = actor.img;
+        image = token.data.img;
       }
-    } else {
-      name = actor.name;
-      image = actor.img;
     }
 
-    const entry = { name, msg: content, image };
+    name = actor.name;
 
-    if (!currentMessage) {
-      displayMessage(entry);
-    } else {
-      messageQueue.push(entry);
-      updateNextArrow();
+    messageQueue.push({
+      name,
+      msg: content,
+      image,
+      userId: message.user.id
+    });
+
+    if (!typing && messageQueue.length === 1) {
+      const next = messageQueue.shift();
+      displayMessage(next);
     }
   });
 })();
