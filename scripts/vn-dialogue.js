@@ -7,8 +7,8 @@
     imageElem.style.position = "fixed";
     imageElem.style.bottom = "0";
     imageElem.style.left = "10px";
-    imageElem.style.width = "31vw";
-    imageElem.style.height = "31vw";
+    imageElem.style.width = "35vw";
+    imageElem.style.height = "35vw";
     imageElem.style.objectFit = "cover";
     imageElem.style.zIndex = 99998;
     imageElem.style.display = "none";
@@ -197,9 +197,16 @@
     }
   });
 
+  // Change key listener to Q:
   window.addEventListener("keydown", (ev) => {
-    if ((ev.key === "e" || ev.key === "E") && isVNInputAllowed()) {
+    if ((ev.key === "q" || ev.key === "Q") && isVNInputAllowed()) {
       advanceMessage();
     }
+  });
+
+  // Click banner to advance:
+  banner.style.cursor = "pointer";
+  banner.addEventListener("click", () => {
+    if (isVNInputAllowed()) advanceMessage();
   });
 })();
