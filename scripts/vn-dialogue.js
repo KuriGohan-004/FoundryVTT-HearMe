@@ -21,7 +21,10 @@ Hooks.once("init", () => {
   let messageQueue = [];
   let typing = false;
   let autoSkipTimeout = null;
-  let documentVisible = true;
+  let autoSkipDuration = 0;
+  let autoSkipStart = 0;
+  let timerPaused = false;
+  let timerRemaining = 0;
 
   const playChatSound = () => {
     const soundPath = game.settings.get("hearme-chat-notification", "pingSound");
@@ -63,7 +66,9 @@ Hooks.once("init", () => {
       overflowY: "auto",
       transition: "opacity 0.25s ease",
       opacity: "0",
-      pointerEvents: "none"
+      pointerEvents: "none",
+      position: "fixed",
+      bottom: "calc(5% + 48px)", // Adjust this to appear below the character sheet UI if needed
     });
 
     const nameElem = document.createElement("div");
@@ -149,17 +154,68 @@ Hooks.once("init", () => {
     typeChar();
   }
 
-  function startAutoSkipTimer(textLength) {
+  function clearAutoSkip() {
     clearTimeout(autoSkipTimeout);
+    autoSkipTimeout = null;
+    timerBar.style.transition = "none";
+    timerBar.style.transform = "scaleX(1)";
+    timerPaused = false;
+    timerRemaining = 0;
+  }
+
+  function startAutoSkipTimer(textLength) {
+    clearAutoSkip();
+
+    // Calculate duration: 5 seconds + 0.05 sec per character
+    autoSkipDuration = 5000 + textLength * 50;
+    timerRemaining = autoSkipDuration;
+    autoSkipStart = Date.now();
     timerBar.style.transition = "none";
     timerBar.style.transform = "scaleX(1)";
 
-    const duration = 5000 + textLength * 50;
-
     setTimeout(() => {
-      timerBar.style.transition = `transform ${duration}ms linear`;
+      timerBar.style.transition = `transform ${autoSkipDuration}ms linear`;
       timerBar.style.transform = "scaleX(0)";
     }, 10);
+
+    autoSkipTimeout = setTimeout(() => {
+      // Check if tab/window is focused & no sheet/journal open
+      const isFocused = document.hasFocus();
+      const sheetOpen = !!document.querySelector(".app.window-app.sheet:not(.minimized)") ||
+                        !!document.querySelector(".app.window-app.journal-entry:not(.minimized)");
+      if (isFocused && !sheetOpen) {
+        skipMessage();
+      } else {
+        // If not focused or sheet open, pause timer
+        pauseAutoSkipTimer();
+      }
+    }, autoSkipDuration);
+
+    timerPaused = false;
+  }
+
+  function pauseAutoSkipTimer() {
+    if (!autoSkipTimeout || timerPaused) return;
+    timerPaused = true;
+    clearTimeout(autoSkipTimeout);
+
+    // Calculate remaining time
+    const elapsed = Date.now() - autoSkipStart;
+    timerRemaining = Math.max(autoSkipDuration - elapsed, 0);
+
+    timerBar.style.transition = "none";
+    // Calculate current scaleX based on elapsed
+    const progress = timerRemaining / autoSkipDuration;
+    timerBar.style.transform = `scaleX(${progress})`;
+  }
+
+  function resumeAutoSkipTimer() {
+    if (!timerPaused || !currentMessage) return;
+    timerPaused = false;
+    autoSkipStart = Date.now();
+
+    timerBar.style.transition = `transform ${timerRemaining}ms linear`;
+    timerBar.style.transform = "scaleX(0)";
 
     autoSkipTimeout = setTimeout(() => {
       const isFocused = document.hasFocus();
@@ -167,16 +223,19 @@ Hooks.once("init", () => {
                         !!document.querySelector(".app.window-app.journal-entry:not(.minimized)");
       if (isFocused && !sheetOpen) {
         skipMessage();
+      } else {
+        pauseAutoSkipTimer();
       }
-    }, duration);
+    }, timerRemaining);
   }
 
-  // Modified displayMessage to play sound only if the message belongs to local user
   function displayMessage(entry) {
-    clearTimeout(autoSkipTimeout);
+    clearAutoSkip();
     currentMessage = entry;
     const nameElem = document.getElementById("vn-chat-name");
     const msgElem = document.getElementById("vn-chat-msg");
+
+    console.log("Displaying message:", entry);
 
     nameElem.textContent = entry.name;
     banner.style.display = "flex";
@@ -196,18 +255,25 @@ Hooks.once("init", () => {
     }
 
     if (entry.userId === game.user.id) {
+      console.log("Playing chat sound for local user");
       playChatSound();
     }
 
     typeText(msgElem, entry.msg, 20, () => {
       updateNextArrow();
-      if (documentVisible) startAutoSkipTimer(entry.msg.length);
+      // Only start timer if window is focused and no sheet/journal open
+      const isFocused = document.hasFocus();
+      const sheetOpen = !!document.querySelector(".app.window-app.sheet:not(.minimized)") ||
+                        !!document.querySelector(".app.window-app.journal-entry:not(.minimized)");
+      if (isFocused && !sheetOpen) {
+        startAutoSkipTimer(entry.msg.length);
+      }
     });
   }
 
   function skipMessage() {
     if (typing) return;
-    clearTimeout(autoSkipTimeout);
+    clearAutoSkip();
     if (messageQueue.length > 0) {
       const next = messageQueue.shift();
       displayMessage(next);
@@ -235,19 +301,12 @@ Hooks.once("init", () => {
     }
   });
 
-  // New: Pause/resume auto skip timer on window focus/blur
   window.addEventListener("blur", () => {
-    documentVisible = false;
-    clearTimeout(autoSkipTimeout);
-    timerBar.style.transition = "none";
-    timerBar.style.transform = "scaleX(1)";
+    pauseAutoSkipTimer();
   });
 
   window.addEventListener("focus", () => {
-    documentVisible = true;
-    if (currentMessage && !typing) {
-      startAutoSkipTimer(currentMessage.msg.length);
-    }
+    resumeAutoSkipTimer();
   });
 
   Hooks.on("createChatMessage", (message) => {
@@ -264,22 +323,24 @@ Hooks.once("init", () => {
       const scene = game.scenes.active;
       const token = scene?.tokens.get(message.speaker.token);
       if (token) {
-        image = token.data.img;
+        name = token.name;
+        image = token.texture.src;
+      } else {
+        name = actor.name;
+        image = actor.img;
       }
+    } else {
+      name = actor.name;
+      image = actor.img;
     }
 
-    name = actor.name;
+    const entry = { name, msg: content, image, userId: message.user.id };
 
-    messageQueue.push({
-      name,
-      msg: content,
-      image,
-      userId: message.user.id
-    });
-
-    if (!typing && messageQueue.length === 1) {
-      const next = messageQueue.shift();
-      displayMessage(next);
+    if (!currentMessage) {
+      displayMessage(entry);
+    } else {
+      messageQueue.push(entry);
+      updateNextArrow();
     }
   });
 })();
