@@ -1,98 +1,122 @@
-const MODULE_ID = "youtube-music-player";
-let audioElement;
-let isPlaying = false;
+const MODULE_ID = "my-youtube-sync";
+let player;
+let currentVideoId = "";
 
-Hooks.once("ready", () => {
-  if (!game.user.isGM) return;
+Hooks.once("ready", async () => {
+  if (game.user.isGM) createGMControls();
+  loadYouTubeAPI();
 
-  createMusicUI();
-
-  game.socket.on(`module.${MODULE_ID}`, (data) => {
-    if (data.action === "play") {
-      playAudio(data.src);
-    } else if (data.action === "stop") {
-      stopAudio();
+  game.socket.on(`module.${MODULE_ID}`, ({ action, videoId }) => {
+    if (action === "play") {
+      currentVideoId = videoId;
+      loadVideo(videoId);
+    } else if (action === "stop") {
+      if (player) player.stopVideo();
     }
   });
 });
 
-function createMusicUI() {
-  const container = document.createElement("div");
-  container.id = "yt-music-ui";
-  Object.assign(container.style, {
+function createGMControls() {
+  const panel = document.createElement("div");
+  panel.id = "yt-sync-panel";
+  Object.assign(panel.style, {
     position: "fixed",
     top: "10px",
     left: "10px",
-    width: "260px",
-    background: "rgba(0,0,0,0.85)",
+    background: "#000",
     color: "#fff",
     padding: "10px",
     borderRadius: "8px",
-    boxShadow: "0 0 10px #000",
-    cursor: "move",
-    zIndex: 1000
+    zIndex: 10000,
+    width: "300px",
+    boxShadow: "0 0 8px #000"
   });
-  container.innerHTML = `
-    <label>Audio File Path:</label>
-    <input id="audio-src" type="text" placeholder="modules/myModule/audio/song.mp3" style="width:100%; background:#222; color:#fff; border:1px solid #444; margin-bottom:5px;" />
-    <button id="audio-toggle-btn">Play for All Players</button>
+
+  panel.innerHTML = `
+    <label>YouTube URL or ID:</label><br/>
+    <input type="text" id="yt-url" style="width: 100%; margin-bottom: 5px;"/><br/>
+    <button id="yt-play">Play for All</button>
+    <button id="yt-stop">Stop</button><br/><br/>
+    <div id="yt-player" style="width:100%; aspect-ratio:16/9;"></div>
   `;
-  document.body.appendChild(container);
-  makeBoundedDraggable(container);
+  document.body.appendChild(panel);
 
-  document.getElementById("audio-toggle-btn").addEventListener("click", () => {
-    const src = document.getElementById("audio-src").value.trim();
-    const action = isPlaying ? "stop" : "play";
-    if (action === "play" && !src) return ui.notifications.error("Please enter an audio file path.");
-    game.socket.emit(`module.${MODULE_ID}`, { action, src });
-    if (action === "play") playAudio(src);
-    else stopAudio();
-    isPlaying = !isPlaying;
-    document.getElementById("audio-toggle-btn").innerText = isPlaying ? "Stop Music" : "Play for All Players";
-  });
+  document.getElementById("yt-play").onclick = () => {
+    const input = document.getElementById("yt-url").value.trim();
+    const videoId = extractYouTubeID(input);
+    if (!videoId) return ui.notifications.warn("Invalid YouTube URL or ID");
+    game.socket.emit(`module.${MODULE_ID}`, { action: "play", videoId });
+    loadVideo(videoId);
+  };
+
+  document.getElementById("yt-stop").onclick = () => {
+    game.socket.emit(`module.${MODULE_ID}`, { action: "stop" });
+    if (player) player.stopVideo();
+  };
+
+  makeBoundedDraggable(panel);
 }
 
-function playAudio(src) {
-  if (!audioElement) {
-    audioElement = new Audio(src);
-    audioElement.loop = true;
-    audioElement.volume = 0.5;
+function extractYouTubeID(url) {
+  const match = url.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/))([\w\-]+)/);
+  return match ? match[1] : url; // if it's already an ID
+}
+
+function loadYouTubeAPI() {
+  if (window.YT) return;
+  const tag = document.createElement("script");
+  tag.src = "https://www.youtube.com/iframe_api";
+  document.head.appendChild(tag);
+  window.onYouTubeIframeAPIReady = () => {
+    if (currentVideoId) loadVideo(currentVideoId);
+  };
+}
+
+function loadVideo(videoId) {
+  if (!window.YT || !YT.Player) return;
+  if (player) {
+    player.loadVideoById(videoId);
   } else {
-    audioElement.src = src;
+    player = new YT.Player("yt-player", {
+      videoId,
+      width: "100%",
+      playerVars: {
+        autoplay: 1,
+        controls: 1,
+        rel: 0,
+        modestbranding: 1
+      },
+      events: {
+        onReady: (e) => e.target.playVideo()
+      }
+    });
   }
-  audioElement.play().catch(err => ui.notifications.error("Audio play failed: " + err.message));
-}
-
-function stopAudio() {
-  if (audioElement) audioElement.pause();
 }
 
 function makeBoundedDraggable(el) {
-  let dragging = false, offsetX=0, offsetY=0;
+  let isDragging = false;
+  let offsetX, offsetY;
 
-  el.addEventListener("mousedown", e => {
-    if (["INPUT","BUTTON"].includes(e.target.tagName)) return;
-    dragging = true;
-    offsetX = e.clientX - el.getBoundingClientRect().left;
-    offsetY = e.clientY - el.getBoundingClientRect().top;
-    document.addEventListener("mousemove", onMouseMove);
-    document.addEventListener("mouseup", onMouseUp);
+  el.addEventListener("mousedown", (e) => {
+    if (["INPUT", "BUTTON"].includes(e.target.tagName)) return;
+    isDragging = true;
+    offsetX = e.clientX - el.offsetLeft;
+    offsetY = e.clientY - el.offsetTop;
+    document.addEventListener("mousemove", drag);
+    document.addEventListener("mouseup", stopDrag);
   });
 
-  function onMouseMove(e) {
-    if (!dragging) return;
-    let newLeft = e.clientX - offsetX;
-    let newTop = e.clientY - offsetY;
-    const { innerWidth, innerHeight } = window;
-    newLeft = Math.max(0, Math.min(newLeft, innerWidth - el.offsetWidth));
-    newTop = Math.max(0, Math.min(newTop, innerHeight - el.offsetHeight));
-    el.style.left = newLeft + "px";
-    el.style.top = newTop + "px";
+  function drag(e) {
+    if (!isDragging) return;
+    const x = Math.min(window.innerWidth - el.offsetWidth, Math.max(0, e.clientX - offsetX));
+    const y = Math.min(window.innerHeight - el.offsetHeight, Math.max(0, e.clientY - offsetY));
+    el.style.left = `${x}px`;
+    el.style.top = `${y}px`;
   }
 
-  function onMouseUp() {
-    dragging = false;
-    document.removeEventListener("mousemove", onMouseMove);
-    document.removeEventListener("mouseup", onMouseUp);
+  function stopDrag() {
+    isDragging = false;
+    document.removeEventListener("mousemove", drag);
+    document.removeEventListener("mouseup", stopDrag);
   }
 }
