@@ -1,4 +1,4 @@
-// === INIT SETTINGS ===
+// === INIT SOUND & SKIP KEY SETTINGS ===
 Hooks.once("init", () => {
   game.settings.register("hearme-chat-notification", "pingSound", {
     name: "Chat Notification Sound",
@@ -11,57 +11,24 @@ Hooks.once("init", () => {
   });
 
   game.settings.register("hearme-chat-notification", "skipKey", {
-    name: "Skip Dialogue Key",
-    hint: "Click the box and press a key to assign it as the skip key.",
+    name: "Skip Key",
+    hint: "The key to press to skip chat dialogue (default: Q).",
     scope: "client",
     config: true,
     type: String,
-    default: "KeyQ",
-    onChange: val => console.log(`Skip key set to: ${val}`)
-  });
-
-  game.settings.register("hearme-chat-notification", "minAutoSkipTime", {
-    name: "Minimum Auto-Skip Time (seconds)",
-    hint: "Minimum time before auto-skipping a message (whole seconds, 1-30). Default is 5.",
-    scope: "client",
-    config: true,
-    type: Number,
-    default: 5,
-    range: {
-      min: 1,
-      max: 30,
-      step: 1
-    }
-  });
-
-  // SET BOTH TO DEFAULT TRUE
-  game.settings.register("hearme-chat-notification", "showLinkedIcon", {
-    name: "Show Linked Icon",
-    hint: "Show the icon for linked messages in the VN banner.",
-    scope: "client",
-    config: true,
-    type: Boolean,
-    default: true
-  });
-
-  game.settings.register("hearme-chat-notification", "showUnlinkedIcon", {
-    name: "Show Unlinked Icon",
-    hint: "Show the icon for unlinked messages in the VN banner.",
-    scope: "client",
-    config: true,
-    type: Boolean,
-    default: true
+    default: "q"
   });
 });
 
 (() => {
+  // === CUSTOMIZABLE VARIABLES ===
+  let autoSkipEnabled = true;          // Set to false to disable autoskip completely
+  let autoSkipMinDurationSeconds = 3;  // Minimum autoskip time in seconds (default: 3)
+
   let banner = document.getElementById("vn-chat-banner");
   let imgElem = document.getElementById("vn-chat-image");
   let arrowElem = document.getElementById("vn-chat-arrow");
   let timerBar = null;
-  let linkedIcon = null;
-  let unlinkedIcon = null;
-
   let currentSpeaker = null;
   let currentMessage = null;
   let messageQueue = [];
@@ -72,13 +39,14 @@ Hooks.once("init", () => {
   let timerPaused = false;
   let timerRemaining = 0;
 
-  // PLAY SOUND
   const playChatSound = () => {
     const soundPath = game.settings.get("hearme-chat-notification", "pingSound");
     if (!soundPath) return;
+
     if (game.audio?.context?.state === "suspended") {
       game.audio.context.resume();
     }
+
     AudioHelper.play({
       src: soundPath,
       volume: 0.8,
@@ -87,7 +55,6 @@ Hooks.once("init", () => {
     }, true);
   };
 
-  // CREATE BANNER IF MISSING
   if (!banner) {
     banner = document.createElement("div");
     banner.id = "vn-chat-banner";
@@ -113,7 +80,6 @@ Hooks.once("init", () => {
       transition: "opacity 0.25s ease",
       opacity: "0",
       pointerEvents: "none",
-      position: "fixed"
     });
 
     const nameElem = document.createElement("div");
@@ -152,44 +118,12 @@ Hooks.once("init", () => {
       background: "white",
       transformOrigin: "left",
       transform: "scaleX(1)",
-      transition: "transform linear"
+      transition: "transform linear",
+      opacity: "1"
     });
     banner.appendChild(timerBar);
 
-    linkedIcon = document.createElement("div");
-    linkedIcon.id = "vn-chat-linked-icon";
-    linkedIcon.textContent = "🔗";
-    Object.assign(linkedIcon.style, {
-      position: "absolute",
-      top: "8px",
-      right: "48px",
-      fontSize: "1.2em",
-      opacity: "0.7",
-      cursor: "default",
-      display: "inline-block"
-    });
-    banner.appendChild(linkedIcon);
-
-    unlinkedIcon = document.createElement("div");
-    unlinkedIcon.id = "vn-chat-unlinked-icon";
-    unlinkedIcon.textContent = "⛔";
-    Object.assign(unlinkedIcon.style, {
-      position: "absolute",
-      top: "8px",
-      right: "72px",
-      fontSize: "1.2em",
-      opacity: "0.7",
-      cursor: "default",
-      display: "inline-block"
-    });
-    banner.appendChild(unlinkedIcon);
-
     document.body.appendChild(banner);
-  } else {
-    linkedIcon = document.getElementById("vn-chat-linked-icon");
-    unlinkedIcon = document.getElementById("vn-chat-unlinked-icon");
-    timerBar = document.getElementById("vn-chat-timer");
-    arrowElem = document.getElementById("vn-chat-arrow");
   }
 
   if (!imgElem) {
@@ -211,23 +145,10 @@ Hooks.once("init", () => {
     document.body.appendChild(imgElem);
   }
 
-  // Update linked/unlinked icons visibility from settings defaults
-  function updateIconsVisibility() {
-    const showLinked = game.settings.get("hearme-chat-notification", "showLinkedIcon");
-    const showUnlinked = game.settings.get("hearme-chat-notification", "showUnlinkedIcon");
-    if (linkedIcon) linkedIcon.style.display = showLinked ? "inline-block" : "none";
-    if (unlinkedIcon) unlinkedIcon.style.display = showUnlinked ? "inline-block" : "none";
-  }
-
-  updateIconsVisibility();
-
-  // Show or hide arrow skip indicator
   function updateNextArrow() {
-    if (!arrowElem) return;
     arrowElem.style.display = messageQueue.length > 0 ? "block" : "none";
   }
 
-  // Typewriter effect
   function typeText(element, text, speed = 20, callback) {
     typing = true;
     element.innerHTML = "";
@@ -250,176 +171,155 @@ Hooks.once("init", () => {
     autoSkipTimeout = null;
     timerBar.style.transition = "none";
     timerBar.style.transform = "scaleX(1)";
-    timerBar.style.display = "block";
+    timerBar.style.opacity = "1";
     timerPaused = false;
     timerRemaining = 0;
   }
 
   function startAutoSkipTimer(textLength) {
     clearAutoSkip();
-    const minTime = game.settings.get("hearme-chat-notification", "minAutoSkipTime") || 5;
-    autoSkipDuration = Math.max(minTime * 1000, textLength * 50); // 50ms per char, min minimum
-    autoSkipStart = Date.now();
 
-    timerBar.style.transition = `transform ${autoSkipDuration}ms linear`;
-    timerBar.style.transform = "scaleX(0)";
-    timerBar.style.display = "block";
-
-    autoSkipTimeout = setTimeout(() => {
-      skipMessage();
-    }, autoSkipDuration);
-  }
-
-  function pauseAutoSkipTimer() {
-    if (autoSkipTimeout && !timerPaused) {
-      timerPaused = true;
-      timerRemaining = autoSkipDuration - (Date.now() - autoSkipStart);
-      clearTimeout(autoSkipTimeout);
-      timerBar.style.transition = "none";
-      const scaleX = timerRemaining / autoSkipDuration;
-      timerBar.style.transform = `scaleX(${scaleX})`;
-      timerBar.style.display = "none"; // Hide timer bar on blur
-    }
-  }
-
-  function resumeAutoSkipTimer() {
-    if (timerPaused) {
-      timerPaused = false;
-      autoSkipDuration = timerRemaining;
-      autoSkipStart = Date.now();
-
-      timerBar.style.display = "block";
-      timerBar.style.transition = `transform ${timerRemaining}ms linear`;
-      timerBar.style.transform = "scaleX(0)";
-
-      autoSkipTimeout = setTimeout(() => {
-        skipMessage();
-      }, timerRemaining);
-    }
-  }
-
-  // Skip current message and advance
-  function skipMessage() {
-    clearAutoSkip();
-
-    if (typing) {
-      // Finish typing immediately
-      const msgElem = document.getElementById("vn-chat-msg");
-      msgElem.innerHTML = currentMessage.text;
-      typing = false;
-      // Start timer for auto skip now after instant show
-      startAutoSkipTimer(currentMessage.text.length);
+    if (!autoSkipEnabled) {
+      timerBar.style.opacity = "0";
       return;
     }
 
-    if (messageQueue.length > 0) {
-      displayMessage(messageQueue.shift());
-    } else {
-      hideBanner();
-    }
+    autoSkipDuration = Math.max(
+      autoSkipMinDurationSeconds * 1000,
+      5000 + textLength * 50
+    );
+
+    timerRemaining = autoSkipDuration;
+    autoSkipStart = Date.now();
+    timerBar.style.transition = "none";
+    timerBar.style.transform = "scaleX(1)";
+    timerBar.style.opacity = "1";
+
+    setTimeout(() => {
+      timerBar.style.transition = `transform ${autoSkipDuration}ms linear`;
+      timerBar.style.transform = "scaleX(0)";
+    }, 10);
+
+    autoSkipTimeout = setTimeout(() => {
+      const isFocused = document.hasFocus();
+      const sheetOpen = !!document.querySelector(".app.window-app.sheet:not(.minimized)") ||
+                        !!document.querySelector(".app.window-app.journal-entry:not(.minimized)");
+      if (isFocused && !sheetOpen) {
+        skipMessage();
+      } else {
+        pauseAutoSkipTimer();
+      }
+    }, autoSkipDuration);
+
+    timerPaused = false;
   }
 
-  // Display the banner and message
-  function displayMessage(message) {
-    currentMessage = message;
+  function pauseAutoSkipTimer() {
+    if (!autoSkipTimeout || timerPaused) return;
+    timerPaused = true;
+    clearTimeout(autoSkipTimeout);
 
-    if (!banner) return;
+    const elapsed = Date.now() - autoSkipStart;
+    timerRemaining = Math.max(autoSkipDuration - elapsed, 0);
 
-    playChatSound();
+    timerBar.style.transition = "none";
+    const progress = timerRemaining / autoSkipDuration;
+    timerBar.style.transform = `scaleX(${progress})`;
 
-    // Set speaker name and message
-    const nameElem = banner.querySelector("#vn-chat-name");
-    const msgElem = banner.querySelector("#vn-chat-msg");
-    nameElem.textContent = message.speaker || "";
-    currentSpeaker = message.speaker;
+    timerBar.style.opacity = "0";
+  }
 
-    // Show banner
+  function resumeAutoSkipTimer() {
+    if (!timerPaused || !currentMessage) return;
+    timerPaused = false;
+    autoSkipStart = Date.now();
+
+    timerBar.style.opacity = "1";
+
+    timerBar.style.transition = `transform ${timerRemaining}ms linear`;
+    timerBar.style.transform = "scaleX(0)";
+
+    autoSkipTimeout = setTimeout(() => {
+      const isFocused = document.hasFocus();
+      const sheetOpen = !!document.querySelector(".app.window-app.sheet:not(.minimized)") ||
+                        !!document.querySelector(".app.window-app.journal-entry:not(.minimized)");
+      if (isFocused && !sheetOpen) {
+        skipMessage();
+      } else {
+        pauseAutoSkipTimer();
+      }
+    }, timerRemaining);
+  }
+
+  function displayMessage(entry) {
+    clearAutoSkip();
+    currentMessage = entry;
+    const nameElem = document.getElementById("vn-chat-name");
+    const msgElem = document.getElementById("vn-chat-msg");
+
+    console.log("Displaying message:", entry);
+
+    nameElem.textContent = entry.name;
     banner.style.display = "flex";
     banner.style.opacity = "1";
-    banner.style.pointerEvents = "auto";
 
-    // Set image if any
-    if (message.image) {
-      imgElem.src = message.image;
-      imgElem.style.opacity = "1";
-      imgElem.style.left = "0";
-      imgElem.style.pointerEvents = "auto";
-    } else {
+    if (entry.name !== currentSpeaker) {
       imgElem.style.opacity = "0";
-      imgElem.style.left = "-40vw";
-      imgElem.style.pointerEvents = "none";
-    }
-
-    // Type the text with effect, then start auto skip timer
-    typeText(msgElem, message.text, 20, () => {
-      startAutoSkipTimer(message.text.length);
-    });
-
-    // Update icons visibility depending on linked/unlinked property
-    const showLinked = game.settings.get("hearme-chat-notification", "showLinkedIcon");
-    const showUnlinked = game.settings.get("hearme-chat-notification", "showUnlinkedIcon");
-
-    if (linkedIcon && unlinkedIcon) {
-      if (message.linked === true) {
-        linkedIcon.style.display = showLinked ? "inline-block" : "none";
-        unlinkedIcon.style.display = "none";
-      } else if (message.linked === false) {
-        unlinkedIcon.style.display = showUnlinked ? "inline-block" : "none";
-        linkedIcon.style.display = "none";
-      } else {
-        linkedIcon.style.display = showLinked ? "inline-block" : "none";
-        unlinkedIcon.style.display = showUnlinked ? "inline-block" : "none";
+      imgElem.style.left = "-35vw";
+      if (entry.image) {
+        imgElem.src = entry.image;
+        setTimeout(() => {
+          imgElem.style.left = "0";
+          imgElem.style.opacity = "1";
+        }, 50);
       }
+      currentSpeaker = entry.name;
     }
 
-    updateNextArrow();
+    if (entry.userId === game.user.id) {
+      console.log("Playing chat sound for local user");
+      playChatSound();
+    }
+
+    typeText(msgElem, entry.msg, 20, () => {
+      updateNextArrow();
+      const isFocused = document.hasFocus();
+      const sheetOpen = !!document.querySelector(".app.window-app.sheet:not(.minimized)") ||
+                        !!document.querySelector(".app.window-app.journal-entry:not(.minimized)");
+      if (isFocused && !sheetOpen) {
+        startAutoSkipTimer(entry.msg.length);
+      }
+    });
   }
 
-  // Hide the banner and reset states
-  function hideBanner() {
-    if (!banner) return;
-    banner.style.opacity = "0";
-    banner.style.pointerEvents = "none";
-    setTimeout(() => {
-      banner.style.display = "none";
-    }, 250);
-
-    if (imgElem) {
-      imgElem.style.opacity = "0";
-      imgElem.style.left = "-40vw";
-      imgElem.style.pointerEvents = "none";
-    }
-
+  function skipMessage() {
+    if (typing) return;
     clearAutoSkip();
-    messageQueue = [];
-    currentMessage = null;
-    currentSpeaker = null;
-    updateNextArrow();
-
-    // Hide icons on hide
-    if (linkedIcon) linkedIcon.style.display = "none";
-    if (unlinkedIcon) unlinkedIcon.style.display = "none";
+    if (messageQueue.length > 0) {
+      const next = messageQueue.shift();
+      displayMessage(next);
+    } else {
+      banner.style.opacity = "0";
+      imgElem.style.opacity = "0";
+      timerBar.style.transition = "none";
+      timerBar.style.transform = "scaleX(1)";
+      timerBar.style.opacity = "1";
+      setTimeout(() => {
+        banner.style.display = "none";
+        currentSpeaker = null;
+        currentMessage = null;
+      }, 250);
+    }
   }
 
-  // Public API to queue messages
-  window.VNShowMessage = (message) => {
-    if (typing || currentMessage) {
-      messageQueue.push(message);
-    } else {
-      displayMessage(message);
-    }
-  };
-
-  // Listen for keydown events for skipping
   document.addEventListener("keydown", (e) => {
     const isTypingChat = document.activeElement?.closest(".chat-message") || document.activeElement?.tagName === "TEXTAREA";
-    const sheetOpen = !!document.querySelector(".app.window-app.sheet:not(.minimized)") ||
-                      !!document.querySelector(".app.window-app.journal-entry:not(.minimized)");
+    const sheetOpen = !!document.querySelector(".app.window-app.sheet:not(.minimized)");
 
-    const skipKey = game.settings.get("hearme-chat-notification", "skipKey") || "KeyQ";
+    const skipKey = game.settings.get("hearme-chat-notification", "skipKey")?.toLowerCase();
 
     if (!isTypingChat && !sheetOpen) {
-      if (e.code === skipKey) skipMessage();
+      if (e.key.toLowerCase() === skipKey) skipMessage();
       if (e.key === "Tab") {
         e.preventDefault();
         skipMessage();
@@ -427,27 +327,45 @@ Hooks.once("init", () => {
     }
   });
 
-  // Window focus/blur handler to pause/resume timer and show/hide timer bar
   window.addEventListener("blur", () => {
     pauseAutoSkipTimer();
   });
+
   window.addEventListener("focus", () => {
     resumeAutoSkipTimer();
   });
 
-  // For the skip key settings input, add listener to convert any key pressed into the code string
-  Hooks.on("renderSettingsConfig", (app, html) => {
-    const skipKeyInput = html.find("input[name='hearme-chat-notification.skipKey']");
-    if (!skipKeyInput.length) return;
+  Hooks.on("createChatMessage", (message) => {
+    if (!message.visible || message.isRoll) return;
+    const content = message.content.trim();
+    let name = "";
+    let image = null;
 
-    skipKeyInput.prop("readonly", true);
-    skipKeyInput.off("keydown").on("keydown", (event) => {
-      event.preventDefault();
-      const code = event.originalEvent.code;
-      if (code) {
-        game.settings.set("hearme-chat-notification", "skipKey", code);
-        skipKeyInput.val(code);
+    if (!message.speaker || !message.speaker.actor) return;
+    const actor = game.actors.get(message.speaker.actor);
+    if (!actor) return;
+
+    if (message.speaker.token) {
+      const scene = game.scenes.active;
+      const token = scene?.tokens.get(message.speaker.token);
+      if (token) {
+        name = token.name;
+        image = token.texture.src;
+      } else {
+        name = actor.name;
+        image = actor.img;
       }
-    });
+    } else {
+      name = actor.name;
+      image = actor.img;
+    }
+
+    const entry = { name, msg: content, image, userId: message.user.id };
+    if (banner.style.display === "flex") {
+      messageQueue.push(entry);
+      updateNextArrow();
+    } else {
+      displayMessage(entry);
+    }
   });
 })();
