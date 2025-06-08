@@ -1,4 +1,4 @@
-// === INIT SOUND SETTING ===
+// === INIT SOUND & SKIP KEY SETTINGS ===
 Hooks.once("init", () => {
   game.settings.register("hearme-chat-notification", "pingSound", {
     name: "Chat Notification Sound",
@@ -8,6 +8,15 @@ Hooks.once("init", () => {
     type: String,
     default: "modules/hearme-chat-notification/ui/chat-ping.ogg",
     filePicker: "audio"
+  });
+
+  game.settings.register("hearme-chat-notification", "skipKey", {
+    name: "Skip Key",
+    hint: "The key to press to skip chat dialogue (default: Q).",
+    scope: "client",
+    config: true,
+    type: String,
+    default: "q"
   });
 });
 
@@ -47,7 +56,7 @@ Hooks.once("init", () => {
     banner.id = "vn-chat-banner";
     Object.assign(banner.style, {
       position: "fixed",
-      bottom: "5%",
+      bottom: "calc(5% + 48px)",
       left: "20%",
       width: "60%",
       background: "rgba(0,0,0,0.75)",
@@ -67,8 +76,6 @@ Hooks.once("init", () => {
       transition: "opacity 0.25s ease",
       opacity: "0",
       pointerEvents: "none",
-      position: "fixed",
-      bottom: "calc(5% + 48px)", // Adjust this to appear below the character sheet UI if needed
     });
 
     const nameElem = document.createElement("div");
@@ -107,7 +114,8 @@ Hooks.once("init", () => {
       background: "white",
       transformOrigin: "left",
       transform: "scaleX(1)",
-      transition: "transform linear"
+      transition: "transform linear",
+      opacity: "1"  // Make sure visible by default
     });
     banner.appendChild(timerBar);
 
@@ -159,6 +167,7 @@ Hooks.once("init", () => {
     autoSkipTimeout = null;
     timerBar.style.transition = "none";
     timerBar.style.transform = "scaleX(1)";
+    timerBar.style.opacity = "1";  // Ensure visible when cleared
     timerPaused = false;
     timerRemaining = 0;
   }
@@ -172,6 +181,7 @@ Hooks.once("init", () => {
     autoSkipStart = Date.now();
     timerBar.style.transition = "none";
     timerBar.style.transform = "scaleX(1)";
+    timerBar.style.opacity = "1";  // Show timer bar
 
     setTimeout(() => {
       timerBar.style.transition = `transform ${autoSkipDuration}ms linear`;
@@ -179,14 +189,12 @@ Hooks.once("init", () => {
     }, 10);
 
     autoSkipTimeout = setTimeout(() => {
-      // Check if tab/window is focused & no sheet/journal open
       const isFocused = document.hasFocus();
       const sheetOpen = !!document.querySelector(".app.window-app.sheet:not(.minimized)") ||
                         !!document.querySelector(".app.window-app.journal-entry:not(.minimized)");
       if (isFocused && !sheetOpen) {
         skipMessage();
       } else {
-        // If not focused or sheet open, pause timer
         pauseAutoSkipTimer();
       }
     }, autoSkipDuration);
@@ -199,20 +207,24 @@ Hooks.once("init", () => {
     timerPaused = true;
     clearTimeout(autoSkipTimeout);
 
-    // Calculate remaining time
     const elapsed = Date.now() - autoSkipStart;
     timerRemaining = Math.max(autoSkipDuration - elapsed, 0);
 
     timerBar.style.transition = "none";
-    // Calculate current scaleX based on elapsed
     const progress = timerRemaining / autoSkipDuration;
     timerBar.style.transform = `scaleX(${progress})`;
+
+    // Hide timer bar when paused (alt-tab)
+    timerBar.style.opacity = "0";
   }
 
   function resumeAutoSkipTimer() {
     if (!timerPaused || !currentMessage) return;
     timerPaused = false;
     autoSkipStart = Date.now();
+
+    // Show timer bar when resuming
+    timerBar.style.opacity = "1";
 
     timerBar.style.transition = `transform ${timerRemaining}ms linear`;
     timerBar.style.transform = "scaleX(0)";
@@ -261,7 +273,6 @@ Hooks.once("init", () => {
 
     typeText(msgElem, entry.msg, 20, () => {
       updateNextArrow();
-      // Only start timer if window is focused and no sheet/journal open
       const isFocused = document.hasFocus();
       const sheetOpen = !!document.querySelector(".app.window-app.sheet:not(.minimized)") ||
                         !!document.querySelector(".app.window-app.journal-entry:not(.minimized)");
@@ -282,6 +293,7 @@ Hooks.once("init", () => {
       imgElem.style.opacity = "0";
       timerBar.style.transition = "none";
       timerBar.style.transform = "scaleX(1)";
+      timerBar.style.opacity = "1"; // reset opacity so next message will show timer
       setTimeout(() => {
         banner.style.display = "none";
         currentSpeaker = null;
@@ -294,10 +306,14 @@ Hooks.once("init", () => {
     const isTypingChat = document.activeElement?.closest(".chat-message") || document.activeElement?.tagName === "TEXTAREA";
     const sheetOpen = !!document.querySelector(".app.window-app.sheet:not(.minimized)");
 
-    if ((e.key === "q" || e.key === "Q") && !isTypingChat && !sheetOpen) skipMessage();
-    if (e.key === "Tab") {
-      e.preventDefault();
-      skipMessage();
+    const skipKey = game.settings.get("hearme-chat-notification", "skipKey")?.toLowerCase();
+
+    if (!isTypingChat && !sheetOpen) {
+      if (e.key.toLowerCase() === skipKey) skipMessage();
+      if (e.key === "Tab") {
+        e.preventDefault();
+        skipMessage();
+      }
     }
   });
 
