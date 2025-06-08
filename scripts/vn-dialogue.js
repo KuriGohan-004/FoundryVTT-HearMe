@@ -1,6 +1,5 @@
-// === INIT SOUND SETTING AND OTHERS ===
+// === INIT SETTINGS ===
 Hooks.once("init", () => {
-  // Sound setting
   game.settings.register("hearme-chat-notification", "pingSound", {
     name: "Chat Notification Sound",
     hint: "The sound to play when a new VN chat message is displayed.",
@@ -11,7 +10,6 @@ Hooks.once("init", () => {
     filePicker: "audio"
   });
 
-  // Skip key setting with listener style (stores KeyboardEvent.code)
   game.settings.register("hearme-chat-notification", "skipKey", {
     name: "Skip Dialogue Key",
     hint: "Click the box and press a key to assign it as the skip key.",
@@ -22,7 +20,6 @@ Hooks.once("init", () => {
     onChange: val => console.log(`Skip key set to: ${val}`)
   });
 
-  // Minimum auto skip time in seconds
   game.settings.register("hearme-chat-notification", "minAutoSkipTime", {
     name: "Minimum Auto-Skip Time (seconds)",
     hint: "Minimum time before auto-skipping a message (whole seconds, 1-30). Default is 5.",
@@ -37,7 +34,7 @@ Hooks.once("init", () => {
     }
   });
 
-  // Show/hide linked icon
+  // SET BOTH TO DEFAULT TRUE
   game.settings.register("hearme-chat-notification", "showLinkedIcon", {
     name: "Show Linked Icon",
     hint: "Show the icon for linked messages in the VN banner.",
@@ -47,7 +44,6 @@ Hooks.once("init", () => {
     default: true
   });
 
-  // Show/hide unlinked icon
   game.settings.register("hearme-chat-notification", "showUnlinkedIcon", {
     name: "Show Unlinked Icon",
     hint: "Show the icon for unlinked messages in the VN banner.",
@@ -58,12 +54,14 @@ Hooks.once("init", () => {
   });
 });
 
-// MAIN IIFE
 (() => {
   let banner = document.getElementById("vn-chat-banner");
   let imgElem = document.getElementById("vn-chat-image");
   let arrowElem = document.getElementById("vn-chat-arrow");
   let timerBar = null;
+  let linkedIcon = null;
+  let unlinkedIcon = null;
+
   let currentSpeaker = null;
   let currentMessage = null;
   let messageQueue = [];
@@ -74,20 +72,7 @@ Hooks.once("init", () => {
   let timerPaused = false;
   let timerRemaining = 0;
 
-  // --- Setup linked/unlinked icons ---
-  // For demonstration, create two icons inside banner:
-  // You can customize this or replace icons with your actual linked/unlinked icons logic.
-  let linkedIcon = null;
-  let unlinkedIcon = null;
-
-  const updateIconsVisibility = () => {
-    const showLinked = game.settings.get("hearme-chat-notification", "showLinkedIcon");
-    const showUnlinked = game.settings.get("hearme-chat-notification", "showUnlinkedIcon");
-    if (linkedIcon) linkedIcon.style.display = showLinked ? "inline-block" : "none";
-    if (unlinkedIcon) unlinkedIcon.style.display = showUnlinked ? "inline-block" : "none";
-  };
-
-  // Play notification sound
+  // PLAY SOUND
   const playChatSound = () => {
     const soundPath = game.settings.get("hearme-chat-notification", "pingSound");
     if (!soundPath) return;
@@ -102,13 +87,13 @@ Hooks.once("init", () => {
     }, true);
   };
 
-  // Create UI elements if missing
+  // CREATE BANNER IF MISSING
   if (!banner) {
     banner = document.createElement("div");
     banner.id = "vn-chat-banner";
     Object.assign(banner.style, {
       position: "fixed",
-      bottom: "calc(5% + 48px)", // Adjust if needed
+      bottom: "calc(5% + 48px)",
       left: "20%",
       width: "60%",
       background: "rgba(0,0,0,0.75)",
@@ -128,9 +113,9 @@ Hooks.once("init", () => {
       transition: "opacity 0.25s ease",
       opacity: "0",
       pointerEvents: "none",
+      position: "fixed"
     });
 
-    // Name element
     const nameElem = document.createElement("div");
     nameElem.id = "vn-chat-name";
     nameElem.style.fontWeight = "bold";
@@ -138,13 +123,11 @@ Hooks.once("init", () => {
     nameElem.style.marginBottom = "4px";
     banner.appendChild(nameElem);
 
-    // Message element
     const msgElem = document.createElement("div");
     msgElem.id = "vn-chat-msg";
     msgElem.style.fontSize = "2.2em";
     banner.appendChild(msgElem);
 
-    // Arrow element (for skip arrow)
     arrowElem = document.createElement("div");
     arrowElem.id = "vn-chat-arrow";
     arrowElem.innerHTML = "&#8595;";
@@ -158,7 +141,6 @@ Hooks.once("init", () => {
     });
     banner.appendChild(arrowElem);
 
-    // Timer bar
     timerBar = document.createElement("div");
     timerBar.id = "vn-chat-timer";
     Object.assign(timerBar.style, {
@@ -174,43 +156,40 @@ Hooks.once("init", () => {
     });
     banner.appendChild(timerBar);
 
-    // Linked icon
     linkedIcon = document.createElement("div");
     linkedIcon.id = "vn-chat-linked-icon";
-    linkedIcon.textContent = "🔗"; // Example linked icon
+    linkedIcon.textContent = "🔗";
     Object.assign(linkedIcon.style, {
       position: "absolute",
       top: "8px",
       right: "48px",
       fontSize: "1.2em",
       opacity: "0.7",
-      cursor: "default"
+      cursor: "default",
+      display: "inline-block"
     });
     banner.appendChild(linkedIcon);
 
-    // Unlinked icon
     unlinkedIcon = document.createElement("div");
     unlinkedIcon.id = "vn-chat-unlinked-icon";
-    unlinkedIcon.textContent = "⛔"; // Example unlinked icon
+    unlinkedIcon.textContent = "⛔";
     Object.assign(unlinkedIcon.style, {
       position: "absolute",
       top: "8px",
       right: "72px",
       fontSize: "1.2em",
       opacity: "0.7",
-      cursor: "default"
+      cursor: "default",
+      display: "inline-block"
     });
     banner.appendChild(unlinkedIcon);
 
-    // Set initial icons visibility from settings
-    updateIconsVisibility();
-
     document.body.appendChild(banner);
   } else {
-    // If banner existed, find icons if present or create them
     linkedIcon = document.getElementById("vn-chat-linked-icon");
     unlinkedIcon = document.getElementById("vn-chat-unlinked-icon");
-    updateIconsVisibility();
+    timerBar = document.getElementById("vn-chat-timer");
+    arrowElem = document.getElementById("vn-chat-arrow");
   }
 
   if (!imgElem) {
@@ -232,12 +211,23 @@ Hooks.once("init", () => {
     document.body.appendChild(imgElem);
   }
 
-  // Update the skip arrow visibility depending on queue
+  // Update linked/unlinked icons visibility from settings defaults
+  function updateIconsVisibility() {
+    const showLinked = game.settings.get("hearme-chat-notification", "showLinkedIcon");
+    const showUnlinked = game.settings.get("hearme-chat-notification", "showUnlinkedIcon");
+    if (linkedIcon) linkedIcon.style.display = showLinked ? "inline-block" : "none";
+    if (unlinkedIcon) unlinkedIcon.style.display = showUnlinked ? "inline-block" : "none";
+  }
+
+  updateIconsVisibility();
+
+  // Show or hide arrow skip indicator
   function updateNextArrow() {
+    if (!arrowElem) return;
     arrowElem.style.display = messageQueue.length > 0 ? "block" : "none";
   }
 
-  // Typewriter effect for text
+  // Typewriter effect
   function typeText(element, text, speed = 20, callback) {
     typing = true;
     element.innerHTML = "";
@@ -255,80 +245,57 @@ Hooks.once("init", () => {
     typeChar();
   }
 
-  // Clear auto-skip timer & reset timer bar
   function clearAutoSkip() {
     clearTimeout(autoSkipTimeout);
     autoSkipTimeout = null;
     timerBar.style.transition = "none";
     timerBar.style.transform = "scaleX(1)";
+    timerBar.style.display = "block";
     timerPaused = false;
     timerRemaining = 0;
-    timerBar.style.display = "block"; // Ensure visible when cleared
   }
 
-  // Start auto skip timer with dynamic duration
   function startAutoSkipTimer(textLength) {
     clearAutoSkip();
-
-    const minAutoSkipMs = (game.settings.get("hearme-chat-notification", "minAutoSkipTime") || 5) * 1000;
-    autoSkipDuration = minAutoSkipMs + textLength * 50;
-    timerRemaining = autoSkipDuration;
+    const minTime = game.settings.get("hearme-chat-notification", "minAutoSkipTime") || 5;
+    autoSkipDuration = Math.max(minTime * 1000, textLength * 50); // 50ms per char, min minimum
     autoSkipStart = Date.now();
 
-    timerBar.style.display = "block";
-    timerBar.style.transition = "none";
-    timerBar.style.transform = "scaleX(1)";
-
-    // Small delay before animating timer bar to scaleX(0)
-    setTimeout(() => {
-      timerBar.style.transition = `transform ${autoSkipDuration}ms linear`;
-      timerBar.style.transform = "scaleX(0)";
-    }, 10);
-
-    autoSkipTimeout = setTimeout(() => {
-      const isFocused = document.hasFocus();
-      const sheetOpen = !!document.querySelector(".app.window-app.sheet:not(.minimized)") ||
-                        !!document.querySelector(".app.window-app.journal-entry:not(.minimized)");
-      if (isFocused && !sheetOpen) {
-        skipMessage();
-      } else {
-        pauseAutoSkipTimer();
-      }
-    }, autoSkipDuration);
-
-    timerPaused = false;
-  }
-
-  // Pause the auto-skip timer and hide timer bar when unfocused
-  function pauseAutoSkipTimer() {
-    if (!autoSkipTimeout || timerPaused) return;
-    timerPaused = true;
-    clearTimeout(autoSkipTimeout);
-
-    const elapsed = Date.now() - autoSkipStart;
-    timerRemaining = Math.max(autoSkipDuration - elapsed, 0);
-
-    timerBar.style.transition = "none";
-    const progress = timerRemaining / autoSkipDuration;
-    timerBar.style.transform = `scaleX(${progress})`;
-
-    // Hide timer bar when paused due to window unfocus
-    timerBar.style.display = "none";
-  }
-
-  // Resume auto-skip timer and show timer bar
-  function resumeAutoSkipTimer() {
-    if (!timerPaused || !currentMessage) return;
-    timerPaused = false;
-    autoSkipStart = Date.now();
-
-    timerBar.style.display = "block";
-    timerBar.style.transition = `transform ${timerRemaining}ms linear`;
+    timerBar.style.transition = `transform ${autoSkipDuration}ms linear`;
     timerBar.style.transform = "scaleX(0)";
+    timerBar.style.display = "block";
 
     autoSkipTimeout = setTimeout(() => {
       skipMessage();
-    }, timerRemaining);
+    }, autoSkipDuration);
+  }
+
+  function pauseAutoSkipTimer() {
+    if (autoSkipTimeout && !timerPaused) {
+      timerPaused = true;
+      timerRemaining = autoSkipDuration - (Date.now() - autoSkipStart);
+      clearTimeout(autoSkipTimeout);
+      timerBar.style.transition = "none";
+      const scaleX = timerRemaining / autoSkipDuration;
+      timerBar.style.transform = `scaleX(${scaleX})`;
+      timerBar.style.display = "none"; // Hide timer bar on blur
+    }
+  }
+
+  function resumeAutoSkipTimer() {
+    if (timerPaused) {
+      timerPaused = false;
+      autoSkipDuration = timerRemaining;
+      autoSkipStart = Date.now();
+
+      timerBar.style.display = "block";
+      timerBar.style.transition = `transform ${timerRemaining}ms linear`;
+      timerBar.style.transform = "scaleX(0)";
+
+      autoSkipTimeout = setTimeout(() => {
+        skipMessage();
+      }, timerRemaining);
+    }
   }
 
   // Skip current message and advance
@@ -358,7 +325,6 @@ Hooks.once("init", () => {
 
     if (!banner) return;
 
-    // Play notification sound on new message
     playChatSound();
 
     // Set speaker name and message
@@ -390,18 +356,19 @@ Hooks.once("init", () => {
     });
 
     // Update icons visibility depending on linked/unlinked property
-    // Assuming message.linked is boolean or undefined
+    const showLinked = game.settings.get("hearme-chat-notification", "showLinkedIcon");
+    const showUnlinked = game.settings.get("hearme-chat-notification", "showUnlinkedIcon");
+
     if (linkedIcon && unlinkedIcon) {
       if (message.linked === true) {
-        linkedIcon.style.display = game.settings.get("hearme-chat-notification", "showLinkedIcon") ? "inline-block" : "none";
+        linkedIcon.style.display = showLinked ? "inline-block" : "none";
         unlinkedIcon.style.display = "none";
       } else if (message.linked === false) {
-        unlinkedIcon.style.display = game.settings.get("hearme-chat-notification", "showUnlinkedIcon") ? "inline-block" : "none";
+        unlinkedIcon.style.display = showUnlinked ? "inline-block" : "none";
         linkedIcon.style.display = "none";
       } else {
-        // Neither linked nor unlinked explicitly
-        linkedIcon.style.display = "none";
-        unlinkedIcon.style.display = "none";
+        linkedIcon.style.display = showLinked ? "inline-block" : "none";
+        unlinkedIcon.style.display = showUnlinked ? "inline-block" : "none";
       }
     }
 
@@ -428,6 +395,10 @@ Hooks.once("init", () => {
     currentMessage = null;
     currentSpeaker = null;
     updateNextArrow();
+
+    // Hide icons on hide
+    if (linkedIcon) linkedIcon.style.display = "none";
+    if (unlinkedIcon) unlinkedIcon.style.display = "none";
   }
 
   // Public API to queue messages
@@ -466,17 +437,14 @@ Hooks.once("init", () => {
 
   // For the skip key settings input, add listener to convert any key pressed into the code string
   Hooks.on("renderSettingsConfig", (app, html) => {
-    // Find the skipKey input field
     const skipKeyInput = html.find("input[name='hearme-chat-notification.skipKey']");
     if (!skipKeyInput.length) return;
 
-    // Prevent typing, listen for keydown on input
     skipKeyInput.prop("readonly", true);
-    skipKeyInput.on("keydown", (event) => {
+    skipKeyInput.off("keydown").on("keydown", (event) => {
       event.preventDefault();
       const code = event.originalEvent.code;
       if (code) {
-        // Save setting
         game.settings.set("hearme-chat-notification", "skipKey", code);
         skipKeyInput.val(code);
       }
