@@ -2,23 +2,23 @@ const MODULE_ID = "my-youtube-sync";
 let player;
 let currentVideoId = "";
 
-// When Foundry is ready, build the interface
+// UI + YouTube API setup
 Hooks.once("ready", () => {
   createUI();
   loadYouTubeAPI();
 
-  // Listen for GM play/stop actions
+  // Listen for GM actions
   game.socket.on(`module.${MODULE_ID}`, ({ action, videoId }) => {
     if (action === "play") {
       currentVideoId = videoId;
       loadVideo(videoId);
-    } else if (action === "stop") {
-      if (player) player.stopVideo();
+    } else if (action === "stop" && player) {
+      player.stopVideo();
     }
   });
 });
 
-// UI setup
+// UI creation
 function createUI() {
   const panel = document.createElement("div");
   panel.id = "yt-sync-panel";
@@ -32,26 +32,33 @@ function createUI() {
     borderRadius: "8px",
     zIndex: 10000,
     width: "300px",
-    boxShadow: "0 0 8px #000"
+    maxWidth: "90vw",
+    boxShadow: "0 0 10px #000",
+    fontFamily: "sans-serif"
   });
 
   panel.innerHTML = `
     ${game.user.isGM ? `
       <label style="color:white;">YouTube URL or ID:</label><br/>
-      <input type="text" id="yt-url" style="width: 100%; margin-bottom: 5px; color: white; background-color: #222;"/><br/>
+      <input type="text" id="yt-url" style="width: 100%; margin-bottom: 5px; color: white; background-color: #222; border: none; padding: 4px;"/><br/>
       <button id="yt-play">Play for All</button>
       <button id="yt-stop">Stop</button><br/><br/>
     ` : ''}
-    <div id="yt-player" style="width:100%; aspect-ratio:16/9;"></div>
+    <div id="yt-player" style="width:100%; aspect-ratio:16/9; background: black;"></div>
   `;
 
   document.body.appendChild(panel);
+  makeBoundedDraggable(panel);
 
   if (game.user.isGM) {
     document.getElementById("yt-play").onclick = () => {
       const input = document.getElementById("yt-url").value.trim();
       const videoId = extractYouTubeID(input);
-      if (!videoId) return ui.notifications.warn("Invalid YouTube URL or ID");
+      if (!videoId || videoId.length !== 11) {
+        ui.notifications.warn("Invalid YouTube URL or ID.");
+        return;
+      }
+      currentVideoId = videoId;
       game.socket.emit(`module.${MODULE_ID}`, { action: "play", videoId });
       loadVideo(videoId);
     };
@@ -61,64 +68,74 @@ function createUI() {
       if (player) player.stopVideo();
     };
   }
-
-  makeBoundedDraggable(panel);
 }
 
-// YouTube video ID extractor
-function extractYouTubeID(url) {
-  const match = url.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\\?v=|embed\/|v\/))([\\w-]{11})/);
-  return match ? match[1] : url;
+// YouTube ID extractor
+function extractYouTubeID(input) {
+  try {
+    const url = new URL(input.includes("http") ? input : `https://youtube.com/watch?v=${input}`);
+    if (url.hostname.includes("youtu.be")) {
+      return url.pathname.slice(1);
+    }
+    if (url.hostname.includes("youtube.com")) {
+      return url.searchParams.get("v");
+    }
+  } catch (e) {
+    // If it's not a URL, assume raw ID
+    return input.length === 11 ? input : null;
+  }
+  return null;
 }
 
-// Inject YouTube API script
+// Load the YouTube Player API
 function loadYouTubeAPI() {
-  if (window.YT) return;
-  const tag = document.createElement("script");
-  tag.src = "https://www.youtube.com/iframe_api";
-  document.head.appendChild(tag);
+  if (window.YT && typeof YT.Player === "function") {
+    if (currentVideoId) loadVideo(currentVideoId);
+    return;
+  }
+
+  const script = document.createElement("script");
+  script.src = "https://www.youtube.com/iframe_api";
+  document.head.appendChild(script);
 
   window.onYouTubeIframeAPIReady = () => {
     if (currentVideoId) loadVideo(currentVideoId);
   };
 }
 
-// Load or reload the video
+// Load a video into the embedded player
 function loadVideo(videoId) {
   if (!window.YT || !YT.Player) return;
 
-  const options = {
+  const container = document.getElementById("yt-player");
+  container.innerHTML = ""; // Clear existing iframe
+
+  player = new YT.Player("yt-player", {
     videoId,
-    width: "100%",
     playerVars: {
       autoplay: 1,
       controls: 1,
-      rel: 0,
       modestbranding: 1,
+      rel: 0,
       loop: 1,
       playlist: videoId
     },
     events: {
       onReady: (e) => e.target.playVideo(),
+      onError: (e) => {
+        console.warn("YouTube error code:", e.data);
+        ui.notifications.error("This video cannot be embedded. Try a different video.");
+      },
       onStateChange: (e) => {
-        if (e.data === YT.PlayerState.ENDED) {
-          e.target.playVideo();
-        }
+        if (e.data === YT.PlayerState.ENDED) e.target.playVideo();
       }
     }
-  };
-
-  if (player) {
-    player.loadVideoById(videoId);
-  } else {
-    player = new YT.Player("yt-player", options);
-  }
+  });
 }
 
-// Make the panel draggable within bounds
+// Draggable and bounded
 function makeBoundedDraggable(el) {
-  let isDragging = false;
-  let offsetX, offsetY;
+  let isDragging = false, offsetX = 0, offsetY = 0;
 
   el.addEventListener("mousedown", (e) => {
     if (["INPUT", "BUTTON"].includes(e.target.tagName)) return;
@@ -131,8 +148,8 @@ function makeBoundedDraggable(el) {
 
   function drag(e) {
     if (!isDragging) return;
-    const x = Math.min(window.innerWidth - el.offsetWidth, Math.max(0, e.clientX - offsetX));
-    const y = Math.min(window.innerHeight - el.offsetHeight, Math.max(0, e.clientY - offsetY));
+    const x = Math.max(0, Math.min(window.innerWidth - el.offsetWidth, e.clientX - offsetX));
+    const y = Math.max(0, Math.min(window.innerHeight - el.offsetHeight, e.clientY - offsetY));
     el.style.left = `${x}px`;
     el.style.top = `${y}px`;
   }
