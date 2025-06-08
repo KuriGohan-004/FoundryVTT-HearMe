@@ -2,12 +2,12 @@ const MODULE_ID = "my-youtube-sync";
 let player;
 let currentVideoId = "";
 
-Hooks.once("ready", async () => {
-  // Create the YouTube player for ALL users
-  createYouTubePlayerUI();
+// When Foundry is ready, build the interface
+Hooks.once("ready", () => {
+  createUI();
   loadYouTubeAPI();
 
-  // Listen for play/stop commands from the GM
+  // Listen for GM play/stop actions
   game.socket.on(`module.${MODULE_ID}`, ({ action, videoId }) => {
     if (action === "play") {
       currentVideoId = videoId;
@@ -18,7 +18,8 @@ Hooks.once("ready", async () => {
   });
 });
 
-function createYouTubePlayerUI() {
+// UI setup
+function createUI() {
   const panel = document.createElement("div");
   panel.id = "yt-sync-panel";
   Object.assign(panel.style, {
@@ -36,11 +37,11 @@ function createYouTubePlayerUI() {
 
   panel.innerHTML = `
     ${game.user.isGM ? `
-      <label>YouTube URL or ID:</label><br/>
+      <label style="color:white;">YouTube URL or ID:</label><br/>
       <input type="text" id="yt-url" style="width: 100%; margin-bottom: 5px; color: white; background-color: #222;"/><br/>
       <button id="yt-play">Play for All</button>
       <button id="yt-stop">Stop</button><br/><br/>
-    ` : ""}
+    ` : ''}
     <div id="yt-player" style="width:100%; aspect-ratio:16/9;"></div>
   `;
 
@@ -64,17 +65,15 @@ function createYouTubePlayerUI() {
   makeBoundedDraggable(panel);
 }
 
+// YouTube video ID extractor
 function extractYouTubeID(url) {
-  const match = url.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/))([\w\-]+)/);
+  const match = url.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\\?v=|embed\/|v\/))([\\w-]{11})/);
   return match ? match[1] : url;
 }
 
+// Inject YouTube API script
 function loadYouTubeAPI() {
-  if (window.YT && YT.Player) {
-    if (currentVideoId) loadVideo(currentVideoId);
-    return;
-  }
-
+  if (window.YT) return;
   const tag = document.createElement("script");
   tag.src = "https://www.youtube.com/iframe_api";
   document.head.appendChild(tag);
@@ -84,28 +83,39 @@ function loadYouTubeAPI() {
   };
 }
 
+// Load or reload the video
 function loadVideo(videoId) {
   if (!window.YT || !YT.Player) return;
+
+  const options = {
+    videoId,
+    width: "100%",
+    playerVars: {
+      autoplay: 1,
+      controls: 1,
+      rel: 0,
+      modestbranding: 1,
+      loop: 1,
+      playlist: videoId
+    },
+    events: {
+      onReady: (e) => e.target.playVideo(),
+      onStateChange: (e) => {
+        if (e.data === YT.PlayerState.ENDED) {
+          e.target.playVideo();
+        }
+      }
+    }
+  };
 
   if (player) {
     player.loadVideoById(videoId);
   } else {
-    player = new YT.Player("yt-player", {
-      videoId,
-      width: "100%",
-      playerVars: {
-        autoplay: 1,
-        controls: 1,
-        rel: 0,
-        modestbranding: 1
-      },
-      events: {
-        onReady: (e) => e.target.playVideo()
-      }
-    });
+    player = new YT.Player("yt-player", options);
   }
 }
 
+// Make the panel draggable within bounds
 function makeBoundedDraggable(el) {
   let isDragging = false;
   let offsetX, offsetY;
