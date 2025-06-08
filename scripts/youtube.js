@@ -3,9 +3,11 @@ let player;
 let currentVideoId = "";
 
 Hooks.once("ready", async () => {
-  if (game.user.isGM) createGMControls();
+  // Create the YouTube player for ALL users
+  createYouTubePlayerUI();
   loadYouTubeAPI();
 
+  // Listen for play/stop commands from the GM
   game.socket.on(`module.${MODULE_ID}`, ({ action, videoId }) => {
     if (action === "play") {
       currentVideoId = videoId;
@@ -16,7 +18,7 @@ Hooks.once("ready", async () => {
   });
 });
 
-function createGMControls() {
+function createYouTubePlayerUI() {
   const panel = document.createElement("div");
   panel.id = "yt-sync-panel";
   Object.assign(panel.style, {
@@ -33,40 +35,50 @@ function createGMControls() {
   });
 
   panel.innerHTML = `
-    <label>YouTube URL or ID:</label><br/>
-    <input type="text" id="yt-url" style="width: 100%; margin-bottom: 5px;"/><br/>
-    <button id="yt-play">Play for All</button>
-    <button id="yt-stop">Stop</button><br/><br/>
+    ${game.user.isGM ? `
+      <label>YouTube URL or ID:</label><br/>
+      <input type="text" id="yt-url" style="width: 100%; margin-bottom: 5px; color: white; background-color: #222;"/><br/>
+      <button id="yt-play">Play for All</button>
+      <button id="yt-stop">Stop</button><br/><br/>
+    ` : ""}
     <div id="yt-player" style="width:100%; aspect-ratio:16/9;"></div>
   `;
+
   document.body.appendChild(panel);
 
-  document.getElementById("yt-play").onclick = () => {
-    const input = document.getElementById("yt-url").value.trim();
-    const videoId = extractYouTubeID(input);
-    if (!videoId) return ui.notifications.warn("Invalid YouTube URL or ID");
-    game.socket.emit(`module.${MODULE_ID}`, { action: "play", videoId });
-    loadVideo(videoId);
-  };
+  if (game.user.isGM) {
+    document.getElementById("yt-play").onclick = () => {
+      const input = document.getElementById("yt-url").value.trim();
+      const videoId = extractYouTubeID(input);
+      if (!videoId) return ui.notifications.warn("Invalid YouTube URL or ID");
+      game.socket.emit(`module.${MODULE_ID}`, { action: "play", videoId });
+      loadVideo(videoId);
+    };
 
-  document.getElementById("yt-stop").onclick = () => {
-    game.socket.emit(`module.${MODULE_ID}`, { action: "stop" });
-    if (player) player.stopVideo();
-  };
+    document.getElementById("yt-stop").onclick = () => {
+      game.socket.emit(`module.${MODULE_ID}`, { action: "stop" });
+      if (player) player.stopVideo();
+    };
+  }
 
   makeBoundedDraggable(panel);
 }
 
 function extractYouTubeID(url) {
   const match = url.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?v=|embed\/))([\w\-]+)/);
-  return match ? match[1] : url; // if it's already an ID
+  return match ? match[1] : url;
 }
 
 function loadYouTubeAPI() {
-  if (window.YT) return;
+  if (window.YT && YT.Player) {
+    if (currentVideoId) loadVideo(currentVideoId);
+    return;
+  }
+
   const tag = document.createElement("script");
   tag.src = "https://www.youtube.com/iframe_api";
   document.head.appendChild(tag);
+
   window.onYouTubeIframeAPIReady = () => {
     if (currentVideoId) loadVideo(currentVideoId);
   };
@@ -74,6 +86,7 @@ function loadYouTubeAPI() {
 
 function loadVideo(videoId) {
   if (!window.YT || !YT.Player) return;
+
   if (player) {
     player.loadVideoById(videoId);
   } else {
