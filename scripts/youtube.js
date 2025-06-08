@@ -1,164 +1,97 @@
 const MODULE_ID = "youtube-music-player";
-let ytPlayer;
+let audioElement;
 let isPlaying = false;
 
 Hooks.once("ready", () => {
   if (!game.user.isGM) return;
 
-  // Inject YouTube API script
-  if (!window.YT) {
-    const tag = document.createElement("script");
-    tag.src = "https://www.youtube.com/iframe_api";
-    document.head.appendChild(tag);
-  }
-
   createMusicUI();
 
   game.socket.on(`module.${MODULE_ID}`, (data) => {
     if (data.action === "play") {
-      loadAndPlayYouTube(data.videoId);
+      playAudio(data.src);
     } else if (data.action === "stop") {
-      stopYouTube();
+      stopAudio();
     }
   });
 });
 
 function createMusicUI() {
-  const uiContainer = document.createElement("div");
-  uiContainer.id = "yt-music-ui";
-  uiContainer.style.position = "fixed";
-  uiContainer.style.top = "10px";
-  uiContainer.style.right = "10px";
-  uiContainer.style.zIndex = 1000;
-  uiContainer.style.background = "rgba(0, 0, 0, 0.85)";
-  uiContainer.style.padding = "10px";
-  uiContainer.style.borderRadius = "8px";
-  uiContainer.style.boxShadow = "0 0 10px #000";
-  uiContainer.style.color = "#fff";
-  uiContainer.style.cursor = "move";
-
-  uiContainer.innerHTML = `
-    <label for="yt-url" style="display:block;margin-bottom:5px;">YouTube URL:</label>
-    <input id="yt-url" type="text" placeholder="https://youtube.com/watch?v=..." style="width: 200px; margin-bottom: 5px; background: #222; color: white; border: 1px solid #444;" />
-    <br/>
-    <button id="yt-toggle-btn">Play for All Players</button>
+  const container = document.createElement("div");
+  container.id = "yt-music-ui";
+  Object.assign(container.style, {
+    position: "fixed",
+    top: "10px",
+    left: "10px",
+    width: "260px",
+    background: "rgba(0,0,0,0.85)",
+    color: "#fff",
+    padding: "10px",
+    borderRadius: "8px",
+    boxShadow: "0 0 10px #000",
+    cursor: "move",
+    zIndex: 1000
+  });
+  container.innerHTML = `
+    <label>Audio File Path:</label>
+    <input id="audio-src" type="text" placeholder="modules/myModule/audio/song.mp3" style="width:100%; background:#222; color:#fff; border:1px solid #444; margin-bottom:5px;" />
+    <button id="audio-toggle-btn">Play for All Players</button>
   `;
+  document.body.appendChild(container);
+  makeBoundedDraggable(container);
 
-  document.body.appendChild(uiContainer);
-
-  // Make draggable
-  makeDraggable(uiContainer);
-
-  document.getElementById("yt-toggle-btn").addEventListener("click", () => {
-    const url = document.getElementById("yt-url").value.trim();
-    const videoId = extractYouTubeID(url);
+  document.getElementById("audio-toggle-btn").addEventListener("click", () => {
+    const src = document.getElementById("audio-src").value.trim();
     const action = isPlaying ? "stop" : "play";
-
-    if (action === "play" && !videoId) {
-      ui.notifications.error("Invalid YouTube URL.");
-      return;
-    }
-
-    const payload = { action, videoId };
-    game.socket.emit(`module.${MODULE_ID}`, payload);
-
-    // Also run locally for GM
-    if (action === "play") {
-      loadAndPlayYouTube(videoId);
-    } else {
-      stopYouTube();
-    }
-
+    if (action === "play" && !src) return ui.notifications.error("Please enter an audio file path.");
+    game.socket.emit(`module.${MODULE_ID}`, { action, src });
+    if (action === "play") playAudio(src);
+    else stopAudio();
     isPlaying = !isPlaying;
-    document.getElementById("yt-toggle-btn").innerText = isPlaying ? "Stop Music" : "Play for All Players";
+    document.getElementById("audio-toggle-btn").innerText = isPlaying ? "Stop Music" : "Play for All Players";
   });
 }
 
-function extractYouTubeID(url) {
-  const match = url.match(/(?:v=|youtu\.be\/)([^&?/]+)/);
-  return match ? match[1] : null;
-}
-
-function loadAndPlayYouTube(videoId) {
-  // Create container if not exists
-  if (!document.getElementById("yt-player-container")) {
-    const container = document.createElement("div");
-    container.id = "yt-player-container";
-    container.style.position = "fixed";
-    container.style.bottom = "10px";
-    container.style.left = "10px";
-    container.style.width = "300px";
-    container.style.height = "0px"; // audio only
-    container.style.overflow = "hidden";
-    container.style.zIndex = 1000;
-    document.body.appendChild(container);
-  }
-
-  if (window.YT && YT.Player) {
-    createPlayer(videoId);
+function playAudio(src) {
+  if (!audioElement) {
+    audioElement = new Audio(src);
+    audioElement.loop = true;
+    audioElement.volume = 0.5;
   } else {
-    window.onYouTubeIframeAPIReady = () => createPlayer(videoId);
+    audioElement.src = src;
   }
+  audioElement.play().catch(err => ui.notifications.error("Audio play failed: " + err.message));
 }
 
-function createPlayer(videoId) {
-  if (ytPlayer) {
-    ytPlayer.loadVideoById(videoId);
-    return;
-  }
-
-  ytPlayer = new YT.Player("yt-player-container", {
-    videoId,
-    playerVars: {
-      autoplay: 1,
-      controls: 0,
-      loop: 1,
-      modestbranding: 1,
-      rel: 0,
-      showinfo: 0,
-      mute: 1,
-      playlist: videoId
-    },
-    events: {
-      onReady: (event) => event.target.playVideo(),
-      onStateChange: (event) => {
-        if (event.data === YT.PlayerState.ENDED) {
-          event.target.seekTo(0);
-          event.target.playVideo();
-        }
-      }
-    }
-  });
+function stopAudio() {
+  if (audioElement) audioElement.pause();
 }
 
-function stopYouTube() {
-  if (ytPlayer && ytPlayer.stopVideo) {
-    ytPlayer.stopVideo();
-  }
-}
+function makeBoundedDraggable(el) {
+  let dragging = false, offsetX=0, offsetY=0;
 
-function makeDraggable(element) {
-  let isDragging = false;
-  let offsetX, offsetY;
-
-  element.addEventListener("mousedown", (e) => {
-    if (e.target.tagName === "INPUT" || e.target.tagName === "BUTTON") return;
-    isDragging = true;
-    offsetX = e.clientX - element.offsetLeft;
-    offsetY = e.clientY - element.offsetTop;
+  el.addEventListener("mousedown", e => {
+    if (["INPUT","BUTTON"].includes(e.target.tagName)) return;
+    dragging = true;
+    offsetX = e.clientX - el.getBoundingClientRect().left;
+    offsetY = e.clientY - el.getBoundingClientRect().top;
     document.addEventListener("mousemove", onMouseMove);
     document.addEventListener("mouseup", onMouseUp);
   });
 
   function onMouseMove(e) {
-    if (!isDragging) return;
-    element.style.left = `${e.clientX - offsetX}px`;
-    element.style.top = `${e.clientY - offsetY}px`;
-    element.style.right = "auto";
+    if (!dragging) return;
+    let newLeft = e.clientX - offsetX;
+    let newTop = e.clientY - offsetY;
+    const { innerWidth, innerHeight } = window;
+    newLeft = Math.max(0, Math.min(newLeft, innerWidth - el.offsetWidth));
+    newTop = Math.max(0, Math.min(newTop, innerHeight - el.offsetHeight));
+    el.style.left = newLeft + "px";
+    el.style.top = newTop + "px";
   }
 
   function onMouseUp() {
-    isDragging = false;
+    dragging = false;
     document.removeEventListener("mousemove", onMouseMove);
     document.removeEventListener("mouseup", onMouseUp);
   }
