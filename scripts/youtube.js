@@ -1,25 +1,32 @@
 let player;
 let currentVideoId = null;
 let playerReady = false;
+let queuedVideoId = null; // NEW: for when player isn't ready yet
 
 Hooks.once("ready", () => {
   createYouTubePanel();
   loadYouTubeAPI();
 
+  // Listen to socket from GM
   game.socket.on("module.youtube-sync", async ({ action, url }) => {
     const videoId = extractVideoId(url || "");
-    if (!videoId && action === "load") return;
 
     switch (action) {
       case "load":
+        if (!videoId) return;
         currentVideoId = videoId;
-        if (playerReady) {
-          player?.loadVideoById(currentVideoId);
+
+        if (playerReady && player) {
+          player.loadVideoById(currentVideoId);
+        } else {
+          queuedVideoId = currentVideoId; // Defer until ready
         }
         break;
+
       case "play":
         player?.playVideo();
         break;
+
       case "pause":
         player?.pauseVideo();
         break;
@@ -27,7 +34,6 @@ Hooks.once("ready", () => {
   });
 });
 
-// GM UI + shared player container
 function createYouTubePanel() {
   const container = document.createElement("div");
   container.style.position = "fixed";
@@ -49,8 +55,8 @@ function createYouTubePanel() {
       <button id="yt-pause" style="width:100%;">Pause</button>
     `;
   }
-  html += `<div id="player" style="margin-top:10px;"></div>`;
 
+  html += `<div id="player" style="margin-top:10px;"></div>`;
   container.innerHTML = html;
   document.body.appendChild(container);
 
@@ -60,9 +66,11 @@ function createYouTubePanel() {
       const videoId = extractVideoId(url);
       if (!videoId) return ui.notifications.error("Invalid YouTube URL.");
       currentVideoId = videoId;
+      queuedVideoId = null; // Not needed, player is ready
       game.socket.emit("module.youtube-sync", { action: "load", url });
-      if (playerReady) {
-        player?.loadVideoById(currentVideoId);
+
+      if (playerReady && player) {
+        player.loadVideoById(currentVideoId);
       }
     };
 
@@ -78,7 +86,6 @@ function createYouTubePanel() {
   }
 }
 
-// Load YouTube iframe API
 function loadYouTubeAPI() {
   if (window.YT && YT.Player) {
     onYouTubeAPIReady();
@@ -94,17 +101,18 @@ function onYouTubeAPIReady() {
   player = new YT.Player("player", {
     height: "200",
     width: "100%",
-    videoId: "", // initially blank
+    videoId: "", // will be loaded later
     playerVars: {
       autoplay: 0,
       loop: 1,
-      playlist: "",
+      playlist: "", // must match videoId when looping
     },
     events: {
       onReady: () => {
         playerReady = true;
-        if (currentVideoId) {
-          player.loadVideoById(currentVideoId);
+        if (queuedVideoId) {
+          player.loadVideoById(queuedVideoId);
+          queuedVideoId = null;
         }
       }
     }
@@ -112,7 +120,7 @@ function onYouTubeAPIReady() {
 }
 
 function extractVideoId(url) {
-  const regex = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/i;
+  const regex = /(?:youtube\.com\/(?:.*v=|v\/|embed\/|shorts\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/;
   const match = url.match(regex);
   return match ? match[1] : null;
 }
