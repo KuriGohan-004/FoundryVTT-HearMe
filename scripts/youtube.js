@@ -1,22 +1,20 @@
 let player;
 let currentVideoId = null;
+let playerReady = false;
 
-Hooks.once('ready', () => {
-  createYoutubePlayerUI();
-  loadYoutubeAPI();
+Hooks.once("ready", () => {
+  createYouTubePanel();
+  loadYouTubeAPI();
 
-  game.socket.on("module.youtube-sync", ({ action, time, url }) => {
-    const videoId = extractVideoId(url);
+  game.socket.on("module.youtube-sync", async ({ action, url }) => {
+    const videoId = extractVideoId(url || "");
+    if (!videoId && action === "load") return;
 
     switch (action) {
       case "load":
-        if (videoId) {
-          currentVideoId = videoId;
-          if (player) {
-            player.loadVideoById(videoId);
-          } else {
-            waitForAPI(() => createYoutubePlayer(videoId));
-          }
+        currentVideoId = videoId;
+        if (playerReady) {
+          player?.loadVideoById(currentVideoId);
         }
         break;
       case "play":
@@ -25,26 +23,24 @@ Hooks.once('ready', () => {
       case "pause":
         player?.pauseVideo();
         break;
-      case "seek":
-        player?.seekTo(time, true);
-        break;
     }
   });
 });
 
-function createYoutubePlayerUI() {
-  const container = document.createElement('div');
-  container.style.position = 'fixed';
-  container.style.top = '10px';
-  container.style.left = '10px';
-  container.style.background = '#222';
-  container.style.color = '#fff';
-  container.style.padding = '10px';
-  container.style.borderRadius = '6px';
+// GM UI + shared player container
+function createYouTubePanel() {
+  const container = document.createElement("div");
+  container.style.position = "fixed";
+  container.style.top = "10px";
+  container.style.left = "10px";
+  container.style.background = "#222";
+  container.style.color = "#fff";
+  container.style.padding = "10px";
+  container.style.borderRadius = "6px";
   container.style.zIndex = 10000;
-  container.style.width = '300px';
+  container.style.width = "300px";
 
-  let html = '';
+  let html = "";
   if (game.user.isGM) {
     html += `
       <input id="yt-url" type="text" placeholder="Enter YouTube URL" style="width:100%; margin-bottom:5px; padding:4px;" />
@@ -65,7 +61,9 @@ function createYoutubePlayerUI() {
       if (!videoId) return ui.notifications.error("Invalid YouTube URL.");
       currentVideoId = videoId;
       game.socket.emit("module.youtube-sync", { action: "load", url });
-      waitForAPI(() => createYoutubePlayer(videoId));
+      if (playerReady) {
+        player?.loadVideoById(currentVideoId);
+      }
     };
 
     document.getElementById("yt-play").onclick = () => {
@@ -80,34 +78,34 @@ function createYoutubePlayerUI() {
   }
 }
 
-function loadYoutubeAPI() {
-  if (window.YT) return;
-  const tag = document.createElement("script");
-  tag.src = "https://www.youtube.com/iframe_api";
-  document.body.appendChild(tag);
-}
-
-function waitForAPI(callback) {
-  if (window.YT && window.YT.Player) {
-    callback();
+// Load YouTube iframe API
+function loadYouTubeAPI() {
+  if (window.YT && YT.Player) {
+    onYouTubeAPIReady();
   } else {
-    setTimeout(() => waitForAPI(callback), 200);
+    const tag = document.createElement("script");
+    tag.src = "https://www.youtube.com/iframe_api";
+    document.body.appendChild(tag);
+    window.onYouTubeIframeAPIReady = onYouTubeAPIReady;
   }
 }
 
-function createYoutubePlayer(videoId) {
+function onYouTubeAPIReady() {
   player = new YT.Player("player", {
     height: "200",
     width: "100%",
-    videoId,
+    videoId: "", // initially blank
     playerVars: {
       autoplay: 0,
       loop: 1,
-      playlist: videoId,
+      playlist: "",
     },
     events: {
       onReady: () => {
-        if (!game.user.isGM) player.pauseVideo(); // clients wait for GM
+        playerReady = true;
+        if (currentVideoId) {
+          player.loadVideoById(currentVideoId);
+        }
       }
     }
   });
