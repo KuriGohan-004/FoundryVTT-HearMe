@@ -1,12 +1,12 @@
 // === INIT SOUND & SKIP KEY SETTINGS ===
 Hooks.once("init", () => {
   /* ---------------------------------------------------------------------
-   * ORIGINAL SETTINGS
+   * STANDARD SETTINGS (unchanged)
    * ------------------------------------------------------------------ */
   game.settings.register("hearme-chat-notification", "pingSound", {
     name: "Chat Notification Sound",
     hint: "The sound to play when a new VN chat message is displayed.",
-    scope: "world",
+    scope: "world",                // world‑level, GM changeable
     config: true,
     type: String,
     default: "modules/hearme-chat-notification/ui/chat-ping.ogg",
@@ -16,19 +16,19 @@ Hooks.once("init", () => {
   game.settings.register("hearme-chat-notification", "skipKey", {
     name: "Skip Key",
     hint: "Key to press to skip chat dialogue (default: Q).",
-    scope: "client",
+    scope: "client",               // client‑side preference
     config: true,
     type: String,
     default: "q"
   });
 
   /* ---------------------------------------------------------------------
-   * NEW SETTINGS
+   * PORTRAIT SETTINGS (now world‑level)
    * ------------------------------------------------------------------ */
   game.settings.register("hearme-chat-notification", "portraitEnabled", {
     name: "Enable Character Portrait",
-    hint: "Toggle display of character portraits in VN banner.",
-    scope: "client",
+    hint: "Toggle display of character portraits in the VN banner (GM‑only).",
+    scope: "world",                // GM controls for all clients
     config: true,
     type: Boolean,
     default: true
@@ -36,12 +36,12 @@ Hooks.once("init", () => {
 
   game.settings.register("hearme-chat-notification", "portraitSize", {
     name: "Portrait Size (vw)",
-    hint: "Width/height of the portrait as viewport‑width units.",
-    scope: "client",
+    hint: "Width/height of the portrait as viewport‑width units (GM‑only).",
+    scope: "world",                // GM controls for all clients
     config: true,
     type: Number,
-    range: { min: 10, max: 60, step: 1 },
-    default: 31
+    range: { min: 5, max: 23, step: 1 },
+    default: 13
   });
 });
 
@@ -79,13 +79,11 @@ Hooks.once("init", () => {
   }
 
   function sanitizeHtml(str) {
-    // Allow <br>, <b>, <strong>, <i>, <em>, <u>
     return str.replace(/<(?!\/?(br|b|strong|i|em|u)\b)[^>]*>/gi, "");
   }
 
   /* --------------------------- DOM SETUP ---------------------------- */
   function ensureDom() {
-    /* Banner --------------------------------------------------------- */
     if (!banner) {
       banner = document.createElement("div");
       banner.id = "vn-chat-banner";
@@ -122,7 +120,6 @@ Hooks.once("init", () => {
       timerBar = document.getElementById("vn-chat-timer");
     }
 
-    /* Portrait ------------------------------------------------------- */
     if (!imgElem) {
       imgElem = document.createElement("img");
       imgElem.id = "vn-chat-image";
@@ -151,25 +148,26 @@ Hooks.once("init", () => {
     positionPortrait();
   }
 
-  Hooks.on("closeSettingsConfig", applyPortraitSettings);
+  Hooks.on("libWrapper.Ready", () => {
+    game.settings.on("change", (setting) => {
+      if (setting.key.startsWith("hearme-chat-notification.portrait")) applyPortraitSettings();
+    });
+  });
+
   window.addEventListener("resize", positionPortrait);
 
-  /* ---------------------- PORTRAIT POSITIONING --------------------- */
   function positionPortrait() {
     if (!portraitEnabled() || !banner || !imgElem) return;
     const bannerRect = banner.getBoundingClientRect();
-    const imgRect    = imgElem.getBoundingClientRect();
-
-    // Right edge flush against banner's left edge
-    const left = bannerRect.left - imgRect.width;
-    // Vertical centre alignment
-    const top  = bannerRect.top + (bannerRect.height / 2) - (imgRect.height / 2);
+    const imgWidth = imgElem.getBoundingClientRect().width;
+    const imgHeight = imgElem.getBoundingClientRect().height;
+    const left = bannerRect.left - imgWidth;
+    const top  = bannerRect.top + (bannerRect.height / 2) - (imgHeight / 2);
 
     imgElem.style.left = `${left}px`;
     imgElem.style.top  = `${top}px`;
   }
 
-  /* --------------------------- TYPEWRITER -------------------------- */
   function typeHtml(el, html, speed = 20, done) {
     typing = true;
     const parts = sanitizeHtml(html).split(/(<[^>]+>)/).filter(Boolean);
@@ -187,7 +185,6 @@ Hooks.once("init", () => {
     next();
   }
 
-  /* ------------------------ AUTO‑SKIP TIMER ------------------------ */
   function resetTimer() {
     clearTimeout(autoSkipTimer);
     autoSkipTimer = null;
@@ -202,118 +199,71 @@ Hooks.once("init", () => {
     autoSkipRemain = duration;
 
     timerBar.style.transition = "none";
-    timerBar.style.transform  = "scaleX(1)";
+    timerBar.style.transform  = `scaleX(1)`;
+
     setTimeout(() => {
       timerBar.style.transition = `transform ${duration}ms linear`;
-      timerBar.style.transform  = "scaleX(0)";
-    }, 20);
-
-    autoSkipTimer = setTimeout(skipMessage, duration);
+      timerBar.style.transform  = `scaleX(0)`;
+      autoSkipTimer = setTimeout(() => {
+        skipCurrentLine();
+      }, duration);
+    }, 10);
   }
 
-  function pauseTimer() {
-    if (!autoSkipTimer) return;
-    clearTimeout(autoSkipTimer);
-    autoSkipRemain -= Date.now() - autoSkipStart;
-    autoSkipTimer   = null;
-    const ratio = autoSkipRemain / (AUTO_SKIP_BASE_DELAY + AUTO_SKIP_MIN_SECONDS * 1000);
-    timerBar.style.transition = "none";
-    timerBar.style.transform  = `scaleX(${ratio})`;
-  }
-
-  function resumeTimer() {
-    if (autoSkipTimer || !autoSkipRemain) return;
-    autoSkipStart = Date.now();
-    timerBar.style.transition = `transform ${autoSkipRemain}ms linear`;
-    timerBar.style.transform  = "scaleX(0)";
-    autoSkipTimer = setTimeout(skipMessage, autoSkipRemain);
-  }
-
-  /* -------------------------- DISPLAY MSG ------------------------- */
-  function updateArrow() { arrow.style.display = queue.length ? "block" : "none"; }
-
-  function displayMessage({ name, msg, image, userId }) {
-    resetTimer();
-
-    const nameEl = banner.querySelector("#vn-chat-name");
-    const msgEl  = banner.querySelector("#vn-chat-msg");
-
-    nameEl.textContent = name;
-    banner.style.display = "flex";
-    requestAnimationFrame(() => {
-      banner.style.opacity = "1";
-      positionPortrait();
-    });
-
-    if (portraitEnabled()) {
-      if (name !== currentSpeaker) {
-        imgElem.style.opacity = "0";
-        if (image) imgElem.src = image;
-        // Wait for layout to settle, then fade in & reposition
-        setTimeout(() => {
-          positionPortrait();
-          imgElem.style.opacity = "1";
-        }, 50);
-        currentSpeaker = name;
-      } else {
-        positionPortrait();
-      }
+  function skipCurrentLine() {
+    if (typing) {
+      const el = document.getElementById("vn-chat-msg");
+      typing = false;
+      el.innerHTML = queue[0]?.message || "";
+      arrow.style.display = "block";
+    } else {
+      queue.shift();
+      displayNext();
     }
-
-    if (userId === game.user.id) playChatSound();
-
-    typeHtml(msgEl, msg, 20, () => {
-      updateArrow();
-      if (document.hasFocus()) startTimer(msgEl.textContent.length);
-    });
   }
 
-  function skipMessage() {
-    if (typing) return;
-    resetTimer();
-    if (queue.length) displayMessage(queue.shift());
-    else {
+  document.addEventListener("keydown", (event) => {
+    if (event.key.toLowerCase() === game.settings.get("hearme-chat-notification", "skipKey")) {
+      skipCurrentLine();
+    }
+  });
+
+  function displayNext() {
+    if (!queue.length) {
       banner.style.opacity = "0";
       imgElem.style.opacity = "0";
-      setTimeout(() => {
-        banner.style.display = "none";
-        currentSpeaker = null;
-      }, 250);
+      return;
     }
+
+    ensureDom();
+    const next = queue[0];
+    const nameEl = document.getElementById("vn-chat-name");
+    const msgEl  = document.getElementById("vn-chat-msg");
+
+    nameEl.textContent = next.speaker || "";
+    arrow.style.display = "none";
+    banner.style.display = "flex";
+    banner.style.opacity = "1";
+
+    if (next.image && portraitEnabled()) {
+      imgElem.src = next.image;
+      imgElem.onload = () => {
+        imgElem.style.opacity = "1";
+        positionPortrait();
+      };
+    } else {
+      imgElem.style.opacity = "0";
+    }
+
+    playChatSound();
+    typeHtml(msgEl, next.message, 20, () => {
+      arrow.style.display = "block";
+      startTimer(next.message.length);
+    });
   }
 
-  /* --------------------------- EVENTS ----------------------------- */
-  document.addEventListener("keydown", ev => {
-    if (document.activeElement?.closest(".chat-message") || document.activeElement?.tagName === "TEXTAREA") return;
-    if (document.querySelector(".app.window-app.sheet:not(.minimized)")) return;
-    const key = game.settings.get("hearme-chat-notification", "skipKey").toLowerCase();
-    if (ev.key.toLowerCase() === key || ev.key === "Tab") { ev.preventDefault(); skipMessage(); }
+  game.socket.on("module.hearme-chat-notification", ({ speaker, message, image }) => {
+    queue.push({ speaker, message, image });
+    if (!typing) displayNext();
   });
-
-  window.addEventListener("blur", pauseTimer);
-  window.addEventListener("focus", resumeTimer);
-
-  Hooks.on("createChatMessage", message => {
-    if (!message.visible || message.isRoll) return; // Ignore dice rolls / hidden
-    if (!message.speaker?.actor) return;
-
-    const actor = game.actors.get(message.speaker.actor);
-    if (!actor) return;
-
-    let name = actor.name;
-    let img  = actor.img;
-
-    if (message.speaker.token) {
-      const scene = game.scenes.active;
-      const token = scene?.tokens.get(message.speaker.token);
-      if (token) { name = token.name; img = token.texture.src; }
-    }
-
-    const entry = { name, msg: message.content.trim(), image: img, userId: message.user.id };
-    if (banner.style.display === "flex") { queue.push(entry); updateArrow(); }
-    else displayMessage(entry);
-  });
-
-  /* -------------------------- INIT -------------------------------- */
-  ensureDom();
 })();
