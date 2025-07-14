@@ -1,9 +1,10 @@
-// === VN Chat Banner with Admin‑Controlled Portraits ===
-//  Fully self‑contained script (replace previous versions)
+// === VN Chat Banner with Admin‑Controlled Floating Portrait ===
+//  Complete self‑contained script — paste into a single .js file.
+//  Portrait size, enable, and offsets are GM‑side (world‑level) settings.
 
 Hooks.once("init", () => {
   /* ------------------------------------------------------------------
-   *  CORE SETTINGS
+   *  CORE SETTINGS (WORLD & CLIENT)
    * ----------------------------------------------------------------*/
   game.settings.register("hearme-chat-notification", "pingSound", {
     name: "Chat Notification Sound",
@@ -29,21 +30,41 @@ Hooks.once("init", () => {
    * ----------------------------------------------------------------*/
   game.settings.register("hearme-chat-notification", "portraitEnabled", {
     name: "Enable Portrait",
-    hint: "Show character portrait beside VN banner (GM setting).",
+    hint: "Toggle character portrait (GM setting).",
     scope: "world",
     config: true,
     type: Boolean,
     default: true
   });
 
-  game.settings.register("hearme-chat-notification", "portraitSize", {
-    name: "Portrait Size (vw)",
-    hint: "Portrait square size in viewport‑width units (5–23). GM setting.",
+  game.settings.register("hearme-chat-notification", "portraitScale", {
+    name: "Portrait Scale (vw)",
+    hint: "Square portrait size in viewport‑width units (5–23).",
     scope: "world",
     config: true,
     type: Number,
     range: { min: 5, max: 23, step: 1 },
     default: 13
+  });
+
+  game.settings.register("hearme-chat-notification", "portraitOffsetX", {
+    name: "Portrait Offset X (vw)",
+    hint: "Move portrait right from the left edge. 0 = flush left (GM setting).",
+    scope: "world",
+    config: true,
+    type: Number,
+    range: { min: 0, max: 50, step: 1 },
+    default: 0
+  });
+
+  game.settings.register("hearme-chat-notification", "portraitOffsetY", {
+    name: "Portrait Offset Y (vh)",
+    hint: "Raise portrait upward from the bottom edge. 0 = flush bottom (GM setting).",
+    scope: "world",
+    config: true,
+    type: Number,
+    range: { min: 0, max: 50, step: 1 },
+    default: 0
   });
 });
 
@@ -52,10 +73,10 @@ Hooks.once("init", () => {
  * ===================================================================*/
 (() => {
   /* -------------------------- CONSTANTS --------------------------- */
-  const AUTO_SKIP_MIN = 3;          // seconds
-  const AUTO_SKIP_BASE = 5000;      // ms
-  const AUTO_SKIP_PER_CHAR = 50;    // ms / char
-  const TYPING_SPEED = 20;          // ms per char
+  const AUTO_SKIP_MIN_SEC   = 3;           // seconds
+  const AUTO_SKIP_BASE_MS   = 5000;        // ms
+  const AUTO_SKIP_PER_CHAR  = 50;          // ms / char
+  const TYPING_SPEED_MS     = 20;          // ms per char
 
   /* ----------------------------- STATE ---------------------------- */
   let banner   = document.getElementById("vn-chat-banner");
@@ -71,10 +92,10 @@ Hooks.once("init", () => {
   let currentSpeaker = null;
 
   /* -------------------------- HELPERS ----------------------------- */
-  const isPortraitOn = () => game.settings.get("hearme-chat-notification", "portraitEnabled");
-  const getPortraitVW = () => game.settings.get("hearme-chat-notification", "portraitSize");
-
-  const pxFromVW = vw => (vw / 100) * window.innerWidth;
+  const portraitOn     = () => game.settings.get("hearme-chat-notification", "portraitEnabled");
+  const portraitVW     = () => game.settings.get("hearme-chat-notification", "portraitScale");
+  const portraitOffXVW = () => game.settings.get("hearme-chat-notification", "portraitOffsetX");
+  const portraitOffYVH = () => game.settings.get("hearme-chat-notification", "portraitOffsetY");
 
   function playPing() {
     const src = game.settings.get("hearme-chat-notification", "pingSound");
@@ -132,68 +153,62 @@ Hooks.once("init", () => {
       imgElm.id = "vn-chat-image";
       Object.assign(imgElm.style, {
         position: "fixed",
-        objectFit: "cover",        // force square crop
-        zIndex: 98,
+        objectFit: "cover",        // square crop
+        zIndex: 98,                 // one layer below banner (99)
         pointerEvents: "none",
         transition: "opacity 0.4s ease",
         opacity: "0",
         left: 0,
-        top: 0
+        bottom: 0                   // anchor to bottom edge
       });
       document.body.appendChild(imgElm);
     }
 
-    applyPortraitSettings();
+    applyPortraitCSS();
   }
 
-  /* ------------------ PORTRAIT SIZE / POSITION -------------------- */
-  function applyPortraitSettings() {
+  /* ------------------- PORTRAIT CSS APPLICATION ------------------- */
+  function applyPortraitCSS() {
     if (!imgElm) return;
-    const vw = getPortraitVW();
+    imgElm.style.display = portraitOn() ? "block" : "none";
+
+    const vw = portraitVW();
     imgElm.style.width  = `${vw}vw`;
     imgElm.style.height = `${vw}vw`;
-    imgElm.style.display = isPortraitOn() ? "block" : "none";
-    positionPortrait();
+
+    // offsets from bottom‑left
+    imgElm.style.left   = `${portraitOffXVW()}vw`;
+    imgElm.style.bottom = `${portraitOffYVH()}vh`;
   }
 
-  function positionPortrait() {
-    if (!isPortraitOn() || !banner) return;
-    const bannerRect = banner.getBoundingClientRect();
-    const sizePx     = pxFromVW(getPortraitVW());
-
-    imgElm.style.left = `${bannerRect.left - sizePx}px`;
-    imgElm.style.top  = `${bannerRect.top + bannerRect.height/2 - sizePx/2}px`;
-  }
-
-  window.addEventListener("resize", positionPortrait);
-
-  /* React to GM setting changes in real time */
+  /* Live update when GM changes settings */
   Hooks.on("updateSetting", (namespace, key) => {
-    if (namespace === "hearme-chat-notification" && (key === "portraitSize" || key === "portraitEnabled")) {
-      applyPortraitSettings();
+    if (namespace !== "hearme-chat-notification") return;
+    if (["portraitEnabled", "portraitScale", "portraitOffsetX", "portraitOffsetY"].includes(key)) {
+      applyPortraitCSS();
     }
   });
 
-  /* ---------------------- TYPEWRITER EFFECT ----------------------- */
+  /* ----------------------- TYPEWRITER ----------------------------- */
   function typeHtml(el, html, done) {
     typing = true;
-    const segs = cleanHTML(html).split(/(<[^>]+>)/).filter(Boolean);
+    const parts = cleanHTML(html).split(/(<[^>]+>)/).filter(Boolean);
     el.innerHTML = "";
-    let s = 0, c = 0;
+    let p = 0, c = 0;
 
     function step() {
-      if (s >= segs.length) { typing = false; done?.(); return; }
-      const seg = segs[s];
-      if (seg.startsWith("<")) { el.innerHTML += seg; s++; step(); }
+      if (p >= parts.length) { typing = false; done?.(); return; }
+      const seg = parts[p];
+      if (seg.startsWith("<")) { el.innerHTML += seg; p++; step(); }
       else {
-        if (c < seg.length) { el.innerHTML += seg.charAt(c++); setTimeout(step, TYPING_SPEED); }
-        else { s++; c = 0; step(); }
+        if (c < seg.length) { el.innerHTML += seg.charAt(c++); setTimeout(step, TYPING_SPEED_MS); }
+        else { p++; c = 0; step(); }
       }
     }
     step();
   }
 
-  /* ---------------------- AUTO‑SKIP TIMER ------------------------- */
+  /* ----------------------- AUTO‑SKIP ------------------------------ */
   function resetTimer() {
     clearTimeout(autoTimer);
     autoTimer = null;
@@ -203,7 +218,7 @@ Hooks.once("init", () => {
   }
 
   function startTimer(chars) {
-    const dur = Math.max(AUTO_SKIP_MIN * 1000, AUTO_SKIP_BASE + chars * AUTO_SKIP_PER_CHAR);
+    const dur = Math.max(AUTO_SKIP_MIN_SEC*1000, AUTO_SKIP_BASE_MS + chars*AUTO_SKIP_PER_CHAR);
     autoStart  = Date.now();
     autoRemain = dur;
 
@@ -212,19 +227,20 @@ Hooks.once("init", () => {
     setTimeout(() => {
       barElm.style.transition = `transform ${dur}ms linear`;
       barElm.style.transform  = "scaleX(0)";
-    }, 20);
+    }, 10);
 
     autoTimer = setTimeout(skip, dur);
   }
 
+  /* Pause/resume on window focus loss */
   window.addEventListener("blur", () => {
     if (!autoTimer) return;
     clearTimeout(autoTimer);
     autoRemain -= Date.now() - autoStart;
-    autoTimer = null;
-    const ratio = autoRemain / (AUTO_SKIP_BASE + 1000*AUTO_SKIP_MIN);
+    autoTimer  = null;
+    const pct = autoRemain / (AUTO_SKIP_BASE_MS + AUTO_SKIP_MIN_SEC*1000);
     barElm.style.transition = "none";
-    barElm.style.transform  = `scaleX(${ratio})`;
+    barElm.style.transform  = `scaleX(${pct})`;
   });
 
   window.addEventListener("focus", () => {
@@ -235,25 +251,28 @@ Hooks.once("init", () => {
     autoTimer = setTimeout(skip, autoRemain);
   });
 
-  /* -------------------- DISPLAY & QUEUE MGMT ---------------------- */
+  /* -------------------- MESSAGE DISPLAY --------------------------- */
   function showArrow() { arrowElm.style.display = queue.length ? "block" : "none"; }
 
-  function display({ speaker, msg, img, uid }) {
+  function display(entry) {
     resetTimer();
+    const { speaker, msg, img, uid } = entry;
+
+    // Show banner
     const nameEl = banner.querySelector("#vn-chat-name");
     const msgEl  = banner.querySelector("#vn-chat-msg");
-
     nameEl.textContent = speaker;
     banner.style.display = "flex";
-    requestAnimationFrame(() => { banner.style.opacity = "1"; positionPortrait(); });
+    requestAnimationFrame(() => { banner.style.opacity = "1"; });
 
-    if (isPortraitOn()) {
+    // Portrait handling
+    if (portraitOn()) {
       if (speaker !== currentSpeaker) {
         imgElm.style.opacity = "0";
         if (img) imgElm.src = img;
-        imgElm.onload = () => { positionPortrait(); imgElm.style.opacity = "1"; };
+        imgElm.onload = () => { imgElm.style.opacity = "1"; };
         currentSpeaker = speaker;
-      } else positionPortrait();
+      }
     }
 
     if (uid === game.user.id) playPing();
@@ -265,7 +284,7 @@ Hooks.once("init", () => {
   }
 
   function skip() {
-    if (typing) return; // ignore during typing
+    if (typing) return;
     resetTimer();
     if (queue.length) display(queue.shift());
     else {
@@ -275,7 +294,8 @@ Hooks.once("init", () => {
     }
   }
 
-  /* ----------------------------- INPUT ----------------------------- */
+  /* --------------------------- INPUT ------------------------------ */
+    /* --------------------------- INPUT ------------------------------ */
   document.addEventListener("keydown", ev => {
     if (document.activeElement?.closest(".chat-message") || document.activeElement?.tagName === "TEXTAREA") return;
     if (document.querySelector(".app.window-app.sheet:not(.minimized)")) return;
@@ -283,7 +303,7 @@ Hooks.once("init", () => {
     if (ev.key.toLowerCase() === key || ev.key === "Tab") { ev.preventDefault(); skip(); }
   });
 
-  /* --------------------------- SOCKET ----------------------------- */
+  /* ------------------------- CHAT HOOK --------------------------- */
   Hooks.on("createChatMessage", message => {
     if (!message.visible || message.isRoll) return;
     if (!message.speaker?.actor) return;
@@ -295,8 +315,8 @@ Hooks.once("init", () => {
     let img     = actor.img;
 
     if (message.speaker.token) {
-      const scene = game.scenes.active;
-      const tkn   = scene?.tokens.get(message.speaker.token);
+      const scn = game.scenes.active;
+      const tkn = scn?.tokens.get(message.speaker.token);
       if (tkn) { speaker = tkn.name; img = tkn.texture.src; }
     }
 
@@ -305,6 +325,6 @@ Hooks.once("init", () => {
     else display(entry);
   });
 
-  /* --------------------------- INIT ------------------------------- */
+  /* --------------------------- INIT ------------------------------ */
   createDom();
 })();
