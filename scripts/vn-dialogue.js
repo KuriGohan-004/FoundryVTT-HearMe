@@ -1,11 +1,13 @@
-// === INIT SOUND & SKIP KEY SETTINGS ===
+// === VN Chat Banner with Admin‑Controlled Portraits ===
+//  Fully self‑contained script (replace previous versions)
+
 Hooks.once("init", () => {
-  /* ---------------------------------------------------------------------
-   * ORIGINAL SETTINGS
-   * ------------------------------------------------------------------ */
+  /* ------------------------------------------------------------------
+   *  CORE SETTINGS
+   * ----------------------------------------------------------------*/
   game.settings.register("hearme-chat-notification", "pingSound", {
     name: "Chat Notification Sound",
-    hint: "The sound to play when a new VN chat message is displayed.",
+    hint: "Sound that plays for each VN message (world‑level).",
     scope: "world",
     config: true,
     type: String,
@@ -14,21 +16,21 @@ Hooks.once("init", () => {
   });
 
   game.settings.register("hearme-chat-notification", "skipKey", {
-    name: "Skip Key",
-    hint: "Key to press to skip chat dialogue (default: Q).",
+    name: "Skip Key (client)",
+    hint: "Key used by a player to advance/skip dialogue (default Q).",
     scope: "client",
     config: true,
     type: String,
     default: "q"
   });
 
-  /* ---------------------------------------------------------------------
-   * NEW SETTINGS
-   * ------------------------------------------------------------------ */
+  /* ------------------------------------------------------------------
+   *  PORTRAIT SETTINGS (GM‑ONLY, WORLD‑LEVEL)
+   * ----------------------------------------------------------------*/
   game.settings.register("hearme-chat-notification", "portraitEnabled", {
-    name: "Enable Character Portrait",
-    hint: "Toggle display of character portraits in VN banner.",
-    scope: "client",
+    name: "Enable Portrait",
+    hint: "Show character portrait beside VN banner (GM setting).",
+    scope: "world",
     config: true,
     type: Boolean,
     default: true
@@ -36,56 +38,58 @@ Hooks.once("init", () => {
 
   game.settings.register("hearme-chat-notification", "portraitSize", {
     name: "Portrait Size (vw)",
-    hint: "Width/height of the portrait as viewport‑width units.",
-    scope: "client",
+    hint: "Portrait square size in viewport‑width units (5–23). GM setting.",
+    scope: "world",
     config: true,
     type: Number,
-    range: { min: 10, max: 60, step: 1 },
-    default: 31
+    range: { min: 5, max: 23, step: 1 },
+    default: 13
   });
 });
 
-/* ========================================================================
- *  MAIN MODULE LOGIC (IIFE)
- * ===================================================================== */
+/* =====================================================================
+ *  MAIN MODULE (IIFE)
+ * ===================================================================*/
 (() => {
-  /* --------------------------- CONSTANTS ----------------------------- */
-  const AUTO_SKIP_MIN_SECONDS = 3;
-  const AUTO_SKIP_BASE_DELAY  = 5000;   // ms
-  const AUTO_SKIP_CHAR_DELAY  = 50;     // ms / character
+  /* -------------------------- CONSTANTS --------------------------- */
+  const AUTO_SKIP_MIN = 3;          // seconds
+  const AUTO_SKIP_BASE = 5000;      // ms
+  const AUTO_SKIP_PER_CHAR = 50;    // ms / char
+  const TYPING_SPEED = 20;          // ms per char
 
-  /* --------------------------- STATE -------------------------------- */
+  /* ----------------------------- STATE ---------------------------- */
   let banner   = document.getElementById("vn-chat-banner");
-  let imgElem  = document.getElementById("vn-chat-image");
-  let arrow    = document.getElementById("vn-chat-arrow");
-  let timerBar = null;
+  let imgElm   = document.getElementById("vn-chat-image");
+  let arrowElm = document.getElementById("vn-chat-arrow");
+  let barElm   = null;
 
+  let queue          = [];
   let typing         = false;
-  let autoSkipTimer  = null;
-  let autoSkipStart  = 0;
-  let autoSkipRemain = 0;
+  let autoTimer      = null;
+  let autoStart      = 0;
+  let autoRemain     = 0;
   let currentSpeaker = null;
-  const queue        = [];
 
-  /* --------------------------- HELPERS ------------------------------ */
-  const portraitEnabled = () => game.settings.get("hearme-chat-notification", "portraitEnabled");
-  const portraitSize    = ()  => game.settings.get("hearme-chat-notification", "portraitSize");
+  /* -------------------------- HELPERS ----------------------------- */
+  const isPortraitOn = () => game.settings.get("hearme-chat-notification", "portraitEnabled");
+  const getPortraitVW = () => game.settings.get("hearme-chat-notification", "portraitSize");
 
-  function playChatSound() {
+  const pxFromVW = vw => (vw / 100) * window.innerWidth;
+
+  function playPing() {
     const src = game.settings.get("hearme-chat-notification", "pingSound");
     if (!src) return;
     if (game.audio?.context?.state === "suspended") game.audio.context.resume();
     AudioHelper.play({ src, volume: 0.8, autoplay: true, loop: false }, true);
   }
 
-  function sanitizeHtml(str) {
-    // Allow <br>, <b>, <strong>, <i>, <em>, <u>
+  function cleanHTML(str) {
     return str.replace(/<(?!\/?(br|b|strong|i|em|u)\b)[^>]*>/gi, "");
   }
 
-  /* --------------------------- DOM SETUP ---------------------------- */
-  function ensureDom() {
-    /* Banner --------------------------------------------------------- */
+  /* ------------------------ DOM CREATION -------------------------- */
+  function createDom() {
+    /* Banner */
     if (!banner) {
       banner = document.createElement("div");
       banner.id = "vn-chat-banner";
@@ -94,7 +98,7 @@ Hooks.once("init", () => {
         bottom: "calc(5% + 48px)",
         left: "20%",
         width: "60%",
-        background: "rgba(0,0,0,0.75)",
+        background: "rgba(0,0,0,0.8)",
         color: "white",
         fontFamily: "Arial, sans-serif",
         padding: "12px 20px",
@@ -114,206 +118,193 @@ Hooks.once("init", () => {
       });
       banner.innerHTML = `
         <div id="vn-chat-name" style="font-weight:bold;font-size:1.2em;margin-bottom:4px;"></div>
-        <div id="vn-chat-msg" style="font-size:2.2em;"></div>
+        <div id="vn-chat-msg"  style="font-size:2.2em;"></div>
         <div id="vn-chat-arrow" style="position:absolute;bottom:8px;right:16px;font-size:1.5em;opacity:0.5;display:none;">&#8595;</div>
         <div id="vn-chat-timer" style="position:absolute;bottom:0;left:0;height:5px;width:100%;background:white;transform-origin:left;transform:scaleX(1);transition:transform linear;opacity:1;"></div>`;
       document.body.appendChild(banner);
-      arrow    = document.getElementById("vn-chat-arrow");
-      timerBar = document.getElementById("vn-chat-timer");
+      arrowElm = document.getElementById("vn-chat-arrow");
+      barElm   = document.getElementById("vn-chat-timer");
     }
 
-    /* Portrait ------------------------------------------------------- */
-    if (!imgElem) {
-      imgElem = document.createElement("img");
-      imgElem.id = "vn-chat-image";
-      Object.assign(imgElem.style, {
+    /* Portrait */
+    if (!imgElm) {
+      imgElm = document.createElement("img");
+      imgElm.id = "vn-chat-image";
+      Object.assign(imgElm.style, {
         position: "fixed",
-        objectFit: "contain",
+        objectFit: "cover",        // force square crop
         zIndex: 98,
         pointerEvents: "none",
-        transition: "opacity 0.5s ease",
+        transition: "opacity 0.4s ease",
         opacity: "0",
-        left: "0",
-        top: "0"
+        left: 0,
+        top: 0
       });
-      document.body.appendChild(imgElem);
+      document.body.appendChild(imgElm);
     }
 
     applyPortraitSettings();
   }
 
+  /* ------------------ PORTRAIT SIZE / POSITION -------------------- */
   function applyPortraitSettings() {
-    if (!imgElem) return;
-    const size = portraitSize();
-    imgElem.style.width  = `${size}vw`;
-    imgElem.style.height = `${size}vw`;
-    imgElem.style.display = portraitEnabled() ? "block" : "none";
+    if (!imgElm) return;
+    const vw = getPortraitVW();
+    imgElm.style.width  = `${vw}vw`;
+    imgElm.style.height = `${vw}vw`;
+    imgElm.style.display = isPortraitOn() ? "block" : "none";
     positionPortrait();
   }
 
-  Hooks.on("closeSettingsConfig", applyPortraitSettings);
+  function positionPortrait() {
+    if (!isPortraitOn() || !banner) return;
+    const bannerRect = banner.getBoundingClientRect();
+    const sizePx     = pxFromVW(getPortraitVW());
+
+    imgElm.style.left = `${bannerRect.left - sizePx}px`;
+    imgElm.style.top  = `${bannerRect.top + bannerRect.height/2 - sizePx/2}px`;
+  }
+
   window.addEventListener("resize", positionPortrait);
 
-  /* ---------------------- PORTRAIT POSITIONING --------------------- */
-  function positionPortrait() {
-    if (!portraitEnabled() || !banner || !imgElem) return;
-    const bannerRect = banner.getBoundingClientRect();
-    const imgRect    = imgElem.getBoundingClientRect();
+  /* React to GM setting changes in real time */
+  Hooks.on("updateSetting", (namespace, key) => {
+    if (namespace === "hearme-chat-notification" && (key === "portraitSize" || key === "portraitEnabled")) {
+      applyPortraitSettings();
+    }
+  });
 
-    // Right edge flush against banner's left edge
-    const left = bannerRect.left - imgRect.width;
-    // Vertical centre alignment
-    const top  = bannerRect.top + (bannerRect.height / 2) - (imgRect.height / 2);
-
-    imgElem.style.left = `${left}px`;
-    imgElem.style.top  = `${top}px`;
-  }
-
-  /* --------------------------- TYPEWRITER -------------------------- */
-  function typeHtml(el, html, speed = 20, done) {
+  /* ---------------------- TYPEWRITER EFFECT ----------------------- */
+  function typeHtml(el, html, done) {
     typing = true;
-    const parts = sanitizeHtml(html).split(/(<[^>]+>)/).filter(Boolean);
+    const segs = cleanHTML(html).split(/(<[^>]+>)/).filter(Boolean);
     el.innerHTML = "";
-    let p = 0, c = 0;
-    const next = () => {
-      if (p >= parts.length) { typing = false; done?.(); return; }
-      const seg = parts[p];
-      if (seg.startsWith("<")) { el.innerHTML += seg; p++; next(); }
+    let s = 0, c = 0;
+
+    function step() {
+      if (s >= segs.length) { typing = false; done?.(); return; }
+      const seg = segs[s];
+      if (seg.startsWith("<")) { el.innerHTML += seg; s++; step(); }
       else {
-        if (c < seg.length) { el.innerHTML += seg.charAt(c++); setTimeout(next, speed); }
-        else { p++; c = 0; next(); }
+        if (c < seg.length) { el.innerHTML += seg.charAt(c++); setTimeout(step, TYPING_SPEED); }
+        else { s++; c = 0; step(); }
       }
-    };
-    next();
+    }
+    step();
   }
 
-  /* ------------------------ AUTO‑SKIP TIMER ------------------------ */
+  /* ---------------------- AUTO‑SKIP TIMER ------------------------- */
   function resetTimer() {
-    clearTimeout(autoSkipTimer);
-    autoSkipTimer = null;
-    timerBar.style.transition = "none";
-    timerBar.style.transform  = "scaleX(1)";
-    timerBar.style.opacity    = "1";
+    clearTimeout(autoTimer);
+    autoTimer = null;
+    barElm.style.transition = "none";
+    barElm.style.transform  = "scaleX(1)";
+    barElm.style.opacity    = "1";
   }
 
   function startTimer(chars) {
-    const duration = Math.max(AUTO_SKIP_MIN_SECONDS * 1000, AUTO_SKIP_BASE_DELAY + chars * AUTO_SKIP_CHAR_DELAY);
-    autoSkipStart  = Date.now();
-    autoSkipRemain = duration;
+    const dur = Math.max(AUTO_SKIP_MIN * 1000, AUTO_SKIP_BASE + chars * AUTO_SKIP_PER_CHAR);
+    autoStart  = Date.now();
+    autoRemain = dur;
 
-    timerBar.style.transition = "none";
-    timerBar.style.transform  = "scaleX(1)";
+    barElm.style.transition = "none";
+    barElm.style.transform  = "scaleX(1)";
     setTimeout(() => {
-      timerBar.style.transition = `transform ${duration}ms linear`;
-      timerBar.style.transform  = "scaleX(0)";
+      barElm.style.transition = `transform ${dur}ms linear`;
+      barElm.style.transform  = "scaleX(0)";
     }, 20);
 
-    autoSkipTimer = setTimeout(skipMessage, duration);
+    autoTimer = setTimeout(skip, dur);
   }
 
-  function pauseTimer() {
-    if (!autoSkipTimer) return;
-    clearTimeout(autoSkipTimer);
-    autoSkipRemain -= Date.now() - autoSkipStart;
-    autoSkipTimer   = null;
-    const ratio = autoSkipRemain / (AUTO_SKIP_BASE_DELAY + AUTO_SKIP_MIN_SECONDS * 1000);
-    timerBar.style.transition = "none";
-    timerBar.style.transform  = `scaleX(${ratio})`;
-  }
+  window.addEventListener("blur", () => {
+    if (!autoTimer) return;
+    clearTimeout(autoTimer);
+    autoRemain -= Date.now() - autoStart;
+    autoTimer = null;
+    const ratio = autoRemain / (AUTO_SKIP_BASE + 1000*AUTO_SKIP_MIN);
+    barElm.style.transition = "none";
+    barElm.style.transform  = `scaleX(${ratio})`;
+  });
 
-  function resumeTimer() {
-    if (autoSkipTimer || !autoSkipRemain) return;
-    autoSkipStart = Date.now();
-    timerBar.style.transition = `transform ${autoSkipRemain}ms linear`;
-    timerBar.style.transform  = "scaleX(0)";
-    autoSkipTimer = setTimeout(skipMessage, autoSkipRemain);
-  }
+  window.addEventListener("focus", () => {
+    if (autoTimer || !autoRemain) return;
+    autoStart = Date.now();
+    barElm.style.transition = `transform ${autoRemain}ms linear`;
+    barElm.style.transform  = "scaleX(0)";
+    autoTimer = setTimeout(skip, autoRemain);
+  });
 
-  /* -------------------------- DISPLAY MSG ------------------------- */
-  function updateArrow() { arrow.style.display = queue.length ? "block" : "none"; }
+  /* -------------------- DISPLAY & QUEUE MGMT ---------------------- */
+  function showArrow() { arrowElm.style.display = queue.length ? "block" : "none"; }
 
-  function displayMessage({ name, msg, image, userId }) {
+  function display({ speaker, msg, img, uid }) {
     resetTimer();
-
     const nameEl = banner.querySelector("#vn-chat-name");
     const msgEl  = banner.querySelector("#vn-chat-msg");
 
-    nameEl.textContent = name;
+    nameEl.textContent = speaker;
     banner.style.display = "flex";
-    requestAnimationFrame(() => {
-      banner.style.opacity = "1";
-      positionPortrait();
-    });
+    requestAnimationFrame(() => { banner.style.opacity = "1"; positionPortrait(); });
 
-    if (portraitEnabled()) {
-      if (name !== currentSpeaker) {
-        imgElem.style.opacity = "0";
-        if (image) imgElem.src = image;
-        // Wait for layout to settle, then fade in & reposition
-        setTimeout(() => {
-          positionPortrait();
-          imgElem.style.opacity = "1";
-        }, 50);
-        currentSpeaker = name;
-      } else {
-        positionPortrait();
-      }
+    if (isPortraitOn()) {
+      if (speaker !== currentSpeaker) {
+        imgElm.style.opacity = "0";
+        if (img) imgElm.src = img;
+        imgElm.onload = () => { positionPortrait(); imgElm.style.opacity = "1"; };
+        currentSpeaker = speaker;
+      } else positionPortrait();
     }
 
-    if (userId === game.user.id) playChatSound();
+    if (uid === game.user.id) playPing();
 
-    typeHtml(msgEl, msg, 20, () => {
-      updateArrow();
+    typeHtml(msgEl, msg, () => {
+      showArrow();
       if (document.hasFocus()) startTimer(msgEl.textContent.length);
     });
   }
 
-  function skipMessage() {
-    if (typing) return;
+  function skip() {
+    if (typing) return; // ignore during typing
     resetTimer();
-    if (queue.length) displayMessage(queue.shift());
+    if (queue.length) display(queue.shift());
     else {
       banner.style.opacity = "0";
-      imgElem.style.opacity = "0";
-      setTimeout(() => {
-        banner.style.display = "none";
-        currentSpeaker = null;
-      }, 250);
+      imgElm.style.opacity = "0";
+      setTimeout(() => { banner.style.display = "none"; currentSpeaker = null; }, 250);
     }
   }
 
-  /* --------------------------- EVENTS ----------------------------- */
+  /* ----------------------------- INPUT ----------------------------- */
   document.addEventListener("keydown", ev => {
     if (document.activeElement?.closest(".chat-message") || document.activeElement?.tagName === "TEXTAREA") return;
     if (document.querySelector(".app.window-app.sheet:not(.minimized)")) return;
     const key = game.settings.get("hearme-chat-notification", "skipKey").toLowerCase();
-    if (ev.key.toLowerCase() === key || ev.key === "Tab") { ev.preventDefault(); skipMessage(); }
+    if (ev.key.toLowerCase() === key || ev.key === "Tab") { ev.preventDefault(); skip(); }
   });
 
-  window.addEventListener("blur", pauseTimer);
-  window.addEventListener("focus", resumeTimer);
-
+  /* --------------------------- SOCKET ----------------------------- */
   Hooks.on("createChatMessage", message => {
-    if (!message.visible || message.isRoll) return; // Ignore dice rolls / hidden
+    if (!message.visible || message.isRoll) return;
     if (!message.speaker?.actor) return;
 
     const actor = game.actors.get(message.speaker.actor);
     if (!actor) return;
 
-    let name = actor.name;
-    let img  = actor.img;
+    let speaker = actor.name;
+    let img     = actor.img;
 
     if (message.speaker.token) {
       const scene = game.scenes.active;
-      const token = scene?.tokens.get(message.speaker.token);
-      if (token) { name = token.name; img = token.texture.src; }
+      const tkn   = scene?.tokens.get(message.speaker.token);
+      if (tkn) { speaker = tkn.name; img = tkn.texture.src; }
     }
 
-    const entry = { name, msg: message.content.trim(), image: img, userId: message.user.id };
-    if (banner.style.display === "flex") { queue.push(entry); updateArrow(); }
-    else displayMessage(entry);
+    const entry = { speaker, msg: message.content.trim(), img, uid: message.user.id };
+    if (banner.style.display === "flex") { queue.push(entry); showArrow(); }
+    else display(entry);
   });
 
-  /* -------------------------- INIT -------------------------------- */
-  ensureDom();
+  /* --------------------------- INIT ------------------------------- */
+  createDom();
 })();
