@@ -1,5 +1,8 @@
 // === INIT SOUND & SKIP KEY SETTINGS ===
 Hooks.once("init", () => {
+  /* -------------------------------------------------------------------------
+   *  ORIGINAL SETTINGS
+   * --------------------------------------------------------------------- */
   game.settings.register("hearme-chat-notification", "pingSound", {
     name: "Chat Notification Sound",
     hint: "The sound to play when a new VN chat message is displayed.",
@@ -18,354 +21,300 @@ Hooks.once("init", () => {
     type: String,
     default: "q"
   });
+
+  /* -------------------------------------------------------------------------
+   *  NEW SETTINGS
+   * --------------------------------------------------------------------- */
+  game.settings.register("hearme-chat-notification", "portraitEnabled", {
+    name: "Enable Character Portrait",
+    hint: "Toggle to show or hide character portraits in VN chat banner.",
+    scope: "client",
+    config: true,
+    type: Boolean,
+    default: true
+  });
+
+  game.settings.register("hearme-chat-notification", "portraitSize", {
+    name: "Portrait Size (vw)",
+    hint: "Width/height of the character portrait in viewport‑width units (e.g. 31).",
+    scope: "client",
+    config: true,
+    type: Number,
+    range: { min: 10, max: 60, step: 1 },
+    default: 31
+  });
 });
 
+/* ===========================================================================
+ *  MAIN MODULE LOGIC (IIFE)
+ * ======================================================================== */
 (() => {
-  // === CUSTOMIZABLE VARIABLES ===
-  let autoSkipEnabled = true;          // Set to false to disable autoskip completely
-  let autoSkipMinDurationSeconds = 3;  // Minimum autoskip time in seconds (default: 3)
+  /* -------------------------------------------------------------------------
+   *  MODULE‑LEVEL STATE
+   * --------------------------------------------------------------------- */
+  const AUTO_SKIP_MIN_SECONDS = 3;
+  const AUTO_SKIP_BASE_DELAY  = 5000; // ms
+  const AUTO_SKIP_CHAR_DELAY  = 50;   // ms per character
 
-  let banner = document.getElementById("vn-chat-banner");
-  let imgElem = document.getElementById("vn-chat-image");
-  let arrowElem = document.getElementById("vn-chat-arrow");
-  let timerBar = null;
+  let banner         = document.getElementById("vn-chat-banner");
+  let imgElem        = document.getElementById("vn-chat-image");
+  let arrowElem      = document.getElementById("vn-chat-arrow");
+  let timerBar       = null;
+
+  let typing         = false;
+  let autoSkipTimer  = null;
+  let autoSkipStart  = 0;
+  let autoSkipRemain = 0;
   let currentSpeaker = null;
-  let currentMessage = null;
-  let messageQueue = [];
-  let typing = false;
-  let autoSkipTimeout = null;
-  let autoSkipDuration = 0;
-  let autoSkipStart = 0;
-  let timerPaused = false;
-  let timerRemaining = 0;
+  let currentMsg     = null;
+  const queue        = [];
 
-  const playChatSound = () => {
-    const soundPath = game.settings.get("hearme-chat-notification", "pingSound");
-    if (!soundPath) return;
+  /* -------------------------------------------------------------------------
+   *  UTILITIES
+   * --------------------------------------------------------------------- */
+  const portraitEnabled = () => game.settings.get("hearme-chat-notification", "portraitEnabled");
+  const portraitSize    = ()  => game.settings.get("hearme-chat-notification", "portraitSize");
 
-    if (game.audio?.context?.state === "suspended") {
-      game.audio.context.resume();
+  function playChatSound () {
+    const path = game.settings.get("hearme-chat-notification", "pingSound");
+    if (!path) return;
+    if (game.audio?.context?.state === "suspended") game.audio.context.resume();
+    AudioHelper.play({ src: path, volume: 0.8, autoplay: true, loop: false }, true);
+  }
+
+  function allowedHtml (str) {
+    // keep only <br>, <b>, <strong>, <i>, <em>, <u>
+    return str.replace(/<(?!\/?(br|b|strong|i|em|u)\b)[^>]*>/gi, "");
+  }
+
+  /* -------------------------------------------------------------------------
+   *  DOM CREATION / UPDATE
+   * --------------------------------------------------------------------- */
+  function ensureDom () {
+    // Banner
+    if (!banner) {
+      banner = document.createElement("div");
+      banner.id = "vn-chat-banner";
+      Object.assign(banner.style, {
+        position: "fixed",
+        bottom: "calc(5% + 48px)",
+        left: "20%",
+        width: "60%",
+        background: "rgba(0,0,0,0.75)",
+        color: "white",
+        fontFamily: "Arial, sans-serif",
+        padding: "12px 20px",
+        zIndex: 99,
+        display: "none",
+        flexDirection: "column",
+        alignItems: "flex-start",
+        userSelect: "none",
+        backdropFilter: "blur(4px)",
+        boxShadow: "0 -2px 10px rgba(0,0,0,0.7)",
+        minHeight: "25vh",
+        maxHeight: "50vh",
+        overflowY: "auto",
+        transition: "opacity 0.25s ease",
+        opacity: "0",
+        pointerEvents: "none",
+      });
+      banner.innerHTML = `
+        <div id="vn-chat-name" style="font-weight:bold;font-size:1.2em;margin-bottom:4px;"></div>
+        <div id="vn-chat-msg"  style="font-size:2.2em;"></div>
+        <div id="vn-chat-arrow" style="position:absolute;bottom:8px;right:16px;font-size:1.5em;opacity:0.5;display:none;">&#8595;</div>
+        <div id="vn-chat-timer" style="position:absolute;bottom:0;left:0;height:5px;width:100%;background:white;transform-origin:left;transform:scaleX(1);transition:transform linear;opacity:1;"></div>`;
+      document.body.appendChild(banner);
+
+      arrowElem = document.getElementById("vn-chat-arrow");
+      timerBar  = document.getElementById("vn-chat-timer");
     }
 
-    AudioHelper.play({
-      src: soundPath,
-      volume: 0.8,
-      autoplay: true,
-      loop: false,
-    }, true);
-  };
+    // Portrait
+    if (!imgElem) {
+      imgElem = document.createElement("img");
+      imgElem.id = "vn-chat-image";
+      Object.assign(imgElem.style, {
+        position: "fixed",
+        bottom: "0",
+        left: "0",
+        objectFit: "contain",
+        zIndex: 98,
+        transition: "left 0.5s ease, opacity 0.5s ease",
+        opacity: "0",
+        pointerEvents: "none",
+        border: "none"
+      });
+      document.body.appendChild(imgElem);
+    }
 
-  if (!banner) {
-    banner = document.createElement("div");
-    banner.id = "vn-chat-banner";
-    Object.assign(banner.style, {
-      position: "fixed",
-      bottom: "calc(5% + 48px)",
-      left: "20%",
-      width: "60%",
-      background: "rgba(0,0,0,0.75)",
-      color: "white",
-      fontFamily: "Arial, sans-serif",
-      padding: "12px 20px",
-      zIndex: 99,
-      display: "none",
-      flexDirection: "column",
-      alignItems: "flex-start",
-      userSelect: "none",
-      backdropFilter: "blur(4px)",
-      boxShadow: "0 -2px 10px rgba(0,0,0,0.7)",
-      minHeight: "25vh",
-      maxHeight: "50vh",
-      overflowY: "auto",
-      transition: "opacity 0.25s ease",
-      opacity: "0",
-      pointerEvents: "none",
-    });
-
-    const nameElem = document.createElement("div");
-    nameElem.id = "vn-chat-name";
-    nameElem.style.fontWeight = "bold";
-    nameElem.style.fontSize = "1.2em";
-    nameElem.style.marginBottom = "4px";
-    banner.appendChild(nameElem);
-
-    const msgElem = document.createElement("div");
-    msgElem.id = "vn-chat-msg";
-    msgElem.style.fontSize = "2.2em";
-    banner.appendChild(msgElem);
-
-    arrowElem = document.createElement("div");
-    arrowElem.id = "vn-chat-arrow";
-    arrowElem.innerHTML = "&#8595;";
-    Object.assign(arrowElem.style, {
-      position: "absolute",
-      bottom: "8px",
-      right: "16px",
-      fontSize: "1.5em",
-      opacity: "0.5",
-      display: "none"
-    });
-    banner.appendChild(arrowElem);
-
-    timerBar = document.createElement("div");
-    timerBar.id = "vn-chat-timer";
-    Object.assign(timerBar.style, {
-      position: "absolute",
-      bottom: "0",
-      left: "0",
-      height: "5px",
-      width: "100%",
-      background: "white",
-      transformOrigin: "left",
-      transform: "scaleX(1)",
-      transition: "transform linear",
-      opacity: "1"
-    });
-    banner.appendChild(timerBar);
-
-    document.body.appendChild(banner);
+    applyPortraitSettings();
   }
 
-  if (!imgElem) {
-    imgElem = document.createElement("img");
-    imgElem.id = "vn-chat-image";
-    Object.assign(imgElem.style, {
-      position: "fixed",
-      bottom: "0",
-      left: "0",
-      width: "31vw",
-      height: "31vw",
-      objectFit: "contain",
-      zIndex: 98,
-      transition: "left 0.5s ease, opacity 0.5s ease",
-      opacity: "0",
-      pointerEvents: "none",
-      border: "none"
-    });
-    document.body.appendChild(imgElem);
+  function applyPortraitSettings () {
+    if (!imgElem) return;
+    const size = portraitSize();
+    imgElem.style.width  = `${size}vw`;
+    imgElem.style.height = `${size}vw`;
+    imgElem.dataset.hideOffset = `${-(size + 4)}vw`;
+    imgElem.style.display = portraitEnabled() ? "block" : "none";
   }
 
-  function updateNextArrow() {
-    arrowElem.style.display = messageQueue.length > 0 ? "block" : "none";
-  }
+  Hooks.on("closeSettingsConfig", applyPortraitSettings);
 
-  function typeText(element, text, speed = 20, callback) {
+  /* -------------------------------------------------------------------------
+   *  TEXT TYPING
+   * --------------------------------------------------------------------- */
+  function typeHtml (el, html, speed = 20, done) {
     typing = true;
-    element.innerHTML = "";
-    let i = 0;
-    function typeChar() {
-      if (i < text.length) {
-        element.innerHTML += text.charAt(i);
-        i++;
-        setTimeout(typeChar, speed);
-      } else {
-        typing = false;
-        if (callback) callback();
+    const safe = allowedHtml(html);
+    const segments = safe.split(/(<[^>]+>)/).filter(Boolean);
+    el.innerHTML = "";
+
+    let sIdx = 0, cIdx = 0;
+
+    const advance = () => {
+      if (sIdx >= segments.length) { typing = false; done?.(); return; }
+      const seg = segments[sIdx];
+      if (seg.startsWith("<")) { el.innerHTML += seg; sIdx++; advance(); }
+      else {
+        if (cIdx < seg.length) { el.innerHTML += seg.charAt(cIdx++); setTimeout(advance, speed); }
+        else { sIdx++; cIdx = 0; advance(); }
       }
-    }
-    typeChar();
+    };
+    advance();
   }
 
-  function clearAutoSkip() {
-    clearTimeout(autoSkipTimeout);
-    autoSkipTimeout = null;
+  /* -------------------------------------------------------------------------
+   *  AUTO‑SKIP TIMER
+   * --------------------------------------------------------------------- */
+  function resetTimer () {
+    clearTimeout(autoSkipTimer);
+    autoSkipTimer = null;
     timerBar.style.transition = "none";
-    timerBar.style.transform = "scaleX(1)";
-    timerBar.style.opacity = "1";
-    timerPaused = false;
-    timerRemaining = 0;
+    timerBar.style.transform  = "scaleX(1)";
+    timerBar.style.opacity    = "1";
   }
 
-  function startAutoSkipTimer(textLength) {
-    clearAutoSkip();
+  function startTimer (charCount) {
+    const duration = Math.max(AUTO_SKIP_MIN_SECONDS * 1000, AUTO_SKIP_BASE_DELAY + charCount * AUTO_SKIP_CHAR_DELAY);
+    autoSkipStart  = Date.now();
+    autoSkipRemain = duration;
 
-    if (!autoSkipEnabled) {
-      timerBar.style.opacity = "0";
-      return;
-    }
-
-    autoSkipDuration = Math.max(
-      autoSkipMinDurationSeconds * 1000,
-      5000 + textLength * 50
-    );
-
-    timerRemaining = autoSkipDuration;
-    autoSkipStart = Date.now();
     timerBar.style.transition = "none";
-    timerBar.style.transform = "scaleX(1)";
-    timerBar.style.opacity = "1";
+    timerBar.style.transform  = "scaleX(1)";
 
+    // Defer to allow property to take
     setTimeout(() => {
-      timerBar.style.transition = `transform ${autoSkipDuration}ms linear`;
-      timerBar.style.transform = "scaleX(0)";
-    }, 10);
+      timerBar.style.transition = `transform ${duration}ms linear`;
+      timerBar.style.transform  = "scaleX(0)";
+    }, 20);
 
-    autoSkipTimeout = setTimeout(() => {
-      const isFocused = document.hasFocus();
-      const sheetOpen = !!document.querySelector(".app.window-app.sheet:not(.minimized)") ||
-                        !!document.querySelector(".app.window-app.journal-entry:not(.minimized)");
-      if (isFocused && !sheetOpen) {
-        skipMessage();
-      } else {
-        pauseAutoSkipTimer();
-      }
-    }, autoSkipDuration);
-
-    timerPaused = false;
+    autoSkipTimer = setTimeout(() => skipMessage(), duration);
   }
 
-  function pauseAutoSkipTimer() {
-    if (!autoSkipTimeout || timerPaused) return;
-    timerPaused = true;
-    clearTimeout(autoSkipTimeout);
-
-    const elapsed = Date.now() - autoSkipStart;
-    timerRemaining = Math.max(autoSkipDuration - elapsed, 0);
-
+  function pauseTimer () {
+    if (!autoSkipTimer) return;
+    clearTimeout(autoSkipTimer);
+    autoSkipTimer = null;
+    autoSkipRemain -= Date.now() - autoSkipStart;
+    const progress = autoSkipRemain / (AUTO_SKIP_BASE_DELAY + 1000 * AUTO_SKIP_MIN_SECONDS);
     timerBar.style.transition = "none";
-    const progress = timerRemaining / autoSkipDuration;
-    timerBar.style.transform = `scaleX(${progress})`;
-
-    timerBar.style.opacity = "0";
+    timerBar.style.transform  = `scaleX(${progress})`;
   }
 
-  function resumeAutoSkipTimer() {
-    if (!timerPaused || !currentMessage) return;
-    timerPaused = false;
+  function resumeTimer () {
+    if (autoSkipTimer || !autoSkipRemain) return;
     autoSkipStart = Date.now();
-
-    timerBar.style.opacity = "1";
-
-    timerBar.style.transition = `transform ${timerRemaining}ms linear`;
-    timerBar.style.transform = "scaleX(0)";
-
-    autoSkipTimeout = setTimeout(() => {
-      const isFocused = document.hasFocus();
-      const sheetOpen = !!document.querySelector(".app.window-app.sheet:not(.minimized)") ||
-                        !!document.querySelector(".app.window-app.journal-entry:not(.minimized)");
-      if (isFocused && !sheetOpen) {
-        skipMessage();
-      } else {
-        pauseAutoSkipTimer();
-      }
-    }, timerRemaining);
+    timerBar.style.transition = `transform ${autoSkipRemain}ms linear`;
+    timerBar.style.transform  = "scaleX(0)";
+    autoSkipTimer = setTimeout(() => skipMessage(), autoSkipRemain);
   }
 
-  function displayMessage(entry) {
-    clearAutoSkip();
-    currentMessage = entry;
-    const nameElem = document.getElementById("vn-chat-name");
-    const msgElem = document.getElementById("vn-chat-msg");
+  /* -------------------------------------------------------------------------
+   *  MESSAGE DISPLAY
+   * --------------------------------------------------------------------- */
+  function updateArrow () { arrowElem.style.display = queue.length ? "block" : "none"; }
 
-    console.log("Displaying message:", entry);
+  function displayMessage ({ name, msg, image, userId }) {
+    resetTimer();
+    currentMsg = msg;
 
-    nameElem.textContent = entry.name;
+    const nameEl = banner.querySelector("#vn-chat-name");
+    const msgEl  = banner.querySelector("#vn-chat-msg");
+
+    nameEl.textContent = name;
     banner.style.display = "flex";
-    banner.style.opacity = "1";
+    requestAnimationFrame(() => banner.style.opacity = "1");
 
-    if (entry.name !== currentSpeaker) {
-      imgElem.style.opacity = "0";
-      imgElem.style.left = "-35vw";
-      if (entry.image) {
-        imgElem.src = entry.image;
-        setTimeout(() => {
-          imgElem.style.left = "0";
-          imgElem.style.opacity = "1";
-        }, 50);
+    // Portrait switching
+    if (portraitEnabled()) {
+      if (name !== currentSpeaker) {
+        imgElem.style.opacity = "0";
+        imgElem.style.left    = imgElem.dataset.hideOffset;
+        if (image) imgElem.src = image;
+        setTimeout(() => { imgElem.style.left = "0"; imgElem.style.opacity = "1"; }, 50);
+        currentSpeaker = name;
       }
-      currentSpeaker = entry.name;
     }
 
-    if (entry.userId === game.user.id) {
-      console.log("Playing chat sound for local user");
-      playChatSound();
-    }
+    // Sound only for local user
+    if (userId === game.user.id) playChatSound();
 
-    typeText(msgElem, entry.msg, 20, () => {
-      updateNextArrow();
-      const isFocused = document.hasFocus();
-      const sheetOpen = !!document.querySelector(".app.window-app.sheet:not(.minimized)") ||
-                        !!document.querySelector(".app.window-app.journal-entry:not(.minimized)");
-      if (isFocused && !sheetOpen) {
-        startAutoSkipTimer(entry.msg.length);
-      }
+    typeHtml(msgEl, msg, 20, () => {
+      updateArrow();
+      if (document.hasFocus()) startTimer(msgEl.textContent.length);
     });
   }
 
-  function skipMessage() {
+  function skipMessage () {
     if (typing) return;
-    clearAutoSkip();
-    if (messageQueue.length > 0) {
-      const next = messageQueue.shift();
-      displayMessage(next);
-    } else {
+    resetTimer();
+    if (queue.length) displayMessage(queue.shift());
+    else {
       banner.style.opacity = "0";
       imgElem.style.opacity = "0";
-      timerBar.style.transition = "none";
-      timerBar.style.transform = "scaleX(1)";
-      timerBar.style.opacity = "1";
-      setTimeout(() => {
-        banner.style.display = "none";
-        currentSpeaker = null;
-        currentMessage = null;
-      }, 250);
+      setTimeout(() => { banner.style.display = "none"; currentSpeaker = null; currentMsg = null; }, 250);
     }
   }
 
-  document.addEventListener("keydown", (e) => {
-    const isTypingChat = document.activeElement?.closest(".chat-message") || document.activeElement?.tagName === "TEXTAREA";
+  /* -------------------------------------------------------------------------
+   *  EVENT HANDLERS
+   * --------------------------------------------------------------------- */
+  document.addEventListener("keydown", ev => {
+    if (document.activeElement?.closest(".chat-message") || document.activeElement?.tagName === "TEXTAREA") return; // typing in chat
     const sheetOpen = !!document.querySelector(".app.window-app.sheet:not(.minimized)");
+    if (sheetOpen) return;
 
-    const skipKey = game.settings.get("hearme-chat-notification", "skipKey")?.toLowerCase();
-
-    if (!isTypingChat && !sheetOpen) {
-      if (e.key.toLowerCase() === skipKey) skipMessage();
-      if (e.key === "Tab") {
-        e.preventDefault();
-        skipMessage();
-      }
-    }
+    const key = game.settings.get("hearme-chat-notification", "skipKey").toLowerCase();
+    if (ev.key.toLowerCase() === key || ev.key === "Tab") { ev.preventDefault(); skipMessage(); }
   });
 
-  window.addEventListener("blur", () => {
-    pauseAutoSkipTimer();
-  });
+  window.addEventListener("blur",  pauseTimer);
+  window.addEventListener("focus", resumeTimer);
 
-  window.addEventListener("focus", () => {
-    resumeAutoSkipTimer();
-  });
+  Hooks.on("createChatMessage", message => {
+    if (!message.visible || message.isRoll) return; // ignore hidden & dice rolls
+    if (!message.speaker?.actor) return;
 
-  Hooks.on("createChatMessage", (message) => {
-    if (!message.visible || message.isRoll) return;
-    const content = message.content.trim();
-    let name = "";
-    let image = null;
-
-    if (!message.speaker || !message.speaker.actor) return;
     const actor = game.actors.get(message.speaker.actor);
     if (!actor) return;
+
+    let name = actor.name;
+    let img  = actor.img;
 
     if (message.speaker.token) {
       const scene = game.scenes.active;
       const token = scene?.tokens.get(message.speaker.token);
-      if (token) {
-        name = token.name;
-        image = token.texture.src;
-      } else {
-        name = actor.name;
-        image = actor.img;
-      }
-    } else {
-      name = actor.name;
-      image = actor.img;
+      if (token) { name = token.name; img = token.texture.src; }
     }
 
-    const entry = { name, msg: content, image, userId: message.user.id };
-    if (banner.style.display === "flex") {
-      messageQueue.push(entry);
-      updateNextArrow();
-    } else {
-      displayMessage(entry);
-    }
+    const entry = { name, msg: message.content.trim(), image: img, userId: message.user.id };
+    if (banner.style.display === "flex") { queue.push(entry); updateArrow(); }
+    else displayMessage(entry);
   });
+
+  /* -------------------------------------------------------------------------
+   *  INITIALISATION
+   * --------------------------------------------------------------------- */
+  ensureDom();
 })();
