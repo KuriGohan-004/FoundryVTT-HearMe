@@ -1,3 +1,5 @@
+/* Image Overlay Toggle – v1.4.1 */
+
 /** Setting key used to persist the control‑panel position */
 const POS_KEY = 'controlPos';
 
