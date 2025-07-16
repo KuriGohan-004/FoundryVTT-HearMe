@@ -1,12 +1,13 @@
 /***********************************************************************
- * Player Token Bar – with “Always Center” toggle and live label
- *   1 ⇽ prev  | toggle follow 2 | next ⇾ 3
+ * Player Token Bar
+ *  Hot‑keys:
+ *    1 ⇽ prev | toggle follow 2 | next ⇾ 3 | ⏎ focus chat
  **********************************************************************/
 (() => {
   const BAR_ID   = "player-token-bar";
   const LABEL_ID = "player-token-bar-label";
 
-  /* ---------- CSS (injected once) ---------- */
+  /* ---------- Inject CSS ---------- */
   const CSS = `
     #${BAR_ID}{
       position:fixed; bottom:0; left:15%; width:50%; height:84px;
@@ -39,124 +40,98 @@
   const label = () => document.getElementById(LABEL_ID) ?? document.body.appendChild(Object.assign(document.createElement("div"), {id:LABEL_ID}));
 
   /* ---------- State ---------- */
-  let lastSelectedTokenId = null;   // token that stays large
-  let alwaysCenter        = false;  // follow toggle
-  let orderedIds          = [];     // all player‑owned tokens (for display)
-  let ownedIds            = [];     // subset you can control (for cycling)
-  let hoverTokenId        = null;   // token id currently hovered (for label)
+  let selectedId     = null;      // token kept big
+  let alwaysCenter   = false;     // follow toggle
+  let orderedIds     = [];        // all player‑owned tokens (display order)
+  let ownedIds       = [];        // you‑owned tokens (cycle order)
+  let hoverId        = null;      // token id currently hovered
 
   /* ---------- Utility ---------- */
-  const combatRunning = () =>
-    !!(game.combat && game.combat.started && game.combat.scene?.id === canvas.scene?.id);
+  const combatRunning = () => !!(game.combat?.started && game.combat.scene?.id === canvas.scene?.id);
 
-  /** Tokens any player owns (visible on bar) */
-  const playerOwnedTokens = () => {
+  /** Tokens owned by *any* player (displayed) */
+  const displayTokens = () => {
     const players = game.users.players;
-    return canvas.tokens.placeables.filter(tok=>{
-      if(!tok.actor) return false;
-      const tokOwn = tok.document?.ownership ?? tok.ownership ?? {};
-      const actOwn = tok.actor.ownership ?? {};
+    return canvas.tokens.placeables.filter(t=>{
+      if(!t.actor) return false;
+      const tokOwn = t.document.ownership ?? t.ownership ?? {};
+      const actOwn = t.actor.ownership;
       const hasTok = Object.entries(tokOwn).some(([u,l])=>players.some(p=>p.id===u)&&l>=CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER);
       const hasAct = Object.entries(actOwn).some(([u,l])=>players.some(p=>p.id===u)&&l>=CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER);
       return hasTok||hasAct;
     });
   };
 
-  /** Can YOU control the token? */
-  const canControl = tok => tok.isOwner || tok.actor?.isOwner;
+  const canControl = t => t.isOwner || t.actor?.isOwner;
 
-  const imgSrc = tok =>
-    tok.document.texture?.src ||
-    tok.actor?.prototypeToken?.texture?.src ||
-    tok.actor?.img ||
-    "icons/svg/mystery-man.svg";
+  const imgSrc = t =>
+      t.document.texture?.src ||
+      t.actor?.prototypeToken?.texture?.src ||
+      t.actor?.img ||
+      "icons/svg/mystery-man.svg";
 
   /* ---------- Label helper ---------- */
-  function updateLabel(text, showBrackets=false){
-    label().textContent = text ? (showBrackets ? `[[ ${text} ]]` : text) : "";
+  function setLabel(text, brackets=false){
+    label().textContent = text ? (brackets ? `[[ ${text} ]]` : text) : "";
   }
 
   /* ---------- Build / refresh bar ---------- */
   function refresh(){
     const b = bar();
 
-    /* Hide in combat */
     if(combatRunning()){
       b.style.opacity="0"; b.style.pointerEvents="none";
-      updateLabel("");
-      b.replaceChildren();
-      orderedIds=[]; ownedIds=[];
+      setLabel("");
+      b.replaceChildren(); orderedIds=[]; ownedIds=[]; hoverId=null;
       return;
     }
 
     b.style.opacity="1"; b.style.pointerEvents="auto";
     b.replaceChildren();
 
-    orderedIds=[]; ownedIds=[];
-    hoverTokenId=null;                                   // reset hover on rebuild
+    orderedIds=[]; ownedIds=[]; hoverId=null;
 
-    for(const tok of playerOwnedTokens()){
-      orderedIds.push(tok.id);
-      if(canControl(tok)) ownedIds.push(tok.id);
+    for(const t of displayTokens()){
+      orderedIds.push(t.id);
+      if(canControl(t)) ownedIds.push(t.id);
 
       const img = document.createElement("img");
-      img.src = imgSrc(tok);
-      img.alt = tok.name;
+      img.src = imgSrc(t); img.alt = t.name;
+      if(t.id===selectedId) img.classList.add("selected-token");
 
-      if(tok.id === lastSelectedTokenId) img.classList.add("selected-token");
+      img.addEventListener("click", ()=> chooseToken(t));
+      img.addEventListener("contextmenu", e=>{ e.preventDefault(); t.actor?.sheet?.render(true); });
 
-      /* --- Click: select & maybe follow --- */
-      img.addEventListener("click", ()=> selectToken(tok));
-
-      /* --- Right‑click: open sheet --- */
-      img.addEventListener("contextmenu", e=>{
-        e.preventDefault();
-        tok.actor?.sheet?.render(true);
-      });
-
-      /* --- Hover label --- */
-      img.addEventListener("mouseenter", ()=>{
-        hoverTokenId = tok.id;
-        updateLabel(tok.name, alwaysCenter && tok.id===lastSelectedTokenId);
-      });
-      img.addEventListener("mouseleave", ()=>{
-        hoverTokenId = null;
-        // revert to selected token name
-        const selTok = canvas.tokens.get(lastSelectedTokenId);
-        updateLabel(selTok?.name ?? "", alwaysCenter);
-      });
+      img.addEventListener("mouseenter", ()=>{ hoverId=t.id; setLabel(t.name, alwaysCenter && t.id===selectedId); });
+      img.addEventListener("mouseleave", ()=>{ hoverId=null; const s=canvas.tokens.get(selectedId); setLabel(s?.name??"", alwaysCenter); });
 
       b.appendChild(img);
     }
 
-    // Ensure label shows correct default after rebuild
-    const selTok = canvas.tokens.get(lastSelectedTokenId);
-    updateLabel(selTok?.name ?? "", alwaysCenter);
+    const selTok = canvas.tokens.get(selectedId);
+    setLabel(selTok?.name??"", alwaysCenter);
   }
 
-  /* ---------- Select token & pan ---------- */
-  function selectToken(tok){
-    lastSelectedTokenId = tok.id;
+  /* ---------- Select token & (maybe) follow ---------- */
+  function chooseToken(tok){
+    selectedId = tok.id;
     if(canControl(tok)) tok.control({releaseOthers:true});
     canvas.animatePan(tok.center);
-    refresh();                               // update highlight & label
+    refresh();
   }
 
-  /* ---------- Always‑center handling ---------- */
-  function toggleAlwaysCenter(){
-    if(!lastSelectedTokenId) return;
+  /* ---------- Always‑center toggle ---------- */
+  function toggleCenter(){
+    if(!selectedId) return;
     alwaysCenter = !alwaysCenter;
-
-    const selTok = canvas.tokens.get(lastSelectedTokenId);
-    if(selTok){
-      if(alwaysCenter) canvas.animatePan(selTok.center);
-      updateLabel(selTok.name, alwaysCenter);
-    }
+    const tok = canvas.tokens.get(selectedId);
+    if(tok && alwaysCenter) canvas.animatePan(tok.center);
+    setLabel(tok?.name??"", alwaysCenter);
   }
 
-  /* Follow hook – pan whenever selected token moves */
-  Hooks.on("updateToken", (doc)=>{
-    if(alwaysCenter && doc.id === lastSelectedTokenId){
+  /* Follow when token moves */
+  Hooks.on("updateToken", doc=>{
+    if(alwaysCenter && doc.id===selectedId){
       const tok = canvas.tokens.get(doc.id);
       if(tok) canvas.animatePan(tok.center);
     }
@@ -165,20 +140,33 @@
   /* ---------- Keyboard handling ---------- */
   function cycleOwned(offset){
     if(!ownedIds.length) return;
-    let idx = ownedIds.indexOf(lastSelectedTokenId);
-    if(idx===-1) idx = 0;
+    let idx = ownedIds.indexOf(selectedId);
+    if(idx===-1) idx=0;
     const next = canvas.tokens.get(ownedIds[(idx+offset+ownedIds.length)%ownedIds.length]);
-    if(next) selectToken(next);
+    if(next) chooseToken(next);
+  }
+
+  function sheetOpen(){
+    /* Any visible window‑app with .sheet class (character, item, etc.) */
+    return !!document.querySelector(".window-app.sheet:not(.minimized)");
   }
 
   window.addEventListener("keydown", ev=>{
-    // ignore if user typing
+    // If typing already (chat input, sheet field, etc.) ignore
     if(ev.target instanceof HTMLInputElement || ev.target instanceof HTMLTextAreaElement || ev.target.isContentEditable) return;
 
     switch(ev.code){
       case "Digit3": ev.preventDefault(); cycleOwned(+1); break;
       case "Digit1": ev.preventDefault(); cycleOwned(-1); break;
-      case "Digit2": ev.preventDefault(); toggleAlwaysCenter(); break;
+      case "Digit2": ev.preventDefault(); toggleCenter(); break;
+      case "Enter":{
+        const chatInput = document.querySelector("#chat-message") || document.querySelector("textarea[name='message']");
+        if(chatInput && document.activeElement!==chatInput && !sheetOpen()){
+          ev.preventDefault();
+          chatInput.focus();
+        }
+        break;
+      }
     }
   });
 
@@ -186,14 +174,14 @@
   Hooks.once("ready", refresh);
   Hooks.on("canvasReady",  refresh);
   Hooks.on("createToken",  refresh);
-  Hooks.on("updateToken",  refresh);  // also used above for follow
+  Hooks.on("updateToken",  refresh);
   Hooks.on("deleteToken",  refresh);
   Hooks.on("updateActor",  refresh);
   Hooks.on("updateCombat", refresh);
   Hooks.on("deleteCombat", refresh);
-  Hooks.on("controlToken", (tok, controlled)=>{
-    if(controlled && canControl(tok)){
-      lastSelectedTokenId = tok.id;
+  Hooks.on("controlToken", (tok, ctl)=>{
+    if(ctl && canControl(tok)){
+      selectedId = tok.id;
       if(alwaysCenter) canvas.animatePan(tok.center);
       refresh();
     }
