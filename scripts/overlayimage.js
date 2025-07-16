@@ -1,11 +1,10 @@
 /***********************************************************************
- * Player Token Bar  – vertical sidebar label added
+ * Player Token Bar  – rotated fading name aligned to sidebar
  **********************************************************************/
 (() => {
   const BAR_ID      = "player-token-bar";
   const LABEL_ID    = "player-token-bar-label";
   const CENTER_ID   = "player-token-bar-center-label";
-  const VERT_ID     = "player-token-bar-vertical-label";   /* NEW */
 
   /* ---------- Styles ---------- */
   const CSS = `
@@ -37,23 +36,15 @@
       height:24px; line-height:24px; user-select:none;
     }
 
-    /* Pulsing overlay (center of screen) --------------------------- */
+    /* Rotated, pulsing name aligned to sidebar --------------------- */
     @keyframes ptbPulse{0%,100%{opacity:1;}50%{opacity:.5;}}
     #${CENTER_ID}{
-      position:fixed; left:50%; top:50%;
-      transform:translate(-50%, -50%);
+      position:fixed;
       font-size:48px; font-weight:bold; font-style:italic; color:#fff; text-shadow:0 0 8px #000;
       pointer-events:none; z-index:40; user-select:none;
       animation:ptbPulse 4s infinite;
-    }
-
-    /* NEW: Vertical sidebar label ---------------------------------- */
-    #${VERT_ID}{
-      position:fixed;
-      font-size:20px; font-weight:bold; color:#fff; text-shadow:0 0 4px #000;
-      pointer-events:none; z-index:39; user-select:none;
       transform:rotate(-90deg);
-      transform-origin:bottom left;       /* baseline hugs sidebar */
+      transform-origin:bottom left;
     }`;
   document.head.appendChild(Object.assign(document.createElement("style"),{textContent:CSS}));
 
@@ -62,7 +53,6 @@
   const bar   =()=>el(BAR_ID);
   const label =()=>el(LABEL_ID);
   const center=()=>el(CENTER_ID);
-  const vert  =()=>el(VERT_ID);
 
   /* ---------- State ---------- */
   let selectedId   = null;
@@ -76,19 +66,18 @@
   const imgSrc        = t=>t.document.texture?.src||t.actor?.prototypeToken?.texture?.src||t.actor?.img||"icons/svg/mystery-man.svg";
   const setSmall      = (txt,b=false)=>{label().textContent=txt?(b?`[[ ${txt} ]]`:txt):"";};
 
-  /* --- positioning helpers --- */
-  function positionCenter(){} // static at 50% via CSS
-  function positionVert(){
-    const sb=document.getElementById("sidebar"); if(!sb) return;
-    const v=vert(); const r=sb.getBoundingClientRect();
-    /* Bottom‑left of rotated label sticks to sidebar's left edge */
-    v.style.left = `${r.left - 4}px`;             // small offset
-    v.style.top  = `${r.top + r.height}px`;       // baseline at bottom
+  /* --- positioning helper --- */
+  function positionCenter(){
+    const sb=document.getElementById("sidebar");
+    if(!sb) return;
+    const c=center();
+    const r=sb.getBoundingClientRect();
+    c.style.left = `${r.left - 4}px`;
+    c.style.top  = `${r.top + r.height}px`;
   }
-  window.addEventListener("resize",()=>{positionCenter();positionVert();});
+  window.addEventListener("resize",positionCenter);
 
   const showCenter = txt=>{center().textContent=txt;positionCenter();};
-  const showVert   = txt=>{vert().textContent=txt;positionVert();};
 
   /* ---------- Token list for bar ---------- */
   function displayTokens(){
@@ -106,7 +95,7 @@
   /* ---------- Build / refresh bar ---------- */
   function refresh(){
     const b=bar();
-    if(combatRunning()){b.style.opacity="0";b.style.pointerEvents="none";setSmall("");showVert("");return;}
+    if(combatRunning()){b.style.opacity="0";b.style.pointerEvents="none";setSmall("");return;}
 
     b.style.opacity="1";b.style.pointerEvents="auto";b.replaceChildren();
     orderedIds=[];ownedIds=[];
@@ -126,7 +115,7 @@
     }
     const sTok=canvas.tokens.get(selectedId);
     const nm=sTok?.name??"";
-    setSmall(nm,alwaysCenter);showCenter(nm);showVert(nm);
+    setSmall(nm,alwaysCenter);showCenter(nm);
   }
 
   /* ---------- Selection helpers ---------- */
@@ -134,7 +123,7 @@
     selectedId=t.id;
     if(canControl(t)) t.control({releaseOthers:true});
     canvas.animatePan(t.center);
-    showCenter(t.name); showVert(t.name);
+    showCenter(t.name);
     refresh();
   }
   function toggleFollow(){
@@ -188,11 +177,7 @@
         }else toggleFollow();
         break;
       }
-      case "Enter":{
-        const inp=document.querySelector("#chat-message")||document.querySelector("textarea[name='message']");
-        if(inp&&document.activeElement!==inp&&!sheetOpen()){ev.preventDefault();inp.focus();}
-        break;
-      }
+      /*  --- Enter case removed: pressing Enter never re‑focuses chat --- */
       case "Space":{
         if(combatRunning()){
           const cb=game.combat.combatant; const tok=cb?canvas.tokens.get(cb.tokenId):null;
@@ -215,7 +200,7 @@
     const com=c.combatant; if(!com||com.sceneId!==canvas.scene?.id) return;
     const tok=canvas.tokens.get(com.tokenId); if(!tok) return;
     canvas.animatePan(tok.center);
-    showCenter(tok.name); showVert(tok.name);
+    showCenter(tok.name);
     if(canControl(tok)){tok.control({releaseOthers:true});selectedId=tok.id;}
     refresh();
   });
@@ -224,7 +209,7 @@
   Hooks.on("controlToken",(tok,ctl)=>{
     if(ctl&&canControl(tok)){
       selectedId=tok.id; if(alwaysCenter) canvas.animatePan(tok.center);
-      showCenter(tok.name); showVert(tok.name); refresh();
+      showCenter(tok.name); refresh();
     }
   });
 
@@ -248,4 +233,25 @@
   Hooks.on("deleteToken",refresh);
   Hooks.on("updateActor",refresh);
   Hooks.on("deleteCombat",refresh);
+
+    /* ---------- Enter key: open chat tab ---------------------------- */
+  window.addEventListener("keydown", ev => {
+    if (ev.code !== "Enter") return;
+
+    /* If the current target is any text‑editable element, do nothing */
+    if (
+      ev.target instanceof HTMLInputElement ||
+      ev.target instanceof HTMLTextAreaElement ||
+      ev.target.isContentEditable
+    ) return;
+
+    /* Otherwise open the Chat sidebar and focus its input */
+    ev.preventDefault();
+    ui.sidebar?.activateTab("chat");
+    (document.querySelector("#chat-message") ||
+     document.querySelector("textarea[name='message']")
+    )?.focus();
+  });
+
+  
 })();
