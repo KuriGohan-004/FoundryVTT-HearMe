@@ -108,7 +108,7 @@
       img.src=imgSrc(t);img.alt=t.name;
       if(t.id===selectedId) img.classList.add("selected-token");
 
-      img.onclick = ()=>selectToken(t);
+      img.onclick = () => clickBarToken(t);
       img.onmouseenter = ()=>setSmall(t.name,alwaysCenter&&t.id===selectedId);
       img.onmouseleave = ()=>{const s=canvas.tokens.get(selectedId);setSmall(s?.name??"",alwaysCenter);} ;
 
