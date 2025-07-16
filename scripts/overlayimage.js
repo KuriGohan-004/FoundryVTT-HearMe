@@ -9,7 +9,7 @@
 
   /* ---------- Register settings under HearMe Chat Notifications ---------- */
   if (game.settings) {
-    const namespace = "hearMeChatNotifications";
+    const namespace = "hearMePartyBar";
 
     // 1) Show/hide token bar toggle
     game.settings.register(namespace, "showTokenBar", {
@@ -133,8 +133,8 @@
     const b = bar();
 
     // Check settings toggles:
-    const showBar = game.settings.get("hearMeChatNotifications", "showTokenBar");
-    const autoHide = game.settings.get("hearMeChatNotifications", "autoHideInCombat");
+    const showBar = game.settings.get("hearMePartyBar", "showTokenBar");
+    const autoHide = game.settings.get("hearMePartyBar", "autoHideInCombat");
 
     if (!showBar) {
       b.style.opacity = "0";
@@ -320,8 +320,8 @@
   Hooks.on("updateCombat", (combat, changed, options, userId) => {
     if (!combatRunning()) return;
 
-    const autoHide = game.settings.get("hearMeChatNotifications", "autoHideInCombat");
-    const showBar = game.settings.get("hearMeChatNotifications", "showTokenBar");
+    const autoHide = game.settings.get("hearMePartyBar", "autoHideInCombat");
+    const showBar = game.settings.get("hearMePartyBar", "showTokenBar");
     if (!showBar) return; // Don't do anything if bar is disabled
 
     // If combat just started or a turn changed
