@@ -1,15 +1,15 @@
 /***********************************************************************
- * Player Token Bar  – WASD‑auto‑select & smarter “2” key
- *   1 ⇽ prev owned | 2 toggle/auto‑select | 3 ⇾ next owned | ⏎ chat
- *   Space: end turn (combat) / pause (out‑of‑combat)
+ * Player Token Bar  – vertical sidebar label added
  **********************************************************************/
 (() => {
-  const BAR_ID   = "player-token-bar";
-  const LABEL_ID = "player-token-bar-label";
-  const CENTER_ID= "player-token-bar-center-label";
+  const BAR_ID      = "player-token-bar";
+  const LABEL_ID    = "player-token-bar-label";
+  const CENTER_ID   = "player-token-bar-center-label";
+  const VERT_ID     = "player-token-bar-vertical-label";   /* NEW */
 
   /* ---------- Styles ---------- */
   const CSS = `
+    /* Bottom bar --------------------------------------------------- */
     #${BAR_ID}{
       position:fixed; bottom:0; left:15%; width:50%; height:84px;
       padding:6px 10px; display:flex; align-items:center; justify-content:center;
@@ -20,6 +20,7 @@
     #${BAR_ID}::-webkit-scrollbar{height:8px;}
     #${BAR_ID}::-webkit-scrollbar-thumb{background:#666;border-radius:4px;}
 
+    /* Portraits ----------------------------------------------------- */
     #${BAR_ID} img{
       width:64px; height:64px; object-fit:cover; border-radius:8px;
       border:2px solid #fff; flex:0 0 auto; cursor:pointer;
@@ -28,6 +29,7 @@
     #${BAR_ID} img:hover          {transform:scale(1.3); z-index:1;}
     #${BAR_ID} img.selected-token {transform:scale(1.3); z-index:2;}
 
+    /* Small label above bar ---------------------------------------- */
     #${LABEL_ID}{
       position:fixed; bottom:90px; left:15%; width:50%;
       text-align:center; font-size:16px; font-weight:bold; color:#fff;
@@ -35,12 +37,22 @@
       height:24px; line-height:24px; user-select:none;
     }
 
+    /* Pulsing overlay (below sidebar) ------------------------------ */
     @keyframes ptbPulse{0%,100%{opacity:1;}50%{opacity:.3;}}
     #${CENTER_ID}{
       position:fixed; left:50%; transform:translateX(-50%);
       font-size:48px; font-weight:bold; color:#fff; text-shadow:0 0 8px #000;
       pointer-events:none; z-index:40; user-select:none;
       animation:ptbPulse 4s infinite;
+    }
+
+    /* NEW: Vertical sidebar label ---------------------------------- */
+    #${VERT_ID}{
+      position:fixed;
+      font-size:20px; font-weight:bold; color:#fff; text-shadow:0 0 4px #000;
+      pointer-events:none; z-index:39; user-select:none;
+      transform:rotate(-90deg);
+      transform-origin:bottom left;       /* baseline hugs sidebar */
     }`;
   document.head.appendChild(Object.assign(document.createElement("style"),{textContent:CSS}));
 
@@ -49,6 +61,7 @@
   const bar   =()=>el(BAR_ID);
   const label =()=>el(LABEL_ID);
   const center=()=>el(CENTER_ID);
+  const vert  =()=>el(VERT_ID);
 
   /* ---------- State ---------- */
   let selectedId   = null;
@@ -56,34 +69,47 @@
   let orderedIds   = [];
   let ownedIds     = [];
 
-  /* ---------- Utils ---------- */
+  /* ---------- Utility ---------- */
   const combatRunning = ()=>!!(game.combat?.started&&game.combat.scene?.id===canvas.scene?.id);
-  const canControl = t=>t.isOwner||t.actor?.isOwner;
-  const imgSrc = t=>t.document.texture?.src||t.actor?.prototypeToken?.texture?.src||t.actor?.img||"icons/svg/mystery-man.svg";
-  const setSmall = (txt,b=false)=>{label().textContent=txt? (b?`[[ ${txt} ]]`:txt):"";};
+  const canControl    = t=>t.isOwner||t.actor?.isOwner;
+  const imgSrc        = t=>t.document.texture?.src||t.actor?.prototypeToken?.texture?.src||t.actor?.img||"icons/svg/mystery-man.svg";
+  const setSmall      = (txt,b=false)=>{label().textContent=txt?(b?`[[ ${txt} ]]`:txt):"";};
 
-  /* big overlay under sidebar */
-  function posCenter(){const sb=document.getElementById("sidebar");if(sb){const r=sb.getBoundingClientRect();const c=center();c.style.top=`${r.top-c.offsetHeight}px`;}}
-  window.addEventListener("resize",posCenter);
-  const showCenter = txt=>{const c=center();c.textContent=txt;posCenter();};
+  /* --- positioning helpers --- */
+  function positionCenter(){
+    const sb=document.getElementById("sidebar"); if(!sb) return;
+    const c=center(); const r=sb.getBoundingClientRect();
+    c.style.top=`${r.top-c.offsetHeight}px`;
+  }
+  function positionVert(){
+    const sb=document.getElementById("sidebar"); if(!sb) return;
+    const v=vert(); const r=sb.getBoundingClientRect();
+    /* Bottom‑left of rotated label sticks to sidebar's left edge */
+    v.style.left = `${r.left - 4}px`;             // small offset
+    v.style.top  = `${r.top + r.height}px`;       // baseline at bottom
+  }
+  window.addEventListener("resize",()=>{positionCenter();positionVert();});
 
-  /* tokens shown in bar */
+  const showCenter = txt=>{center().textContent=txt;positionCenter();};
+  const showVert   = txt=>{vert().textContent=txt;positionVert();};
+
+  /* ---------- Token list for bar ---------- */
   function displayTokens(){
     const players=game.users.players;
     return canvas.tokens.placeables.filter(t=>{
       if(!t.actor) return false;
-      const ownTok=t.document.ownership??t.ownership??{};
-      const ownAct=t.actor.ownership;
-      const hasTok=Object.entries(ownTok).some(([u,l])=>players.some(p=>p.id===u)&&l>=CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER);
-      const hasAct=Object.entries(ownAct).some(([u,l])=>players.some(p=>p.id===u)&&l>=CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER);
+      const tokOwn=t.document.ownership??t.ownership??{};
+      const actOwn=t.actor.ownership;
+      const hasTok=Object.entries(tokOwn).some(([u,l])=>players.some(p=>p.id===u)&&l>=CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER);
+      const hasAct=Object.entries(actOwn).some(([u,l])=>players.some(p=>p.id===u)&&l>=CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER);
       return hasTok||hasAct;
     });
   }
 
-  /* ---------- Build bar ---------- */
+  /* ---------- Build / refresh bar ---------- */
   function refresh(){
     const b=bar();
-    if(combatRunning()){b.style.opacity="0";b.style.pointerEvents="none";setSmall("");return;}
+    if(combatRunning()){b.style.opacity="0";b.style.pointerEvents="none";setSmall("");showVert("");return;}
 
     b.style.opacity="1";b.style.pointerEvents="auto";b.replaceChildren();
     orderedIds=[];ownedIds=[];
@@ -102,8 +128,8 @@
       b.appendChild(img);
     }
     const sTok=canvas.tokens.get(selectedId);
-    setSmall(sTok?.name??"",alwaysCenter);
-    showCenter(sTok?.name??"");
+    const nm=sTok?.name??"";
+    setSmall(nm,alwaysCenter);showCenter(nm);showVert(nm);
   }
 
   /* ---------- Selection helpers ---------- */
@@ -111,7 +137,7 @@
     selectedId=t.id;
     if(canControl(t)) t.control({releaseOthers:true});
     canvas.animatePan(t.center);
-    showCenter(t.name);
+    showCenter(t.name); showVert(t.name);
     refresh();
   }
   function toggleFollow(){
@@ -138,20 +164,18 @@
   }
   function sheetOpen(){return !!document.querySelector(".window-app.sheet:not(.minimized)");}
 
-  function ensureBarSelection(){
-    if(canvas.tokens.controlled.length===0 && selectedId){
-      const t=canvas.tokens.get(selectedId);
-      if(t&&canControl(t)) t.control({releaseOthers:true});
+  function ensureBarSel(){
+    if(canvas.tokens.controlled.length===0&&selectedId){
+      const t=canvas.tokens.get(selectedId); if(t&&canControl(t)) t.control({releaseOthers:true});
     }
   }
 
   window.addEventListener("keydown",ev=>{
     if(ev.target instanceof HTMLInputElement||ev.target instanceof HTMLTextAreaElement||ev.target.isContentEditable) return;
 
-    /* Movement keys auto‑select */
+    /* WASD / arrows auto‑select */
     if(["KeyW","KeyA","KeyS","KeyD","ArrowUp","ArrowDown","ArrowLeft","ArrowRight"].includes(ev.code)){
-      ensureBarSelection();
-      return; // don't prevent default – let Foundry handle movement
+      ensureBarSel(); return;     // let Foundry handle movement
     }
 
     switch(ev.code){
@@ -164,9 +188,7 @@
         if(barTok && barTok.id!==curTok?.id){
           selectToken(barTok);
           if(!alwaysCenter) toggleFollow();
-        }else{
-          toggleFollow();
-        }
+        }else toggleFollow();
         break;
       }
       case "Enter":{
@@ -176,8 +198,7 @@
       }
       case "Space":{
         if(combatRunning()){
-          const cb=game.combat.combatant;
-          const tok=cb?canvas.tokens.get(cb.tokenId):null;
+          const cb=game.combat.combatant; const tok=cb?canvas.tokens.get(cb.tokenId):null;
           if(tok&&(game.user.isGM||tok.isOwner)){ev.preventDefault();game.combat.nextTurn();}
         }else{ev.preventDefault();game.togglePause();}
         break;
@@ -185,36 +206,40 @@
     }
   });
 
-  /* Chat blur after send */
+  /* Chat blur */
   Hooks.once("renderChatLog",(app,html)=>{
     const form=html[0].querySelector("form");
     form?.addEventListener("submit",()=>setTimeout(()=>form.querySelector("textarea[name='message'],#chat-message")?.blur(),10));
   });
 
-  /* Combat turn pan/select */
+  /* Combat turn */
   Hooks.on("updateCombat",(c,chg)=>{
     if(chg.turn===undefined) return;
-    const com=c.combatant;if(!com||com.sceneId!==canvas.scene?.id) return;
+    const com=c.combatant; if(!com||com.sceneId!==canvas.scene?.id) return;
     const tok=canvas.tokens.get(com.tokenId); if(!tok) return;
-    canvas.animatePan(tok.center); showCenter(tok.name);
+    canvas.animatePan(tok.center);
+    showCenter(tok.name); showVert(tok.name);
     if(canControl(tok)){tok.control({releaseOthers:true});selectedId=tok.id;}
     refresh();
   });
 
-  /* Control change from other sources */
+  /* Control hook */
   Hooks.on("controlToken",(tok,ctl)=>{
-    if(ctl&&canControl(tok)){selectedId=tok.id;if(alwaysCenter)canvas.animatePan(tok.center);showCenter(tok.name);refresh();}
+    if(ctl&&canControl(tok)){
+      selectedId=tok.id; if(alwaysCenter) canvas.animatePan(tok.center);
+      showCenter(tok.name); showVert(tok.name); refresh();
+    }
   });
 
-  /* Double‑click sheet+select (left‑click behaviour restored) */
-  if(!Token.prototype._ptbDCPatched){
-    Token.prototype._ptbDCPatched=true;
+  /* Double click sheet + select */
+  if(!Token.prototype._ptbDblPatched){
+    Token.prototype._ptbDblPatched=true;
     const orig=Token.prototype._onClickLeft2;
     Token.prototype._onClickLeft2=function(e){
       this.actor?.sheet?.render(true);
       if(this.isOwner) this.control({releaseOthers:true});
       selectToken(this);
-      if(orig) orig.call(this,e);
+      orig?.call(this,e);
     };
   }
 
