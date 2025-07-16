@@ -1,5 +1,3 @@
-/* Image Overlay Toggle – v1.4.1 */
-
 /** Setting key used to persist the control‑panel position */
 const POS_KEY = 'controlPos';
 
@@ -14,7 +12,6 @@ Hooks.once('init', () => {
     type: Object,
     default: { x: 12, y: window.innerHeight - 60 }
   });
-});
 });
 
 Hooks.once('ready', () => {
@@ -49,7 +46,7 @@ function createOverlayUI() {
   const thumb = Object.assign(document.createElement('img'), {
     id: 'io-thumb',
     width: 32,
-    height: 32,
+    height: 32
   });
   Object.assign(thumb.style, {
     objectFit: 'cover',
@@ -77,6 +74,7 @@ function createOverlayUI() {
   uiBox.append(thumb, pickBtn, toggleBtn);
   document.body.appendChild(uiBox);
 
+  // Drag‑n‑drop handling
   let dragging = false, offsetX = 0, offsetY = 0;
   uiBox.addEventListener('mousedown', event => {
     dragging = true;
@@ -108,7 +106,7 @@ function pickImage() {
     callback: path => {
       currentImagePath = path;
       document.getElementById('io-thumb').src = path;
-      broadcastState();
+      broadcastState(); // path sync only
     }
   }).browse();
 }
@@ -127,17 +125,17 @@ function applyOverlay() {
   if (!img) {
     img = document.createElement('img');
     img.id = 'image-overlay-display';
-    img.style.position = 'fixed';
-    img.style.left = '40%';           // 40 % from the left
-    img.style.top  = '50%';           // vertical middle
-    img.style.transform = 'translate(-50%, -50%)';
-    img.style.zIndex = 20;            // beneath chat panel
-    img.style.opacity = 1;
-    img.style.maxWidth = '90%';
-    img.style.userSelect = 'none';
-
-    // Full‑screen black matte
-    img.style.boxShadow = '0 0 0 9999px rgba(0,0,0,1)';
+    Object.assign(img.style, {
+      position: 'fixed',
+      left: '40%',            // 40 % from left edge
+      top: '50%',             // vertical middle
+      transform: 'translate(-50%, -50%)',
+      zIndex: 20,             // beneath chat UI
+      opacity: 1,
+      maxWidth: '90%',
+      userSelect: 'none',
+      boxShadow: '0 0 0 9999px rgba(0,0,0,1)'
+    });
 
     document.body.appendChild(img);
     addHoverHandler(img);
@@ -161,9 +159,7 @@ function handleSocket(data) {
 }
 
 /* ------------------------------------------------------------- */
-// Hover fade after 0.5 s of continuous pointer movement; fade opacity 0.35
-// -------------------------------------------------------------
-// Style injector (now runs for everyone)
+// Style injector (runs for everyone)
 function injectStyles() {
   if (document.getElementById('io-shared-style')) return;
   const style = document.createElement('style');
@@ -186,7 +182,8 @@ function injectStyles() {
   document.head.appendChild(style);
 }
 
-// -------------------------------------------------------------
+/* ------------------------------------------------------------- */
+// Hover fade after 0.5 s of continuous pointer movement; fade opacity 0.35
 function addHoverHandler(img) {
   if (hoverHandler) return;
 
@@ -207,18 +204,14 @@ function addHoverHandler(img) {
     }
 
     const moved = (event.clientX !== lastPosX) || (event.clientY !== lastPosY);
-    const now = Date.now();
-
-    if (moved) {
-      if (movingStart === 0) movingStart = now;
-      if (now - movingStart >= 500) img.style.opacity = 0.35;
-    } else {
-      movingStart = 0;
-      img.style.opacity = 1;
-    }
-
     lastPosX = event.clientX;
     lastPosY = event.clientY;
+
+    if (moved) {
+      movingStart = Date.now();
+    } else if (movingStart && (Date.now() - movingStart > 500)) {
+      img.style.opacity = 0.35;
+    }
   };
 
   window.addEventListener('mousemove', hoverHandler);
