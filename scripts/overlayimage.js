@@ -1,44 +1,41 @@
 /***********************************************************************
  * Player Token Bar  – rotated fading name aligned to sidebar
- *  • v3 – user‑owned only, GM omnibus view, half‑sized bar
- *  • Adds Foundry settings for bar visibility & combat auto‑hide
- *  • Auto‑selects combatant at turn start
+ *  • v2 – user‑owned only, GM omnibus view, half‑sized bar
  **********************************************************************/
 (() => {
-  const MODULE_ID = "hear-me-chat-notifications";
   const BAR_ID    = "player-token-bar";
   const LABEL_ID  = "player-token-bar-label";
   const CENTER_ID = "player-token-bar-center-label";
 
-  /* ---------- Module Settings ---------- */
-  Hooks.once("init", () => {
-    game.settings.register(MODULE_ID, "enableTokenBar", {
-      name: "Enable Token Bar",
-      hint: "Toggle the bottom player‑token bar on or off.",
+  /* ---------- Register settings under HearMe Chat Notifications ---------- */
+  if (game.settings) {
+    const namespace = "hearMeChatNotifications";
+
+    // 1) Show/hide token bar toggle
+    game.settings.register(namespace, "showTokenBar", {
+      name: "Show Player Token Bar",
+      hint: "Toggle the display of the player token bar at the bottom.",
       scope: "client",
       config: true,
-      type: Boolean,
-      default: true
+      default: true,
+      type: Boolean
     });
 
-    game.settings.register(MODULE_ID, "autoHideInCombat", {
-      name: "Auto‑hide Bar in Combat",
-      hint: "Hide the token bar while an active combat encounter is running.",
+    // 2) Auto-hide bar in combat toggle
+    game.settings.register(namespace, "autoHideInCombat", {
+      name: "Auto-hide Token Bar in Combat",
+      hint: "Automatically hide the token bar when combat is active.",
       scope: "client",
       config: true,
-      type: Boolean,
-      default: true
+      default: true,
+      type: Boolean
     });
-  });
+  }
 
-  /* Convenience getters so we always read live setting values */
-  const barEnabled     = () => game.settings.get(MODULE_ID, "enableTokenBar");
-  const autoHideCombat = () => game.settings.get(MODULE_ID, "autoHideInCombat");
-
-  /* ---------- Styles (50 % width, transparent) ---------- */
-  const CSS = `
+  /* ---------- Styles (50% width, transparent) ---------- */
+  const CSS = 
     /* Bottom bar --------------------------------------------------- */
-    #${BAR_ID}{
+    `#${BAR_ID}{
       position:fixed; bottom:0; left:25%; width:50%; height:84px;
       padding:6px 10px; display:flex;
       align-items:center; justify-content:center;      /* keep centred */
@@ -75,31 +72,27 @@
       transform:rotate(-90deg);
       transform-origin:bottom left;
       padding-left:35%;
-    }`;
+    };`;
 
-  /* Inject styles once */
-  if (!document.getElementById("player-token-bar-styles")) {
-    const s = Object.assign(document.createElement("style"), { id: "player-token-bar-styles", textContent: CSS });
-    document.head.appendChild(s);
-  }
+  document.head.appendChild(Object.assign(document.createElement("style"), { textContent: CSS }));
 
   /* ---------- DOM helpers ---------- */
-  const el     = (id, tag = "div") => document.getElementById(id) ?? document.body.appendChild(Object.assign(document.createElement(tag), { id }));
-  const bar    = () => el(BAR_ID);
-  const label  = () => el(LABEL_ID);
+  const el = (id, tag = "div") => document.getElementById(id) ?? document.body.appendChild(Object.assign(document.createElement(tag), { id }));
+  const bar = () => el(BAR_ID);
+  const label = () => el(LABEL_ID);
   const center = () => el(CENTER_ID);
 
   /* ---------- State ---------- */
-  let selectedId   = null;
+  let selectedId = null;
   let alwaysCenter = false;
-  let orderedIds   = [];
-  let ownedIds     = [];
+  let orderedIds = [];
+  let ownedIds = [];
 
   /* ---------- Utility ---------- */
   const combatRunning = () => !!(game.combat?.started && game.combat.scene?.id === canvas.scene?.id);
-  const canControl    = t => t.isOwner || t.actor?.isOwner;
-  const imgSrc        = t => t.document.texture?.src || t.actor?.prototypeToken?.texture?.src || t.actor?.img || "icons/svg/mystery-man.svg";
-  const setSmall      = (txt, b = false) => { label().textContent = txt ? (b ? `[[ ${txt} ]]` : txt) : ""; };
+  const canControl = t => t.isOwner || t.actor?.isOwner;
+  const imgSrc = t => t.document.texture?.src || t.actor?.prototypeToken?.texture?.src || t.actor?.img || "icons/svg/mystery-man.svg";
+  const setSmall = (txt, b = false) => { label().textContent = txt ? (b ? `[ ${txt} ]` : txt) : ""; };
 
   /* --- positioning helper --- */
   function positionCenter() {
@@ -108,7 +101,7 @@
     const c = center();
     const r = sb.getBoundingClientRect();
     c.style.left = `${r.left - 4}px`;
-    c.style.top  = `${r.top + r.height}px`;
+    c.style.top = `${r.top + r.height}px`;
   }
   window.addEventListener("resize", positionCenter);
   const showCenter = txt => { center().textContent = txt; positionCenter(); };
@@ -117,10 +110,10 @@
   function displayTokens() {
     /* ---------- GM view ---------- */
     if (game.user.isGM) {
-      /* 1 ) every linked token in the current scene */
+      /* 1) every linked token in the current scene */
       const sceneLinked = canvas.tokens.placeables.filter(t => t.document.actorLink);
 
-      /* 2 ) plus linked tokens whose owners are offline */
+      /* 2) plus linked tokens whose owners are offline (covers “actors whose players are not logged in”) */
       const offlineLinked = canvas.tokens.placeables.filter(t => {
         if (!t.document.actorLink) return false;
         const owners = game.users.players.filter(u => t.actor?.testUserPermission(u, CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER));
@@ -131,37 +124,35 @@
       return [...new Set([...sceneLinked, ...offlineLinked])];
     }
 
-    /* ---------- Regular player view (only tokens you OWN) ---------- */
+    /* ---------- Regular player view  (only tokens you OWN) ---------- */
     return canvas.tokens.placeables.filter(t => canControl(t));
   }
 
   /* ---------- Build / refresh bar (looping carousel) -------------- */
   function refresh() {
-    /* Respect setting: is the bar enabled? */
-    if (!barEnabled()) {
-      bar().style.display = "none";
-      label().style.display = "none";
-      center().style.display = "none";
-      return;
-    } else {
-      bar().style.display = "flex";
-      label().style.display = "";
-      center().style.display = "";
-    }
-
     const b = bar();
 
-    /* Hide bar while the combat turn list is open, if configured */
-    if (autoHideCombat() && combatRunning()) {
-      b.style.opacity       = "0";
+    // Check settings toggles:
+    const showBar = game.settings.get("hearMeChatNotifications", "showTokenBar");
+    const autoHide = game.settings.get("hearMeChatNotifications", "autoHideInCombat");
+
+    if (!showBar) {
+      b.style.opacity = "0";
       b.style.pointerEvents = "none";
       setSmall("");
       return;
     }
 
-    b.style.opacity       = "1";
+    // Auto-hide in combat if enabled
+    if (combatRunning() && autoHide) {
+      b.style.opacity = "0";
+      b.style.pointerEvents = "none";
+      setSmall("");
+      return;
+    }
+    b.style.opacity = "1";
     b.style.pointerEvents = "auto";
-    b.replaceChildren();                           // clear old icons
+    b.replaceChildren(); // clear old icons
 
     /* --------------------------------------------------------------- */
     /* 1. Gather tokens that belong in the bar                         */
@@ -175,22 +166,22 @@
 
     /* Arrays used by keyboard handlers elsewhere in the script */
     orderedIds = allToks.map(t => t.id);
-    ownedIds   = allToks.filter(canControl).map(t => t.id);
+    ownedIds = allToks.filter(canControl).map(t => t.id);
 
-    const n       = orderedIds.length;
-    const selIdx  = orderedIds.indexOf(selectedId);
+    const n = orderedIds.length;
+    const selIdx = orderedIds.indexOf(selectedId);
 
     /* How many portraits go on each side? --------------------------- */
     /* – Show ONE previous token on the left, but only if we have
        at least 3 tokens in total. All remaining tokens go to the right. */
-    const leftCount  = (n >= 3) ? 1 : 0;          // ← exactly one or zero
+    const leftCount = (n >= 3) ? 1 : 0;          // ← exactly one or zero
     const rightCount = (n - 1) - leftCount;       // everything else
 
     /* Helpers to wrap the array index */
     const wrap = idx => (idx + n) % n;
 
     /* Collect tokens to display */
-    const leftTokens  = [];      // previous tokens, nearest first
+    const leftTokens = [];      // previous tokens, nearest first
     const rightTokens = [];      // next tokens, nearest first
 
     for (let i = 1; i <= leftCount; i++)
@@ -204,14 +195,14 @@
     /* --------------------------------------------------------------- */
     function makeImg(token) {
       const img = document.createElement("img");
-      img.src   = imgSrc(token);
-      img.alt   = token.name;
+      img.src = imgSrc(token);
+      img.alt = token.name;
 
       if (token.id === selectedId)
         img.classList.add("selected-token");
 
       /* Click → switch selection */
-      img.onclick      = () => selectToken(token);
+      img.onclick = () => selectToken(token);
       img.onmouseenter = () => setSmall(token.name, alwaysCenter && token.id === selectedId);
       img.onmouseleave = () => {
         const cur = canvas.tokens.get(selectedId);
@@ -223,7 +214,7 @@
     /* --------------------------------------------------------------- */
     /* 3. Build three flex containers:  left | selected | right        */
     /* --------------------------------------------------------------- */
-    const leftWrap  = Object.assign(document.createElement("div"), {
+    const leftWrap = Object.assign(document.createElement("div"), {
       style: "display:flex; gap:10px; flex-direction:row-reverse;"  // shows nearest‑prev next to centre
     });
     const rightWrap = Object.assign(document.createElement("div"), {
@@ -247,97 +238,122 @@
     /* --------------------------------------------------------------- */
     /* 4. Update labels & big centre name                              */
     /* --------------------------------------------------------------- */
-  const curTok = canvas.tokens.get(selectedId);
-  const nm     = curTok?.name ?? "";
-  setSmall(nm, alwaysCenter);
-  showCenter(nm);
-}
-
-
-
+    const curTok = canvas.tokens.get(selectedId);
+    const nm = curTok?.name ?? "";
+    setSmall(nm, alwaysCenter);
+    showCenter(nm);
+  }
 
   /* ---------- Selection helpers (unchanged) ---------- */
-  function selectToken(t){
-    selectedId=t.id;
-    if(canControl(t)) t.control({releaseOthers:true});
+  function selectToken(t) {
+    selectedId = t.id;
+    if (canControl(t)) t.control({ releaseOthers: true });
     canvas.animatePan(t.center);
     showCenter(t.name);
     refresh();
   }
-  function toggleFollow(){
-    if(!selectedId) return;
-    alwaysCenter=!alwaysCenter;
-    const t=canvas.tokens.get(selectedId);
-    if(t&&alwaysCenter) canvas.animatePan(t.center);
-    setSmall(t?.name??"",alwaysCenter);
+  function toggleFollow() {
+    if (!selectedId) return;
+    alwaysCenter = !alwaysCenter;
+    const t = canvas.tokens.get(selectedId);
+    if (t && alwaysCenter) canvas.animatePan(t.center);
+    setSmall(t?.name ?? "", alwaysCenter);
   }
 
   /* --- rest of original script unchanged -------------------------- */
   /* (hooks, key handlers … everything below remains as‑is) */
-  Hooks.on("updateToken",doc=>{
-    if(alwaysCenter&&doc.id===selectedId){
-      const t=canvas.tokens.get(doc.id);
-      if(t) canvas.animatePan(t.center);
+  Hooks.on("updateToken", doc => {
+    if (alwaysCenter && doc.id === selectedId) {
+      const t = canvas.tokens.get(doc.id);
+      if (t) canvas.animatePan(t.center);
     }
   });
 
   /* ---------- Key handling ---------- */
-  function cycleOwned(o){
-    if(!ownedIds.length) return;
-    let idx=ownedIds.indexOf(selectedId); if(idx===-1) idx=0;
-    const next=canvas.tokens.get(ownedIds[(idx+o+ownedIds.length)%ownedIds.length]);
-    if(next) selectToken(next);
+  function cycleOwned(o) {
+    if (!ownedIds.length) return;
+    let idx = ownedIds.indexOf(selectedId); if (idx === -1) idx = 0;
+    const next = canvas.tokens.get(ownedIds[(idx + o + ownedIds.length) % ownedIds.length]);
+    if (next) selectToken(next);
   }
-  function sheetOpen(){return !!document.querySelector(".window-app.sheet:not(.minimized)");}
+  function sheetOpen() { return !!document.querySelector(".window-app.sheet:not(.minimized)"); }
 
-  function ensureBarSel(){
-    if(canvas.tokens.controlled.length===0&&selectedId){
-      const t=canvas.tokens.get(selectedId); if(t&&canControl(t)) t.control({releaseOthers:true});
+  function ensureBarSel() {
+    if (canvas.tokens.controlled.length === 0 && selectedId) {
+      const t = canvas.tokens.get(selectedId); if (t && canControl(t)) t.control({ releaseOthers: true });
     }
   }
 
-  window.addEventListener("keydown",ev=>{
-    if(ev.target instanceof HTMLInputElement||ev.target instanceof HTMLTextAreaElement||ev.target.isContentEditable) return;
+  window.addEventListener("keydown", ev => {
+    if (ev.target instanceof HTMLInputElement || ev.target instanceof HTMLTextAreaElement || ev.target.isContentEditable) return;
 
     /* WASD / arrows auto‑select */
-    if(["KeyW","KeyA","KeyS","KeyD","ArrowUp","ArrowDown","ArrowLeft","ArrowRight"].includes(ev.code)){
+    if (["KeyW", "KeyA", "KeyS", "KeyD", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(ev.code)) {
       ensureBarSel(); return;     // let Foundry handle movement
     }
 
-    switch(ev.code){
+    switch (ev.code) {
       case "KeyE": ev.preventDefault(); cycleOwned(+1); break;
       case "KeyQ": ev.preventDefault(); cycleOwned(-1); break;
-      case "KeyR":{
+      case "KeyR": {
         ev.preventDefault();
-        const barTok=canvas.tokens.get(selectedId);
-        const curTok=canvas.tokens.controlled[0];
-        if(barTok && barTok.id!==curTok?.id){
+        const barTok = canvas.tokens.get(selectedId);
+        const curTok = canvas.tokens.controlled[0];
+        if (barTok && barTok.id !== curTok?.id) {
           selectToken(barTok);
-          if(!alwaysCenter) toggleFollow();
-        }else toggleFollow();
+          if (!alwaysCenter) toggleFollow();
+        } else toggleFollow();
         break;
       }
       /*  --- Enter case removed: pressing Enter never re‑focuses chat --- */
-      case "Space":{
-        if(combatRunning()){
-          const cb=game.combat.combatant; const tok=cb?canvas.tokens.get(cb.tokenId):null;
-          if(tok&&(game.user.isGM||tok.isOwner)){ev.preventDefault();game.combat.nextTurn();}
-        }else{ev.preventDefault();game.togglePause();}
+      case "Space": {
+        if (combatRunning()) {
+          const cb = game.combat.combatant; const tok = cb ? canvas.tokens.get(cb.tokenId) : null;
+          if (tok && (game.user.isGM || tok.isOwner)) { ev.preventDefault(); game.combat.nextTurn(); }
+        } else { ev.preventDefault(); game.togglePause(); }
         break;
       }
     }
   });
 
-  /* … (all subsequent hooks & helpers unchanged) … */
+  /* ----------- New: Auto-select token on its combat turn ------------ */
+  Hooks.on("updateCombat", (combat, changed, options, userId) => {
+    if (!combatRunning()) return;
 
-  /* Initial build */
-  Hooks.once("ready",refresh);
-  Hooks.on("canvasReady",refresh);
-  Hooks.on("createToken",refresh);
-  Hooks.on("updateToken",refresh);
-  Hooks.on("deleteToken",refresh);
-  Hooks.on("updateActor",refresh);
-  Hooks.on("deleteCombat",refresh);
+    const autoHide = game.settings.get("hearMeChatNotifications", "autoHideInCombat");
+    const showBar = game.settings.get("hearMeChatNotifications", "showTokenBar");
+    if (!showBar) return; // Don't do anything if bar is disabled
+
+    // If combat just started or a turn changed
+    if ("turn" in changed) {
+      const combatant = combat.combatant;
+      if (!combatant) return;
+
+      // Try to find token in bar
+      const token = canvas.tokens.get(combatant.tokenId);
+      if (token && orderedIds.includes(token.id)) {
+        selectedId = token.id;
+
+        // Select token for the user if owner or GM
+        if (game.user.isGM || token.isOwner) {
+          token.control({ releaseOthers: true });
+          canvas.animatePan(token.center);
+        }
+        refresh();
+      }
+    }
+  });
+
+  /* ---------- Initial build & hooks ---------- */
+  Hooks.once("ready", refresh);
+  Hooks.on("renderTokenHUD", refresh);
+  Hooks.on("deleteToken", refresh);
+  Hooks.on("createToken", refresh);
+  Hooks.on("updateToken", refresh);
+  Hooks.on("canvasReady", refresh);
+  Hooks.on("controlToken", refresh);
+  Hooks.on("deleteCombat", refresh);
+  Hooks.on("updateCombat", refresh);
 
   /* ---------- Improved ENTER behaviour --------------------------- */
   /**
