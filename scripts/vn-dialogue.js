@@ -1,5 +1,3 @@
-You removed all the rest of the code. Reminder, this is the code you are working on, please add the changes to it and modify it without deleting any other functions:
-
 // === VN Chat Module with GM‑Controlled Portrait (Size & Offsets) ===
 //  This is the **complete** script.  All prior functionality retained.
 //  Three GM‑side (world) settings now control the portrait:
