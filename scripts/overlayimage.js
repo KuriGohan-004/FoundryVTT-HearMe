@@ -262,9 +262,9 @@ function refresh() {
     }
 
     switch(ev.code){
-      case "Digit3": ev.preventDefault(); cycleOwned(+1); break;
-      case "Digit1": ev.preventDefault(); cycleOwned(-1); break;
-      case "Digit2":{
+      case "KeyE": ev.preventDefault(); cycleOwned(+1); break;
+      case "KeyQ": ev.preventDefault(); cycleOwned(-1); break;
+      case "KeyR":{
         ev.preventDefault();
         const barTok=canvas.tokens.get(selectedId);
         const curTok=canvas.tokens.controlled[0];
@@ -363,7 +363,7 @@ function refresh() {
 
 /* ---------- Q key: toggle sheet for the active token -------------- */
 window.addEventListener("keydown", ev => {
-  if (ev.code !== "KeyQ") return;             /* only react to Q        */
+  if (ev.code !== "Tab") return;             /* only react to Tab        */
 
   /* Ignore Q when typing in an input / textarea / content‑editable */
   if (
@@ -387,125 +387,6 @@ window.addEventListener("keydown", ev => {
     sheet.render(true);
   }
 });
-
-/* --[[HEY Checkit The Hotbar!!!]]--  */
-
-  /* ===========================================================
-   QUICK‑SLOTS  (two per actor, launch with keys 4 & 5)
-   =========================================================== */
-const QS_ID = "ptb-quick-slots";
-const QS_CSS = `
-  #${QS_ID}{
-    position:fixed; bottom:128px; left:25%; width:50%;
-    display:flex; justify-content:center; gap:16px; pointer-events:auto;
-    z-index:30;
-  }
-  #${QS_ID} .qs-slot{
-    width:36px; height:36px; border:2px solid var(--color-border-light-primary);
-    border-radius:6px; object-fit:cover; background:rgba(0,0,0,.5);
-    cursor:pointer; transition:outline .15s ease;
-  }
-  #${QS_ID} .qs-slot:hover{
-    outline:2px solid var(--color-border-highlight);
-  }`;
-document.head.appendChild(Object.assign(document.createElement("style"), {textContent: QS_CSS}));
-
-/* ---------- Helper: element ------------------------------------- */
-const qsEl = () =>
-  document.getElementById(QS_ID) ??
-  document.body.appendChild(Object.assign(document.createElement("div"), {id: QS_ID}));
-
-/* ---------- Storage helpers (per‑actor) ------------------------- */
-function getSlots(actor){
-  return actor?.getFlag("ptb", "quickSlots") ?? {slot4:null, slot5:null};
-}
-async function setSlot(actor, idx, uuid){
-  const cur = getSlots(actor);
-  cur[idx]  = uuid;
-  await actor.setFlag("ptb", "quickSlots", cur);
-}
-
-/* ---------- UI refresh ------------------------------------------ */
-function refreshQuickSlots(){
-  const wrap = qsEl(); wrap.replaceChildren();
-
-  const tok   = canvas.tokens.get(selectedId);
-  const actor = tok?.actor;
-  if(!actor) return;
-
-  const slots = getSlots(actor);   // {slot4, slot5}
-  const slotKeys = ["slot4", "slot5"];
-
-  for(const key of slotKeys){
-    const img = document.createElement("img");
-    img.className = "qs-slot";
-    const item = slots[key] ? fromUuidSync(slots[key]) : null;
-    img.src = item?.img ?? "icons/svg/drag.svg";
-    img.title = item?.name ?? "Drag an item here";
-    img.dataset.key = key;
-
-    /* Click: execute item if present */
-    img.onclick = () => {
-      if(!item) return;
-      /* Generic “use” — falls back to roll() if no use() */
-      if(typeof item.use === "function") item.use();
-      else if(typeof item.roll === "function") item.roll();
-      else ui.notifications.warn(`Can't use ${item.name}`);
-    };
-
-    /* Drag‑drop handling */
-    img.ondragover = ev => ev.preventDefault();
-    img.ondrop = async ev => {
-      ev.preventDefault();
-      try{
-        const data = JSON.parse(ev.dataTransfer.getData("text/plain"));
-        if(data?.type !== "Item") return;
-        await setSlot(actor, key, data.uuid);
-        refreshQuickSlots();
-      }catch(err){ console.error(err); }
-    };
-
-    wrap.appendChild(img);
-  }
-}
-
-/* ---------- Keyboard activation (4 / 5) ------------------------- */
-window.addEventListener("keydown", ev=>{
-  /* Ignore if typing */
-  if(ev.target instanceof HTMLInputElement ||
-     ev.target instanceof HTMLTextAreaElement ||
-     ev.target?.isContentEditable) return;
-
-  const keyMap = {Digit4:"slot4", Digit5:"slot5"};
-  if(!(ev.code in keyMap)) return;
-
-  const tok   = canvas.tokens.get(selectedId);
-  const actor = tok?.actor;
-  if(!actor) return;
-
-  const uuid = getSlots(actor)[keyMap[ev.code]];
-  if(!uuid) return;                        // empty slot = nothing
-
-  const item = fromUuidSync(uuid);
-  if(!item){
-    ui.notifications.warn("Item not found.");
-    return;
-  }
-
-  /* Consume the keypress */
-  ev.preventDefault();
-
-  /* Use / roll the item */
-  if(typeof item.use === "function") item.use();
-  else if(typeof item.roll === "function") item.roll();
-  else ui.notifications.warn(`Can't use ${item.name}`);
-});
-
-/* ---------- Keep slots up‑to‑date ------------------------------- */
-Hooks.on("updateActor", (a,chg)=>{ if(a.id === canvas.tokens.get(selectedId)?.actor?.id) refreshQuickSlots(); });
-Hooks.on("controlToken", ()=>refreshQuickSlots());
-Hooks.on("deleteToken", ()=>refreshQuickSlots());
-/* (your main refresh() should call refreshQuickSlots() too) */
 
   
 })();
