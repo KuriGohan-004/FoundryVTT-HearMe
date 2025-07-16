@@ -20,7 +20,7 @@ let overlayVisible   = false;
 let hoverHandler     = null;
 
 /* ------------------------------------------------------------- */
-// UI construction
+// UI construction (unchanged apart from version comments)
 function createOverlayUI() {
   const uiBox = document.createElement('div');
   uiBox.id = 'image-overlay-controls';
@@ -84,7 +84,7 @@ function createOverlayUI() {
   uiBox.append(thumb, pickBtn, toggleBtn);
   document.body.appendChild(uiBox);
 
-  // Drag‑n‑drop handling (same as before)
+  // Drag‑n‑drop handling (unchanged)
   let dragging = false, offsetX = 0, offsetY = 0;
   uiBox.addEventListener('mousedown', event => {
     dragging = true;
@@ -142,11 +142,13 @@ function applyOverlay() {
     img.style.left = '50%';          // centre horizontally
     img.style.top  = '45%';          // 45 % vertical framing
     img.style.transform = 'translate(-50%, -50%)';
-    img.style.zIndex = 30;           // beneath UI windows
+    img.style.zIndex = 20;           // beneath chat (#ui-right ≈30)
     img.style.opacity = 1;
     img.style.maxWidth  = '90%';
     img.style.userSelect = 'none';
-    img.style.boxShadow = '0 0 0 9999px rgba(0,0,0,1)'; // huge black matte
+
+    // Full‑screen black matte
+    img.style.boxShadow = '0 0 0 9999px rgba(0,0,0,1)';
 
     document.body.appendChild(img);
     addHoverHandler(img);
@@ -170,12 +172,13 @@ function handleSocket(data) {
 }
 
 /* ------------------------------------------------------------- */
-// Hover fade after 3 s of movement inside overlay
+// Hover fade after 0.5 s of continuous movement inside overlay
 function addHoverHandler(img) {
   if (hoverHandler) return;
 
   let movingStart = 0;
-  let lastMoveTime = 0;
+  let lastPosX = 0;
+  let lastPosY = 0;
 
   hoverHandler = event => {
     if (!img.isConnected) return;
@@ -189,26 +192,22 @@ function addHoverHandler(img) {
       return;
     }
 
+    // Check actual movement by comparing coordinates
+    const moved = (event.clientX !== lastPosX) || (event.clientY !== lastPosY);
     const now = Date.now();
 
-    // Detect whether the mouse has actually moved (changes in coords)
-    const moved = (now - lastMoveTime) < 150; // <150 ms between events ≈ moving
-
-    if (!moved) {
-      // Reset if stationary
-      movingStart = now;
+    if (moved) {
+      if (movingStart === 0) movingStart = now; // start counting
+      // Fade when 500 ms of continuous movement reached
+      if (now - movingStart >= 500) img.style.opacity = 0.5;
+    } else {
+      // No movement – reset timer & restore opacity
+      movingStart = 0;
       img.style.opacity = 1;
-    } else if (movingStart === 0) {
-      // First movement inside overlay
-      movingStart = now;
     }
 
-    // After 3 s of continuous movement fade to 0.5
-    if (now - movingStart >= 3000) {
-      img.style.opacity = 0.5;
-    }
-
-    lastMoveTime = now;
+    lastPosX = event.clientX;
+    lastPosY = event.clientY;
   };
 
   window.addEventListener('mousemove', hoverHandler);
