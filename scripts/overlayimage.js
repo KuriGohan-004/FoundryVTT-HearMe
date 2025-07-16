@@ -234,24 +234,54 @@
   Hooks.on("updateActor",refresh);
   Hooks.on("deleteCombat",refresh);
 
-    /* ---------- Enter key: open chat tab ---------------------------- */
+  /* ---------- Improved ENTER behaviour --------------------------- */
+  /**
+   *  • If Enter is pressed while a text‑editable element is focused → do nothing
+   *  • Otherwise → open Chat tab and focus its input
+   *  • After a chat message is submitted → blur the input and
+   *    re‑select the previously‑controlled token (so WASD etc. work)
+   */
+
+  const isEditable = el =>
+    el instanceof HTMLInputElement ||
+    el instanceof HTMLTextAreaElement ||
+    el?.isContentEditable;
+
+  /* -- Keydown handler ------------------------------------------- */
   window.addEventListener("keydown", ev => {
     if (ev.code !== "Enter") return;
 
-    /* If the current target is any text‑editable element, do nothing */
-    if (
-      ev.target instanceof HTMLInputElement ||
-      ev.target instanceof HTMLTextAreaElement ||
-      ev.target.isContentEditable
-    ) return;
+    /* Case 1 – typing somewhere: leave Foundry’s default alone */
+    if (isEditable(ev.target)) return;
 
-    /* Otherwise open the Chat sidebar and focus its input */
+    /* Case 2 – no textbox focused: open Chat, focus input */
     ev.preventDefault();
     ui.sidebar?.activateTab("chat");
-    (document.querySelector("#chat-message") ||
-     document.querySelector("textarea[name='message']")
+    (
+      document.querySelector("#chat-message") ||
+      document.querySelector("textarea[name='message']")
     )?.focus();
   });
+
+  /* -- After chat submit: blur & re‑focus canvas ----------------- */
+  Hooks.once("renderChatLog", (app, html) => {
+    const form = html[0].querySelector("form");
+    if (!form) return;
+
+    form.addEventListener("submit", () => {
+      setTimeout(() => {
+        /* Blur chat input so keyboard controls are free again */
+        form.querySelector("textarea[name='message'],#chat-message")?.blur();
+
+        /* Re‑select previously‑controlled token for movement keys */
+        if (canvas?.ready) {
+          const sel = canvas.tokens.controlled[0] || canvas.tokens.get(selectedId);
+          sel?.control({ releaseOthers: false });
+        }
+      }, 200);   /* small delay lets Foundry finish its own handlers */
+    });
+  });
+
 
   
 })();
