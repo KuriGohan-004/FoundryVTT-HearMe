@@ -104,12 +104,12 @@ const CSS = `
     return canvas.tokens.placeables.filter(t => canControl(t));
   }
 
-/* ---------- Build / refresh bar (centre‑selected, show all) ------ */
-function refresh(){
+/* ---------- Build / refresh bar (true sliding carousel) ---------- */
+function refresh() {
   const b = bar();
 
-  /* Hide bar during combat turn list */
-  if (combatRunning()){
+  /* Hide the bar while the combat tracker is up ------------------- */
+  if (combatRunning()) {
     b.style.opacity       = "0";
     b.style.pointerEvents = "none";
     setSmall("");
@@ -117,37 +117,48 @@ function refresh(){
   }
   b.style.opacity       = "1";
   b.style.pointerEvents = "auto";
-  b.replaceChildren();                           /* clear old icons   */
+  b.replaceChildren();                       /* clear all icons first */
 
-  /* All tokens that belong in the bar (GM vs player view) ---------- */
+  /* ---------------- Gather and validate tokens ------------------- */
   const allToks = displayTokens();
-  if (!allToks.length){ setSmall(""); return; }
+  if (!allToks.length) { setSmall(""); return; }
 
-  /* Ensure currently‑selected token is valid ----------------------- */
+  /* Make sure we still have a valid selection */
   if (!selectedId || !allToks.some(t => t.id === selectedId))
     selectedId = allToks[0].id;
 
-  /* Rebuild arrays used by keyboard cycling */
+  /* Arrays used by key‑bindings elsewhere */
   orderedIds = allToks.map(t => t.id);
   ownedIds   = allToks.filter(canControl).map(t => t.id);
 
-  /* ----  Containers:   [ left | SELECTED | right ]  -------------- */
-  const leftWrap  = Object.assign(document.createElement("div"), {
-    style: "display:flex; gap:10px; flex-direction:row-reverse;"
-  });
-  const rightWrap = Object.assign(document.createElement("div"), {
-    style: "display:flex; gap:10px;"
-  });
+  /* ---------------- Build a “rotated” list ----------------------- */
+  const n      = orderedIds.length;
+  const midIdx = Math.floor(n / 2);          /* index where selected lands */
+  const selPos = orderedIds.indexOf(selectedId);
 
-  /* Quick helper to build an <img> element */
-  function makeImg(t){
-    const img   = document.createElement("img");
-    img.src     = imgSrc(t);
-    img.alt     = t.name;
+  /* out[i] = token id whose visual position is i (0 … n‑1) */
+  const out = new Array(n);
+  out[midIdx] = orderedIds[selPos];
+
+  /* fill to the left */
+  for (let offset = 1; offset <= midIdx; offset++) {
+    const idx = (selPos - offset + n) % n;
+    out[midIdx - offset] = orderedIds[idx];
+  }
+  /* fill to the right */
+  for (let offset = 1; offset < n - midIdx; offset++) {
+    const idx = (selPos + offset) % n;
+    out[midIdx + offset] = orderedIds[idx];
+  }
+
+  /* ---------------- Helper to create an <img> -------------------- */
+  function makeImg(t) {
+    const img = document.createElement("img");
+    img.src   = imgSrc(t);
+    img.alt   = t.name;
     if (t.id === selectedId) img.classList.add("selected-token");
 
-    /* Click → switch selection */
-    img.onclick      = () => selectToken(t);
+    img.onclick      = () => selectToken(t);             /* ← fix click */
     img.onmouseenter = () => setSmall(t.name, alwaysCenter && t.id === selectedId);
     img.onmouseleave = () => {
       const cur = canvas.tokens.get(selectedId);
@@ -156,29 +167,33 @@ function refresh(){
     return img;
   }
 
-  /* ----  Populate left (previous tokens, nearest first) ---------- */
-  const selIdx = orderedIds.indexOf(selectedId);
-  const prevIds = orderedIds.slice(0, selIdx);                /* earlier tokens */
-  for (const id of prevIds)  leftWrap.appendChild(makeImg(canvas.tokens.get(id)));
+  /* ---------------- Assemble DOM: left | selected | right -------- */
+  const leftWrap  = Object.assign(document.createElement("div"),  {
+    style: "display:flex; gap:10px; flex-direction:row-reverse;"
+  });
+  const rightWrap = Object.assign(document.createElement("div"),  {
+    style: "display:flex; gap:10px;"
+  });
 
-  /* ----  Populate right (next tokens, in order) ------------------ */
-  const nextIds = orderedIds.slice(selIdx + 1);               /* later tokens   */
-  for (const id of nextIds) rightWrap.appendChild(makeImg(canvas.tokens.get(id)));
+  for (let i = 0; i < midIdx; i++)
+    leftWrap.appendChild( makeImg( canvas.tokens.get(out[i])) );
 
-  /* ----  Build centre‑selected icon ------------------------------ */
-  const selTokImg = makeImg(canvas.tokens.get(selectedId));
+  const selectedImg = makeImg( canvas.tokens.get(out[midIdx]) );
 
-  /* ----  Assemble bar ------------------------------------------- */
+  for (let i = midIdx + 1; i < n; i++)
+    rightWrap.appendChild( makeImg( canvas.tokens.get(out[i])) );
+
   b.appendChild(leftWrap);
-  b.appendChild(selTokImg);
+  b.appendChild(selectedImg);
   b.appendChild(rightWrap);
 
-  /* ----  Labels -------------------------------------------------- */
+  /* ---------------- Label + big centre name ---------------------- */
   const curTok = canvas.tokens.get(selectedId);
   const nm     = curTok?.name ?? "";
   setSmall(nm, alwaysCenter);
   showCenter(nm);
 }
+
 
 
   /* ---------- Selection helpers (unchanged) ---------- */
