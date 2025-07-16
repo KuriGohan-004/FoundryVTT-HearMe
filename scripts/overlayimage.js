@@ -1,10 +1,13 @@
 /***********************************************************************
- * Player Token Bar – complete version
- *   1 ⇽ prev owned | 2 toggle follow | 3 ⇾ next owned | ⏎ focus chat
- *   • Chat box unfocuses after sending
- *   • Big center overlay on token switch
- *   • Auto‑pan/auto‑select active combatant
- *   • Map clicks: single ＝ target, double ＝ sheet + select
+ * Player Token Bar – extended
+ *  1 ⇽ prev owned  | 2 toggle follow | 3 ⇾ next owned | ⏎ focus chat
+ *  Space:
+ *    • In combat  → end turn (if you own the active combatant or GM)
+ *    • Out of combat → toggle pause
+ *  Chat text‑box blurs after you send a message
+ *  Single‑click on map token = target   (Shift = multi‑target)
+ *  Double‑click on map token = open sheet + select
+ *  Selected token’s name stays on‑screen, pulsing below the sidebar
  **********************************************************************/
 (() => {
   const BAR_ID     = "player-token-bar";
@@ -33,7 +36,7 @@
     #${BAR_ID} img:hover          {transform:scale(1.3); z-index:1;}
     #${BAR_ID} img.selected-token {transform:scale(1.3); z-index:2;}
 
-    /* Small label --------------------------------------------------- */
+    /* Small label above bar ---------------------------------------- */
     #${LABEL_ID}{
       position:fixed; bottom:90px; left:15%; width:50%;
       text-align:center; font-size:16px; font-weight:bold; color:#fff;
@@ -41,12 +44,13 @@
       height:24px; line-height:24px; user-select:none;
     }
 
-    /* Large centre overlay ----------------------------------------- */
+    /* Large pulsing overlay (below sidebar) ------------------------ */
+    @keyframes ptbPulse { 0%,100%{opacity:1;} 50%{opacity:.3;} }
     #${CENTER_ID}{
-      position:fixed; top:40%; left:50%; transform:translate(-50%,-50%);
+      position:fixed; left:50%; transform:translateX(-50%);
       font-size:48px; font-weight:bold; color:#fff; text-shadow:0 0 8px #000;
-      pointer-events:none; z-index:40; opacity:0; transition:opacity .5s ease;
-      user-select:none;
+      pointer-events:none; z-index:40; user-select:none;
+      animation:ptbPulse 4s infinite;
     }`;
   document.head.appendChild(Object.assign(document.createElement("style"), {textContent: CSS}));
 
@@ -59,18 +63,16 @@
   const center = () => getOrCreate(CENTER_ID);
 
   /* ---------- State ----------------------------------------------- */
-  let selectedId   = null;     // token kept large
-  let alwaysCenter = false;    // follow toggle
-  let orderedIds   = [];       // all player‑owned tokens (display order)
-  let ownedIds     = [];       // subset you can control (cycling)
-  let hoverId      = null;     // token id under hover
+  let selectedId   = null;
+  let alwaysCenter = false;
+  let orderedIds   = [];
+  let ownedIds     = [];
+  let hoverId      = null;
 
-  /* ---------- Utility functions ----------------------------------- */
+  /* ---------- Utility --------------------------------------------- */
   const combatRunning = () => !!(game.combat?.started && game.combat.scene?.id === canvas.scene?.id);
-
-  const canControl = t => t.isOwner || t.actor?.isOwner;
-
-  const imgSrc = t =>
+  const canControl    = t   => t.isOwner || t.actor?.isOwner;
+  const imgSrc        = t   =>
       t.document.texture?.src ||
       t.actor?.prototypeToken?.texture?.src ||
       t.actor?.img ||
@@ -80,16 +82,24 @@
     label().textContent = text ? (brackets ? `[[ ${text} ]]` : text) : "";
   }
 
-  /* Flash big centre overlay --------------------------------------- */
-  function flashCenter(text){
+  /* ---------- Centre‑overlay helpers ------------------------------ */
+  function updateCenterPosition(){
+    const sb = document.getElementById("sidebar");
+    if(!sb) return;
+    const rect = sb.getBoundingClientRect();
+    const c = center();
+    // Place overlay so its bottom aligns with top of sidebar
+    c.style.top = `${rect.top - c.offsetHeight}px`;
+  }
+  window.addEventListener("resize", updateCenterPosition);
+
+  function showCenter(text){
     const c = center();
     c.textContent = text;
-    c.style.opacity = "1";
-    clearTimeout(c._hideTimer);
-    c._hideTimer = setTimeout(()=> c.style.opacity="0", 1500);
+    updateCenterPosition();
   }
 
-  /* Tokens shown in bar -------------------------------------------- */
+  /* ---------- Token list for bar ---------------------------------- */
   function displayTokens(){
     const players = game.users.players;
     return canvas.tokens.placeables.filter(t=>{
@@ -106,11 +116,9 @@
   function refresh(){
     const b = bar();
 
-    /* Hide during combat if desired? (We keep visible) */
     if(combatRunning()){
       b.style.opacity="0"; b.style.pointerEvents="none";
-      setSmallLabel("");
-      b.replaceChildren(); orderedIds=[]; ownedIds=[];
+      setSmallLabel(""); orderedIds=[]; ownedIds=[];
       return;
     }
 
@@ -129,14 +137,11 @@
 
       img.addEventListener("click", ()=> chooseToken(t));
       img.addEventListener("contextmenu", e=>{ e.preventDefault(); t.actor?.sheet?.render(true); });
-
       img.addEventListener("mouseenter", ()=>{
-        hoverId=t.id;
-        setSmallLabel(t.name, alwaysCenter && t.id===selectedId);
+        hoverId=t.id; setSmallLabel(t.name, alwaysCenter && t.id===selectedId);
       });
       img.addEventListener("mouseleave", ()=>{
-        hoverId=null;
-        const s = canvas.tokens.get(selectedId);
+        hoverId=null; const s=canvas.tokens.get(selectedId);
         setSmallLabel(s?.name??"", alwaysCenter);
       });
 
@@ -145,6 +150,7 @@
 
     const selTok = canvas.tokens.get(selectedId);
     setSmallLabel(selTok?.name??"", alwaysCenter);
+    showCenter(selTok?.name??"");
   }
 
   /* ---------- Select token & follow logic ------------------------- */
@@ -152,10 +158,9 @@
     selectedId = tok.id;
     if(canControl(tok)) tok.control({releaseOthers:true});
     canvas.animatePan(tok.center);
-    flashCenter(tok.name);
+    showCenter(tok.name);
     refresh();
   }
-
   function toggleFollow(){
     if(!selectedId) return;
     alwaysCenter = !alwaysCenter;
@@ -164,46 +169,53 @@
     setSmallLabel(tok?.name??"", alwaysCenter);
   }
 
-  /* Follow selected token while moving ----------------------------- */
+  /* Follow movement */
   Hooks.on("updateToken", doc=>{
     if(alwaysCenter && doc.id===selectedId){
-      const tok = canvas.tokens.get(doc.id);
-      if(tok) canvas.animatePan(tok.center);
+      const t=canvas.tokens.get(doc.id);
+      if(t) canvas.animatePan(t.center);
     }
   });
 
   /* ---------- Keyboard handling ----------------------------------- */
   function cycleOwned(offset){
     if(!ownedIds.length) return;
-    let idx=ownedIds.indexOf(selectedId);
+    let idx = ownedIds.indexOf(selectedId);
     if(idx===-1) idx=0;
     const next = canvas.tokens.get(ownedIds[(idx+offset+ownedIds.length)%ownedIds.length]);
     if(next) chooseToken(next);
   }
-
-  function sheetOpen(){
-    return !!document.querySelector(".window-app.sheet:not(.minimized)");
-  }
+  function sheetOpen(){ return !!document.querySelector(".window-app.sheet:not(.minimized)"); }
 
   window.addEventListener("keydown", ev=>{
     if(ev.target instanceof HTMLInputElement || ev.target instanceof HTMLTextAreaElement || ev.target.isContentEditable) return;
 
     switch(ev.code){
-      case "Digit3": ev.preventDefault(); cycleOwned(+1);            break;
-      case "Digit1": ev.preventDefault(); cycleOwned(-1);            break;
-      case "Digit2": ev.preventDefault(); toggleFollow();            break;
+      case "Digit3": ev.preventDefault(); cycleOwned(+1); break;
+      case "Digit1": ev.preventDefault(); cycleOwned(-1); break;
+      case "Digit2": ev.preventDefault(); toggleFollow(); break;
       case "Enter":{
         const chatInput = document.querySelector("#chat-message") || document.querySelector("textarea[name='message']");
         if(chatInput && document.activeElement!==chatInput && !sheetOpen()){
-          ev.preventDefault();
-          chatInput.focus();
+          ev.preventDefault(); chatInput.focus();
+        }
+        break;
+      }
+      case "Space":{
+        if(combatRunning()){
+          const c = game.combat, active = c?.combatant;
+          if(!active) break;
+          const tok = canvas.tokens.get(active.tokenId);
+          if(tok && (game.user.isGM || tok.isOwner)) { ev.preventDefault(); c.nextTurn(); }
+        }else{
+          ev.preventDefault(); game.togglePause();
         }
         break;
       }
     }
   });
 
-  /* Un‑focus chat after sending ------------------------------------ */
+  /* Unfocus chat after send */
   Hooks.once("renderChatLog", (app, html)=>{
     const form = html[0].querySelector("form");
     if(form){
@@ -220,26 +232,21 @@
   Hooks.on("updateCombat", (combat, changed)=>{
     if(changed.turn===undefined) return;
     const cbt = combat.combatant;
-    if(!cbt || cbt.sceneId !== canvas.scene?.id) return;
-    const tok = canvas.tokens.get(cbt.tokenId);
-    if(!tok) return;
+    if(!cbt || cbt.sceneId!==canvas.scene?.id) return;
+    const tok = canvas.tokens.get(cbt.tokenId); if(!tok) return;
 
     canvas.animatePan(tok.center);
-    flashCenter(tok.name);
-
-    if(canControl(tok)){
-      tok.control({releaseOthers:true});
-      selectedId = tok.id;
-    }
+    showCenter(tok.name);
+    if(canControl(tok)){ tok.control({releaseOthers:true}); selectedId=tok.id; }
     refresh();
   });
 
   /* ---------- Control token hook ---------------------------------- */
-  Hooks.on("controlToken", (tok,ctl)=>{
+  Hooks.on("controlToken", (tok, ctl)=>{
     if(ctl && canControl(tok)){
-      selectedId = tok.id;
+      selectedId=tok.id;
       if(alwaysCenter) canvas.animatePan(tok.center);
-      flashCenter(tok.name);
+      showCenter(tok.name);
       refresh();
     }
   });
@@ -247,30 +254,23 @@
   /* ---------- Patch token interactions ---------------------------- */
   if(!Token.prototype._ptbPatched){
     Token.prototype._ptbPatched=true;
+    const origLeft2 = Token.prototype._onClickLeft2;
 
-    const origClickLeft  = Token.prototype._onClickLeft;
-    const origClickLeft2 = Token.prototype._onClickLeft2;
-
+    /* SINGLE CLICK ⇒ TARGET */
     Token.prototype._onClickLeft = function(event){
-      // Single‑click = target (toggle, exclusive)
-      if(event.data.originalEvent?.shiftKey){ // allow multi‑target with Shift
-        this.setTarget(!this.isTargeted, {groupSelect:true});
-      }else{
-        canvas.tokens.releaseAllTargets();
-        this.setTarget(true);
-      }
+      const shift = event.data.originalEvent?.shiftKey;
+      if(!shift) canvas.tokens.releaseAllTargets();
+      this.setTarget(!this.isTargeted, {groupSelect:shift});
     };
 
+    /* DOUBLE CLICK ⇒ SHEET + SELECT */
     Token.prototype._onClickLeft2 = function(event){
-      // Double‑click = open sheet + select (if owned)
       if(this.actor) this.actor.sheet?.render(true);
       if(this.isOwner) this.control({releaseOthers:true});
-      chooseToken(this);  // update bar/overlay if changed
+      chooseToken(this);
+      // still fire original dbl‑click handlers (camera pan for GMs etc.)
+      if(origLeft2) origLeft2.call(this, event);
     };
-
-    // Preserve right‑click behaviour (orig functions untouched)
-    Token.prototype._ptbOrigClickLeft  = origClickLeft;
-    Token.prototype._ptbOrigClickLeft2 = origClickLeft2;
   }
 
   /* ---------- Initial build --------------------------------------- */
@@ -280,6 +280,5 @@
   Hooks.on("updateToken",  refresh);
   Hooks.on("deleteToken",  refresh);
   Hooks.on("updateActor",  refresh);
-  Hooks.on("updateCombat", refresh);
   Hooks.on("deleteCombat", refresh);
 })();
