@@ -300,6 +300,32 @@
     });
   });
 
+/* ---------- Q key: toggle sheet for the active token -------------- */
+window.addEventListener("keydown", ev => {
+  if (ev.code !== "KeyQ") return;             /* only react to Q        */
+
+  /* Ignore Q when typing in an input / textarea / content‑editable */
+  if (
+    ev.target instanceof HTMLInputElement ||
+    ev.target instanceof HTMLTextAreaElement ||
+    ev.target?.isContentEditable
+  ) return;
+
+  ev.preventDefault();
+
+  const tok = canvas.tokens.get(selectedId);
+  if (!tok || !tok.actor) return;
+
+  const sheet = tok.actor.sheet;
+  if (!sheet) return;
+
+  /* If sheet is open and not minimised → close it, else → open it  */
+  if (sheet.rendered && !sheet._minimized) {
+    sheet.close();
+  } else {
+    sheet.render(true);
+  }
+});
 
   
 })();
