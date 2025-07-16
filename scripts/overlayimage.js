@@ -20,12 +20,10 @@ let overlayVisible   = false;
 let hoverHandler     = null;
 
 /* ------------------------------------------------------------- */
-// UI construction (unchanged apart from version comments)
 function createOverlayUI() {
   const uiBox = document.createElement('div');
   uiBox.id = 'image-overlay-controls';
 
-  // Restore saved position
   const pos = game.settings.get('image-overlay-toggle', POS_KEY);
   uiBox.style.position = 'fixed';
   uiBox.style.left = `${pos.x}px`;
@@ -38,7 +36,6 @@ function createOverlayUI() {
   uiBox.style.border = '1px solid #555';
   uiBox.style.borderRadius = '6px';
 
-  // Styles
   const style = document.createElement('style');
   style.textContent = `
     #image-overlay-controls .io-btn {
@@ -54,7 +51,6 @@ function createOverlayUI() {
   `;
   document.head.appendChild(style);
 
-  // Thumbnail preview (32×32)
   const thumb = document.createElement('img');
   thumb.id = 'io-thumb';
   thumb.width = 32;
@@ -62,7 +58,6 @@ function createOverlayUI() {
   thumb.style.objectFit = 'cover';
   thumb.style.border = '1px solid #333';
 
-  // Buttons
   const pickBtn = document.createElement('button');
   pickBtn.className = 'io-btn';
   pickBtn.textContent = 'Pick';
@@ -84,7 +79,6 @@ function createOverlayUI() {
   uiBox.append(thumb, pickBtn, toggleBtn);
   document.body.appendChild(uiBox);
 
-  // Drag‑n‑drop handling (unchanged)
   let dragging = false, offsetX = 0, offsetY = 0;
   uiBox.addEventListener('mousedown', event => {
     dragging = true;
@@ -110,14 +104,13 @@ function createOverlayUI() {
 }
 
 /* ------------------------------------------------------------- */
-// Image selection and overlay logic
 function pickImage() {
   new FilePicker({
     type: 'image',
     callback: path => {
       currentImagePath = path;
       document.getElementById('io-thumb').src = path;
-      broadcastState(); // visibility unchanged
+      broadcastState();
     }
   }).browse();
 }
@@ -125,7 +118,6 @@ function pickImage() {
 function applyOverlay() {
   let img = document.getElementById('image-overlay-display');
 
-  // Remove overlay if hidden
   if (!overlayVisible) {
     if (img) {
       img.remove();
@@ -134,17 +126,16 @@ function applyOverlay() {
     return;
   }
 
-  // Create if first time
   if (!img) {
     img = document.createElement('img');
     img.id = 'image-overlay-display';
     img.style.position = 'fixed';
-    img.style.left = '50%';          // centre horizontally
-    img.style.top  = '45%';          // 45 % vertical framing
+    img.style.left = '40%';           // 40 % from the left
+    img.style.top  = '50%';           // vertical middle
     img.style.transform = 'translate(-50%, -50%)';
-    img.style.zIndex = 20;           // beneath chat (#ui-right ≈30)
+    img.style.zIndex = 20;            // beneath chat panel
     img.style.opacity = 1;
-    img.style.maxWidth  = '90%';
+    img.style.maxWidth = '90%';
     img.style.userSelect = 'none';
 
     // Full‑screen black matte
@@ -155,7 +146,7 @@ function applyOverlay() {
   }
 
   img.src = currentImagePath;
-  img.style.maxHeight = `${window.innerHeight * 0.9}px`; // 90 % height
+  img.style.maxHeight = `${window.innerHeight * 0.9}px`;
 }
 
 function broadcastState() {
@@ -172,7 +163,7 @@ function handleSocket(data) {
 }
 
 /* ------------------------------------------------------------- */
-// Hover fade after 0.5 s of continuous movement inside overlay
+// Hover fade after 0.5 s of continuous pointer movement; fade opacity 0.35
 function addHoverHandler(img) {
   if (hoverHandler) return;
 
@@ -192,16 +183,13 @@ function addHoverHandler(img) {
       return;
     }
 
-    // Check actual movement by comparing coordinates
     const moved = (event.clientX !== lastPosX) || (event.clientY !== lastPosY);
     const now = Date.now();
 
     if (moved) {
-      if (movingStart === 0) movingStart = now; // start counting
-      // Fade when 500 ms of continuous movement reached
-      if (now - movingStart >= 500) img.style.opacity = 0.5;
+      if (movingStart === 0) movingStart = now;
+      if (now - movingStart >= 500) img.style.opacity = 0.35;
     } else {
-      // No movement – reset timer & restore opacity
       movingStart = 0;
       img.style.opacity = 1;
     }
