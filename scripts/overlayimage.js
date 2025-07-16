@@ -52,7 +52,8 @@ function createOverlayUI() {
     position: 'fixed', left: `${pos.x}px`, top: `${pos.y}px`,
     display: 'flex', gap: '4px', zIndex: 80,
     background: 'rgba(0,0,0,0.6)', padding: '4px',
-    border: '1px solid #555', borderRadius: '6px'
+    border: '1px solid #555', borderRadius: '6px',
+    cursor: 'move'
   });
 
   // Thumbnail preview
@@ -64,7 +65,10 @@ function createOverlayUI() {
   // Pick button
   const pickBtn = makeBtn('Pick', 'Choose an image');
   pickBtn.addEventListener('click', () => {
-    new FilePicker({ type: 'image', callback: path => updateState({ path }) }).browse();
+    new FilePicker({ 
+      type: 'image', 
+      callback: path => updateState({ path }) 
+    }).browse();
   });
 
   // Toggle button
@@ -114,7 +118,14 @@ function makeDraggable(el) {
 /* ------------------------------------------------------------- */
 function updateState(partial) {
   const cur = game.settings.get('image-overlay-toggle', STATE_KEY);
-  game.settings.set('image-overlay-toggle', STATE_KEY, { ...cur, ...partial });
+  const next = { ...cur, ...partial };
+
+  // If overlay is visible and image path changed, force re-apply overlay immediately
+  if (cur.visible && partial.path && partial.path !== cur.path) {
+    applyOverlay(partial.path, true);
+  }
+
+  game.settings.set('image-overlay-toggle', STATE_KEY, next);
 }
 
 /* ------------------------------------------------------------- */
