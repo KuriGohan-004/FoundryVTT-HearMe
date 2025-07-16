@@ -1,10 +1,7 @@
-/* Image Overlay Toggle – v1.1.0 */
-
 /** Setting key used to persist the control‑panel position */
 const POS_KEY = 'controlPos';
 
 Hooks.once('init', () => {
-  // Store panel position per‑client (so every GM/player can put it where they like)
   game.settings.register('image-overlay-toggle', POS_KEY, {
     scope: 'client',
     config: false,
@@ -87,7 +84,7 @@ function createOverlayUI() {
   uiBox.append(thumb, pickBtn, toggleBtn);
   document.body.appendChild(uiBox);
 
-  // Basic drag‑n‑drop handling
+  // Drag‑n‑drop handling (same as before)
   let dragging = false, offsetX = 0, offsetY = 0;
   uiBox.addEventListener('mousedown', event => {
     dragging = true;
@@ -105,7 +102,6 @@ function createOverlayUI() {
   window.addEventListener('mouseup', () => {
     if (!dragging) return;
     dragging = false;
-    // Persist position
     game.settings.set('image-overlay-toggle', POS_KEY, {
       x: uiBox.offsetLeft,
       y: uiBox.offsetTop
@@ -121,7 +117,7 @@ function pickImage() {
     callback: path => {
       currentImagePath = path;
       document.getElementById('io-thumb').src = path;
-      broadcastState(); // Visibility unchanged; players just cache the path
+      broadcastState(); // visibility unchanged
     }
   }).browse();
 }
@@ -143,22 +139,21 @@ function applyOverlay() {
     img = document.createElement('img');
     img.id = 'image-overlay-display';
     img.style.position = 'fixed';
-    img.style.left = '50%';
-    img.style.top = '50%';
+    img.style.left = '50%';          // centre horizontally
+    img.style.top  = '45%';          // 45 % vertical framing
     img.style.transform = 'translate(-50%, -50%)';
-    img.style.zIndex = 30; // Beneath UI windows
+    img.style.zIndex = 30;           // beneath UI windows
     img.style.opacity = 1;
-    img.style.maxWidth = '90%';
-    img.style.maxHeight = `${window.innerHeight * 0.8}px`;
-    img.style.width = 'auto';
+    img.style.maxWidth  = '90%';
     img.style.userSelect = 'none';
+    img.style.boxShadow = '0 0 0 9999px rgba(0,0,0,1)'; // huge black matte
 
     document.body.appendChild(img);
     addHoverHandler(img);
   }
 
   img.src = currentImagePath;
-  img.style.maxHeight = `${window.innerHeight * 0.8}px`;
+  img.style.maxHeight = `${window.innerHeight * 0.9}px`; // 90 % height
 }
 
 function broadcastState() {
@@ -175,17 +170,50 @@ function handleSocket(data) {
 }
 
 /* ------------------------------------------------------------- */
-// Hover transparency without blocking clicks (pointer‑events: none)
+// Hover fade after 3 s of movement inside overlay
 function addHoverHandler(img) {
   if (hoverHandler) return;
+
+  let movingStart = 0;
+  let lastMoveTime = 0;
+
   hoverHandler = event => {
-    if (!img.isConnected) return; // safety
+    if (!img.isConnected) return;
+
     const r = img.getBoundingClientRect();
     const inside = event.clientX >= r.left && event.clientX <= r.right && event.clientY >= r.top && event.clientY <= r.bottom;
-    img.style.opacity = inside ? 0.5 : 1;
+
+    if (!inside) {
+      img.style.opacity = 1;
+      movingStart = 0;
+      return;
+    }
+
+    const now = Date.now();
+
+    // Detect whether the mouse has actually moved (changes in coords)
+    const moved = (now - lastMoveTime) < 150; // <150 ms between events ≈ moving
+
+    if (!moved) {
+      // Reset if stationary
+      movingStart = now;
+      img.style.opacity = 1;
+    } else if (movingStart === 0) {
+      // First movement inside overlay
+      movingStart = now;
+    }
+
+    // After 3 s of continuous movement fade to 0.5
+    if (now - movingStart >= 3000) {
+      img.style.opacity = 0.5;
+    }
+
+    lastMoveTime = now;
   };
+
   window.addEventListener('mousemove', hoverHandler);
 }
+
 function removeHoverHandler() {
   if (!hoverHandler) return;
   window.removeEventListener('mousemove', hoverHandler);
