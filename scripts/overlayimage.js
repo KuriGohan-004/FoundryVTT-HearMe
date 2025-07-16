@@ -44,7 +44,7 @@
       pointer-events:none; z-index:40; user-select:none;
       animation:ptbPulse 4s infinite;
       transform:rotate(-90deg);
-      transform-origin:bottom left;
+      transform-origin:middle left;
     }`;
   document.head.appendChild(Object.assign(document.createElement("style"),{textContent:CSS}));
 
