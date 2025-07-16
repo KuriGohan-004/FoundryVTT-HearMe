@@ -388,84 +388,30 @@ window.addEventListener("keydown", ev => {
   }
 });
 
+/* ---------------------------------------------------------------
+ *  Auto‑select the active combatant
+ *  (paste this block before the closing "})();" of the main file)
+ * ------------------------------------------------------------- */
+Hooks.on("combatTurn", (combat /* Combat */, updateData /* {round,turn} */, _options) => {
+  /* Ignore combats from other scenes                                       */
+  if (!combat?.scene || combat.scene.id !== canvas.scene?.id) return;
 
-  /* ===========================================================
-   ACTOR‑SPECIFIC HOTBAR  (save & load on token switch)
-   =========================================================== */
-const HB_FLAG = "ptb.hotbar";    // where we store per‑actor layouts
-let   hotbarActorId = null;      // actor whose layout is currently shown
+  /* Get the combatant whose turn just began                                */
+  const cb  = combat.combatant;
+  if (!cb) return;
 
-/* ------------- helpers ------------------------------------------ */
-/* Return an object {slot: macroId, …} for slots 1‑10 of page 1      */
-function captureHotbar(){
-  const map = game.user.getHotbarMacros(1);   // Map<slot, Macro|null>
-  const out = {};
-  for (let s = 1; s <= 10; s++){
-    const macro = map[s];
-    if (macro) out[s] = macro.id;
+  /* Look up its token on the canvas                                        */
+  const tok = canvas.tokens.get(cb.tokenId);
+  if (!tok) return;
+
+  /* Only auto‑select if you could already control it (or you're the GM)    */
+  if (game.user.isGM || canControl(tok)) {
+    /* Re‑use the Player‑Token‑Bar helper so the UI stays in sync            */
+    selectToken(tok);
   }
-  return out;                                 // empty object = none
-}
-
-/* Apply a saved layout object to the user’s hotbar (page 1)        */
-async function applyHotbar(layout){
-  /* Clear first */
-  const current = game.user.getHotbarMacros(1);
-  for (let s = 1; s <= 10; s++){
-    if (current[s]) await game.user.assignHotbarMacro(null, s);
-  }
-  /* Re‑populate */
-  for (const [slot, mid] of Object.entries(layout)){
-    const macro = game.macros.get(mid);
-    if (macro) await game.user.assignHotbarMacro(macro, Number(slot));
-  }
-}
-
-/* Save the current bar to the given actor’s flag ----------------- */
-async function saveActorHotbar(actor){
-  if (!actor) return;
-  const layout = captureHotbar();
-  await actor.setFlag("ptb", HB_FLAG, layout);
-}
-
-/* Load (if any) from actor; otherwise leave bar empty ------------- */
-async function loadActorHotbar(actor){
-  if (!actor) return;
-  const layout = actor.getFlag("ptb", HB_FLAG) ?? {};
-  await applyHotbar(layout);
-  hotbarActorId = actor.id;
-}
-
-/* ------------- master switch routine ---------------------------- */
-async function switchActorHotbar(newActor){
-  if (!newActor || newActor.id === hotbarActorId) return;
-
-  /* Save previous */
-  const prevActor = game.actors.get(hotbarActorId);
-  await saveActorHotbar(prevActor);
-
-  /* Load new */
-  await loadActorHotbar(newActor);
-}
-
-/* ------------- hook into every way the active token can change -- */
-Hooks.on("controlToken", (tok, controlled)=>{
-  if (controlled && canControl(tok)) switchActorHotbar(tok.actor);
 });
 
-Hooks.on("updateCombat", (c,chg)=>{
-  if (chg.turn === undefined) return;
-  const com = c.combatant;
-  if (com?.sceneId !== canvas.scene?.id) return;
-  const tok = canvas.tokens.get(com.tokenId);
-  if (tok && canControl(tok)) switchActorHotbar(tok.actor);
-});
-
-/* When the module first loads (e.g. page refresh) ---------------- */
-Hooks.once("ready", () =>{
-  const tok = canvas.tokens.controlled[0] || canvas.tokens.placeables.find(t=>t.isOwner);
-  if (tok) switchActorHotbar(tok.actor);
-});
+  
 
   
 })();
