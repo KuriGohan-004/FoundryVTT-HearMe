@@ -8,7 +8,7 @@
   const CENTER_ID = "player-token-bar-center-label";
 
 /* ---------- Styles (50 % width, transparent) ---------- */
-const CSS = 
+const CSS = `
   /* Bottom bar --------------------------------------------------- */
   #${BAR_ID}{
     position:fixed; bottom:0; left:25%; width:50%; height:84px;
@@ -47,7 +47,7 @@ const CSS =
     transform:rotate(-90deg);
     transform-origin:bottom left;
     padding-left:35%;
-  };
+  }`;
 
   
   document.head.appendChild(Object.assign(document.createElement("style"),{textContent:CSS}));
@@ -68,7 +68,7 @@ const CSS =
   const combatRunning = ()=>!!(game.combat?.started && game.combat.scene?.id===canvas.scene?.id);
   const canControl    = t=>t.isOwner || t.actor?.isOwner;
   const imgSrc        = t=>t.document.texture?.src || t.actor?.prototypeToken?.texture?.src || t.actor?.img || "icons/svg/mystery-man.svg";
-  const setSmall      = (txt,b=false)=>{label().textContent=txt?(b?[[ ${txt} ]]:txt):"";};
+  const setSmall      = (txt,b=false)=>{label().textContent=txt?(b?`[[ ${txt} ]]`:txt):"";};
 
   /* --- positioning helper --- */
   function positionCenter(){
@@ -76,8 +76,8 @@ const CSS =
     if(!sb) return;
     const c=center();
     const r=sb.getBoundingClientRect();
-    c.style.left = ${r.left - 4}px;
-    c.style.top  = ${r.top + r.height}px;
+    c.style.left = `${r.left - 4}px`;
+    c.style.top  = `${r.top + r.height}px`;
   }
   window.addEventListener("resize",positionCenter);
   const showCenter = txt=>{center().textContent=txt;positionCenter();};
