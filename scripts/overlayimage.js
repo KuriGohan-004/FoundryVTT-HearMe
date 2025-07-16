@@ -1,6 +1,3 @@
-/***********************************************************************
- * Player Token Bar – with proper token images and 40% offset layout
- **********************************************************************/
 (() => {
   const BAR_ID = "player-token-bar";
 
@@ -15,6 +12,7 @@
       padding: 6px 10px;
       display: flex;
       align-items: center;
+      justify-content: center;     /* center contents horizontally */
       gap: 10px;
       overflow-x: auto;
       background: rgba(0, 0, 0, 0.7);
@@ -36,7 +34,6 @@
   style.textContent = CSS;
   document.head.appendChild(style);
 
-  /* Helpers */
   function getBar() {
     let bar = document.getElementById(BAR_ID);
     if (!bar) {
@@ -98,7 +95,13 @@
       img.src = getImageForToken(tok);
       img.title = tok.name;
 
-      img.addEventListener("click", () => canvas.animatePan(tok.center));
+      img.addEventListener("click", () => {
+        canvas.animatePan(tok.center);
+
+        if (tok.controlled || !tok.actor?.testUserPermission(game.user, "OWNER")) return;
+        tok.control({ releaseOthers: true }); // Select it if allowed
+      });
+
       img.addEventListener("contextmenu", ev => {
         ev.preventDefault();
         tok.actor?.sheet?.render(true);
@@ -108,13 +111,12 @@
     }
   }
 
-  /* Hook into game events */
   Hooks.once("ready", refresh);
   Hooks.on("canvasReady", refresh);
   Hooks.on("createToken", refresh);
   Hooks.on("updateToken", refresh);
   Hooks.on("deleteToken", refresh);
-  Hooks.on("updateActor", refresh);     // ownership change
+  Hooks.on("updateActor", refresh);
   Hooks.on("updateCombat", refresh);
   Hooks.on("deleteCombat", refresh);
 })();
