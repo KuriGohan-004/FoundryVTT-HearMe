@@ -1,152 +1,4 @@
 /***********************************************************************
- * Player Token Bar – full script with pulse text and 0.3s chat blur
- **********************************************************************/
-(() => {
-  const BAR_ID = "player-token-bar";
-  const LABEL_ID = "player-token-bar-label";
-  const CENTER_ID = "player-token-bar-center-label";
-  const VERT_ID = "player-token-bar-vertical-label";
-
-  const CSS = `
-    #${BAR_ID} {
-      position: fixed;
-      bottom: 0;
-      left: 15%;
-      width: 50%;
-      height: 84px;
-      padding: 6px 10px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 10px;
-      overflow-x: auto;
-      overflow-y: hidden;
-      background: rgba(0, 0, 0, 0.7);
-      border-top: 2px solid var(--color-border-light-primary);
-      transition: opacity 0.25s ease;
-      z-index: 20;
-      pointer-events: auto;
-    }
-    #${BAR_ID}::-webkit-scrollbar {
-      height: 8px;
-    }
-    #${BAR_ID}::-webkit-scrollbar-thumb {
-      background: #666;
-      border-radius: 4px;
-    }
-    #${BAR_ID} img {
-      width: 64px;
-      height: 64px;
-      object-fit: cover;
-      border-radius: 8px;
-      border: 2px solid #fff;
-      flex: 0 0 auto;
-      cursor: pointer;
-      transition: transform 0.15s ease;
-    }
-    #${BAR_ID} img:hover {
-      transform: scale(1.3);
-      z-index: 1;
-    }
-    #${BAR_ID} img.selected-token {
-      transform: scale(1.3);
-      z-index: 2;
-    }
-    #${LABEL_ID} {
-      position: fixed;
-      bottom: 90px;
-      left: 15%;
-      width: 50%;
-      text-align: center;
-      font-size: 16px;
-      font-weight: bold;
-      color: #fff;
-      text-shadow: 0 0 4px #000;
-      pointer-events: none;
-      z-index: 21;
-      height: 24px;
-      line-height: 24px;
-      user-select: none;
-    }
-    @keyframes ptbFade50 {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.5; }
-    }
-    #${CENTER_ID} {
-      position: fixed;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      font-size: 120px;
-      font-style: italic;
-      font-weight: bold;
-      color: #fff;
-      text-shadow: 0 0 8px #000;
-      pointer-events: none;
-      z-index: 40;
-      user-select: none;
-      animation: ptbFade50 4s infinite;
-    }
-    #${VERT_ID} {
-      position: fixed;
-      font-size: 20px;
-      font-weight: bold;
-      color: #fff;
-      text-shadow: 0 0 4px #000;
-      pointer-events: none;
-      z-index: 39;
-      user-select: none;
-      transform: rotate(-90deg);
-      transform-origin: bottom left;
-    }
-  `;
-
-  document.head.appendChild(Object.assign(document.createElement("style"), { textContent: CSS }));
-
-  const el = id => document.getElementById(id) || document.body.appendChild(Object.assign(document.createElement("div"), { id }));
-  const bar = () => el(BAR_ID);
-  const label = () => el(LABEL_ID);
-  const center = () => el(CENTER_ID);
-  const vert = () => el(VERT_ID);
-
-  let selectedId = null, alwaysCenter = false, orderedIds = [], ownedIds = [];
-
-  const combatRunning = () => !!(game.combat?.started && game.combat.scene?.id === canvas.scene?.id);
-  const canControl = t => t.isOwner || t.actor?.isOwner;
-  const imgSrc = t => t.document.texture?.src || t.actor?.prototypeToken?.texture?.src || t.actor?.img || "icons/svg/mystery-man.svg";
-
-  const setSmall = (txt, brackets = false) => {
-    label().textContent = txt ? (brackets ? `[[ ${txt} ]]` : txt) : "";
-  };
-  const showCenter = txt => center().textContent = txt || "";
-  const showVert = txt => {
-    vert().textContent = txt;
-    positionVert();
-  };
-
-  function positionVert() {
-    const sb = document.getElementById("sidebar");
-    if (!sb) return;
-    const r = sb.getBoundingClientRect();
-    const v = vert();
-    v.style.left = `${r.left - 4}px`;
-    v.style.top = `${r.top + r.height}px`;
-  }
-  window.addEventListener("resize", positionVert);
-
-  /* -- Snipped: rest of the bar creation, token updates, event listeners, hotkeys, and combat hooks (unchanged) -- */
-
-  Hooks.once("renderChatLog", (app, html) => {
-    const form = html[0].querySelector("form");
-    form?.addEventListener("submit", () => {
-      setTimeout(() => form.querySelector("textarea[name='message'],#chat-message")?.blur(), 300); // Delay increased to 0.3s
-    });
-  });
-
-  // You can add the full script body logic from previous parts below this comment,
-  // keeping all event listeners, bar rendering, token selection, camera focusing, etc.
-})();
-/***********************************************************************
  * Player Token Bar  – vertical sidebar label added
  **********************************************************************/
 (() => {
@@ -185,11 +37,12 @@
       height:24px; line-height:24px; user-select:none;
     }
 
-    /* Pulsing overlay (below sidebar) ------------------------------ */
-    @keyframes ptbPulse{0%,100%{opacity:1;}50%{opacity:.3;}}
+    /* Pulsing overlay (center of screen) --------------------------- */
+    @keyframes ptbPulse{0%,100%{opacity:1;}50%{opacity:.5;}}
     #${CENTER_ID}{
-      position:fixed; left:50%; transform:translateX(-50%);
-      font-size:48px; font-weight:bold; color:#fff; text-shadow:0 0 8px #000;
+      position:fixed; left:50%; top:50%;
+      transform:translate(-50%, -50%);
+      font-size:48px; font-weight:bold; font-style:italic; color:#fff; text-shadow:0 0 8px #000;
       pointer-events:none; z-index:40; user-select:none;
       animation:ptbPulse 4s infinite;
     }
@@ -224,11 +77,7 @@
   const setSmall      = (txt,b=false)=>{label().textContent=txt?(b?`[[ ${txt} ]]`:txt):"";};
 
   /* --- positioning helpers --- */
-  function positionCenter(){
-    const sb=document.getElementById("sidebar"); if(!sb) return;
-    const c=center(); const r=sb.getBoundingClientRect();
-    c.style.top=`${r.top-c.offsetHeight}px`;
-  }
+  function positionCenter(){} // static at 50% via CSS
   function positionVert(){
     const sb=document.getElementById("sidebar"); if(!sb) return;
     const v=vert(); const r=sb.getBoundingClientRect();
@@ -271,7 +120,7 @@
 
       img.onclick = ()=>selectToken(t);
       img.onmouseenter = ()=>setSmall(t.name,alwaysCenter&&t.id===selectedId);
-      img.onmouseleave = ()=>{const s=canvas.tokens.get(selectedId);setSmall(s?.name??"",alwaysCenter);};
+      img.onmouseleave = ()=>{const s=canvas.tokens.get(selectedId);setSmall(s?.name??"",alwaysCenter);} ;
 
       b.appendChild(img);
     }
@@ -357,7 +206,7 @@
   /* Chat blur */
   Hooks.once("renderChatLog",(app,html)=>{
     const form=html[0].querySelector("form");
-    form?.addEventListener("submit",()=>setTimeout(()=>form.querySelector("textarea[name='message'],#chat-message")?.blur(),10));
+    form?.addEventListener("submit",()=>setTimeout(()=>form.querySelector("textarea[name='message'],#chat-message")?.blur(),300));
   });
 
   /* Combat turn */
@@ -400,4 +249,3 @@
   Hooks.on("updateActor",refresh);
   Hooks.on("deleteCombat",refresh);
 })();
-
