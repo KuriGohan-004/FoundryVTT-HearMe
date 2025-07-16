@@ -27,16 +27,6 @@ Hooks.once("init", () => {
     default: "q"
   });
 
-  /* Speaker‑specific ping map */
-  game.settings.register("hearme-chat-notification", "customPingMap", {
-    name: "Speaker Sound Map",
-    hint: "Object where keys = name fragments (case‑insensitive) and values = sound file paths. Longest matching key contained in actor name is used.",
-    scope: "world",
-    config: true,
-    type: Object,
-    default: {}
-  });
-
   /* GM‑controlled portrait settings */
   game.settings.register("hearme-chat-notification", "portraitEnabled", {
     name: "Enable Portrait",
