@@ -8,7 +8,7 @@
   const CENTER_ID = "player-token-bar-center-label";
 
 /* ---------- Styles (50 % width, transparent) ---------- */
-const CSS = 
+const CSS = `
   /* Bottom bar --------------------------------------------------- */
   #${BAR_ID}{
     position:fixed; bottom:0; left:25%; width:50%; height:84px;
@@ -47,7 +47,7 @@ const CSS =
     transform:rotate(-90deg);
     transform-origin:bottom left;
     padding-left:35%;
-  };
+  }`;
 
   
   document.head.appendChild(Object.assign(document.createElement("style"),{textContent:CSS}));
@@ -68,7 +68,7 @@ const CSS =
   const combatRunning = ()=>!!(game.combat?.started && game.combat.scene?.id===canvas.scene?.id);
   const canControl    = t=>t.isOwner || t.actor?.isOwner;
   const imgSrc        = t=>t.document.texture?.src || t.actor?.prototypeToken?.texture?.src || t.actor?.img || "icons/svg/mystery-man.svg";
-  const setSmall      = (txt,b=false)=>{label().textContent=txt?(b?[[ ${txt} ]]:txt):"";};
+  const setSmall      = (txt,b=false)=>{label().textContent=txt?(b?`[[ ${txt} ]]`:txt):"";};
 
   /* --- positioning helper --- */
   function positionCenter(){
@@ -76,8 +76,8 @@ const CSS =
     if(!sb) return;
     const c=center();
     const r=sb.getBoundingClientRect();
-    c.style.left = ${r.left - 4}px;
-    c.style.top  = ${r.top + r.height}px;
+    c.style.left = `${r.left - 4}px`;
+    c.style.top  = `${r.top + r.height}px`;
   }
   window.addEventListener("resize",positionCenter);
   const showCenter = txt=>{center().textContent=txt;positionCenter();};
@@ -386,6 +386,85 @@ window.addEventListener("keydown", ev => {
   } else {
     sheet.render(true);
   }
+});
+
+
+  /* ===========================================================
+   ACTOR‑SPECIFIC HOTBAR  (save & load on token switch)
+   =========================================================== */
+const HB_FLAG = "ptb.hotbar";    // where we store per‑actor layouts
+let   hotbarActorId = null;      // actor whose layout is currently shown
+
+/* ------------- helpers ------------------------------------------ */
+/* Return an object {slot: macroId, …} for slots 1‑10 of page 1      */
+function captureHotbar(){
+  const map = game.user.getHotbarMacros(1);   // Map<slot, Macro|null>
+  const out = {};
+  for (let s = 1; s <= 10; s++){
+    const macro = map[s];
+    if (macro) out[s] = macro.id;
+  }
+  return out;                                 // empty object = none
+}
+
+/* Apply a saved layout object to the user’s hotbar (page 1)        */
+async function applyHotbar(layout){
+  /* Clear first */
+  const current = game.user.getHotbarMacros(1);
+  for (let s = 1; s <= 10; s++){
+    if (current[s]) await game.user.assignHotbarMacro(null, s);
+  }
+  /* Re‑populate */
+  for (const [slot, mid] of Object.entries(layout)){
+    const macro = game.macros.get(mid);
+    if (macro) await game.user.assignHotbarMacro(macro, Number(slot));
+  }
+}
+
+/* Save the current bar to the given actor’s flag ----------------- */
+async function saveActorHotbar(actor){
+  if (!actor) return;
+  const layout = captureHotbar();
+  await actor.setFlag("ptb", HB_FLAG, layout);
+}
+
+/* Load (if any) from actor; otherwise leave bar empty ------------- */
+async function loadActorHotbar(actor){
+  if (!actor) return;
+  const layout = actor.getFlag("ptb", HB_FLAG) ?? {};
+  await applyHotbar(layout);
+  hotbarActorId = actor.id;
+}
+
+/* ------------- master switch routine ---------------------------- */
+async function switchActorHotbar(newActor){
+  if (!newActor || newActor.id === hotbarActorId) return;
+
+  /* Save previous */
+  const prevActor = game.actors.get(hotbarActorId);
+  await saveActorHotbar(prevActor);
+
+  /* Load new */
+  await loadActorHotbar(newActor);
+}
+
+/* ------------- hook into every way the active token can change -- */
+Hooks.on("controlToken", (tok, controlled)=>{
+  if (controlled && canControl(tok)) switchActorHotbar(tok.actor);
+});
+
+Hooks.on("updateCombat", (c,chg)=>{
+  if (chg.turn === undefined) return;
+  const com = c.combatant;
+  if (com?.sceneId !== canvas.scene?.id) return;
+  const tok = canvas.tokens.get(com.tokenId);
+  if (tok && canControl(tok)) switchActorHotbar(tok.actor);
+});
+
+/* When the module first loads (e.g. page refresh) ---------------- */
+Hooks.once("ready", () =>{
+  const tok = canvas.tokens.controlled[0] || canvas.tokens.placeables.find(t=>t.isOwner);
+  if (tok) switchActorHotbar(tok.actor);
 });
 
   
