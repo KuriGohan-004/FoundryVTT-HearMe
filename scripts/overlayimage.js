@@ -104,61 +104,76 @@ const CSS = `
     return canvas.tokens.placeables.filter(t => canControl(t));
   }
 
-/* ---------- Build / refresh bar ---------- */
+/* ---------- Build / refresh bar (centre‑selected, show all) ------ */
 function refresh(){
   const b = bar();
 
-  /* Hide during combat turn list */
+  /* Hide bar during combat turn list */
   if (combatRunning()){
-    b.style.opacity = "0";
+    b.style.opacity       = "0";
     b.style.pointerEvents = "none";
     setSmall("");
     return;
   }
-  b.style.opacity = "1";
+  b.style.opacity       = "1";
   b.style.pointerEvents = "auto";
-  b.replaceChildren();
+  b.replaceChildren();                           /* clear old icons   */
 
-  /* All tokens that should exist in the bar (GM vs player view) */
-  const allToks   = displayTokens();
-  if (!allToks.length) { setSmall(""); return; }
+  /* All tokens that belong in the bar (GM vs player view) ---------- */
+  const allToks = displayTokens();
+  if (!allToks.length){ setSmall(""); return; }
 
-  /* Ensure we have a valid selection */
+  /* Ensure currently‑selected token is valid ----------------------- */
   if (!selectedId || !allToks.some(t => t.id === selectedId))
     selectedId = allToks[0].id;
 
-  /* Rebuild navigation arrays used by key‑bindings */
-  ownedIds   = allToks.filter(canControl).map(t => t.id);
+  /* Rebuild arrays used by keyboard cycling */
   orderedIds = allToks.map(t => t.id);
+  ownedIds   = allToks.filter(canControl).map(t => t.id);
 
-  /* ---- Determine which icons to show (prev • selected • next) ---- */
-  const selIdx = allToks.findIndex(t => t.id === selectedId);
-  const prev   = allToks[(selIdx - 1 + allToks.length) % allToks.length];
-  const next   = allToks[(selIdx + 1) % allToks.length];
+  /* ----  Containers:   [ left | SELECTED | right ]  -------------- */
+  const leftWrap  = Object.assign(document.createElement("div"), {
+    style: "display:flex; gap:10px; flex-direction:row-reverse;"
+  });
+  const rightWrap = Object.assign(document.createElement("div"), {
+    style: "display:flex; gap:10px;"
+  });
 
-  /* De‑duplicate when only 1‑2 tokens exist */
-  const toShow = [prev, allToks[selIdx], next]
-    .filter((t,i,self) => self.findIndex(o => o.id === t.id) === i);
-
-  /* ---- Render icons ---- */
-  for (const t of toShow){
-    const img = document.createElement("img");
-    img.src = imgSrc(t);
-    img.alt = t.name;
+  /* Quick helper to build an <img> element */
+  function makeImg(t){
+    const img   = document.createElement("img");
+    img.src     = imgSrc(t);
+    img.alt     = t.name;
     if (t.id === selectedId) img.classList.add("selected-token");
 
-    /* CLICK → switch selection (fixes the “clicking no longer works” issue) */
+    /* Click → switch selection */
     img.onclick      = () => selectToken(t);
     img.onmouseenter = () => setSmall(t.name, alwaysCenter && t.id === selectedId);
     img.onmouseleave = () => {
-      const s = canvas.tokens.get(selectedId);
-      setSmall(s?.name ?? "", alwaysCenter);
+      const cur = canvas.tokens.get(selectedId);
+      setSmall(cur?.name ?? "", alwaysCenter);
     };
-
-    b.appendChild(img);
+    return img;
   }
 
-  /* Label + big centre name */
+  /* ----  Populate left (previous tokens, nearest first) ---------- */
+  const selIdx = orderedIds.indexOf(selectedId);
+  const prevIds = orderedIds.slice(0, selIdx);                /* earlier tokens */
+  for (const id of prevIds)  leftWrap.appendChild(makeImg(canvas.tokens.get(id)));
+
+  /* ----  Populate right (next tokens, in order) ------------------ */
+  const nextIds = orderedIds.slice(selIdx + 1);               /* later tokens   */
+  for (const id of nextIds) rightWrap.appendChild(makeImg(canvas.tokens.get(id)));
+
+  /* ----  Build centre‑selected icon ------------------------------ */
+  const selTokImg = makeImg(canvas.tokens.get(selectedId));
+
+  /* ----  Assemble bar ------------------------------------------- */
+  b.appendChild(leftWrap);
+  b.appendChild(selTokImg);
+  b.appendChild(rightWrap);
+
+  /* ----  Labels -------------------------------------------------- */
   const curTok = canvas.tokens.get(selectedId);
   const nm     = curTok?.name ?? "";
   setSmall(nm, alwaysCenter);
