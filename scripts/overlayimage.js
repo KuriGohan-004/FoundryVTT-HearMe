@@ -1,62 +1,93 @@
 /***********************************************************************
  * Player Token Bar  – rotated fading name aligned to sidebar
- *  • v2 – user‑owned only, GM omnibus view, half‑sized bar
+ *  • v3 – user‑owned only, GM omnibus view, half‑sized bar
+ *  • Adds Foundry settings for bar visibility & combat auto‑hide
+ *  • Auto‑selects combatant at turn start
  **********************************************************************/
 (() => {
+  const MODULE_ID = "hear-me-chat-notifications";
   const BAR_ID    = "player-token-bar";
   const LABEL_ID  = "player-token-bar-label";
   const CENTER_ID = "player-token-bar-center-label";
 
-/* ---------- Styles (50 % width, transparent) ---------- */
-const CSS = `
-  /* Bottom bar --------------------------------------------------- */
-  #${BAR_ID}{
-    position:fixed; bottom:0; left:25%; width:50%; height:84px;
-    padding:6px 10px; display:flex;
-    align-items:center; justify-content:center;      /* keep centred */
-    gap:10px; overflow:hidden;                       /* no scrollbar */
-    background:none; border:none;                    /* ← removed bar */
-    z-index:20; pointer-events:auto; transition:opacity .25s ease;
+  /* ---------- Module Settings ---------- */
+  Hooks.once("init", () => {
+    game.settings.register(MODULE_ID, "enableTokenBar", {
+      name: "Enable Token Bar",
+      hint: "Toggle the bottom player‑token bar on or off.",
+      scope: "client",
+      config: true,
+      type: Boolean,
+      default: true
+    });
+
+    game.settings.register(MODULE_ID, "autoHideInCombat", {
+      name: "Auto‑hide Bar in Combat",
+      hint: "Hide the token bar while an active combat encounter is running.",
+      scope: "client",
+      config: true,
+      type: Boolean,
+      default: true
+    });
+  });
+
+  /* Convenience getters so we always read live setting values */
+  const barEnabled     = () => game.settings.get(MODULE_ID, "enableTokenBar");
+  const autoHideCombat = () => game.settings.get(MODULE_ID, "autoHideInCombat");
+
+  /* ---------- Styles (50 % width, transparent) ---------- */
+  const CSS = `
+    /* Bottom bar --------------------------------------------------- */
+    #${BAR_ID}{
+      position:fixed; bottom:0; left:25%; width:50%; height:84px;
+      padding:6px 10px; display:flex;
+      align-items:center; justify-content:center;      /* keep centred */
+      gap:10px; overflow:hidden;                       /* no scrollbar */
+      background:none; border:none;                    /* ← removed bar */
+      z-index:20; pointer-events:auto; transition:opacity .25s ease;
+    }
+
+    /* Portraits ----------------------------------------------------- */
+    #${BAR_ID} img{
+      width:64px; height:64px; object-fit:cover; border-radius:8px;
+      border:2px solid #fff; flex:0 0 auto; cursor:pointer;
+      transition:transform .15s ease;
+    }
+    #${BAR_ID} img:hover               {transform:scale(1.20); z-index:1;}
+    #${BAR_ID} img.selected-token,
+    #${BAR_ID} img.selected-token:hover{transform:scale(1.25); z-index:2;}
+
+    /* Small label above bar ---------------------------------------- */
+    #${LABEL_ID}{
+      position:fixed; bottom:90px; left:25%; width:50%;
+      text-align:center; font-size:16px; font-weight:bold; color:#fff;
+      text-shadow:0 0 4px #000; pointer-events:none; z-index:21;
+      height:24px; line-height:24px; user-select:none;
+    }
+
+    /* Rotated, pulsing name aligned to sidebar --------------------- */
+    @keyframes ptbPulse{0%,100%{opacity:1;}50%{opacity:.5;}}
+    #${CENTER_ID}{
+      position:fixed;
+      font-size:48px; font-weight:bold; font-style:italic; color:#fff; text-shadow:0 0 8px #000;
+      pointer-events:none; z-index:40; user-select:none;
+      animation:ptbPulse 4s infinite;
+      transform:rotate(-90deg);
+      transform-origin:bottom left;
+      padding-left:35%;
+    }`;
+
+  /* Inject styles once */
+  if (!document.getElementById("player-token-bar-styles")) {
+    const s = Object.assign(document.createElement("style"), { id: "player-token-bar-styles", textContent: CSS });
+    document.head.appendChild(s);
   }
-
-  /* Portraits ----------------------------------------------------- */
-  #${BAR_ID} img{
-    width:64px; height:64px; object-fit:cover; border-radius:8px;
-    border:2px solid #fff; flex:0 0 auto; cursor:pointer;
-    transition:transform .15s ease;
-  }
-  #${BAR_ID} img:hover               {transform:scale(1.20); z-index:1;}
-  #${BAR_ID} img.selected-token,
-  #${BAR_ID} img.selected-token:hover{transform:scale(1.25); z-index:2;}
-
-  /* Small label above bar ---------------------------------------- */
-  #${LABEL_ID}{
-    position:fixed; bottom:90px; left:25%; width:50%;
-    text-align:center; font-size:16px; font-weight:bold; color:#fff;
-    text-shadow:0 0 4px #000; pointer-events:none; z-index:21;
-    height:24px; line-height:24px; user-select:none;
-  }
-
-  /* Rotated, pulsing name aligned to sidebar --------------------- */
-  @keyframes ptbPulse{0%,100%{opacity:1;}50%{opacity:.5;}}
-  #${CENTER_ID}{
-    position:fixed;
-    font-size:48px; font-weight:bold; font-style:italic; color:#fff; text-shadow:0 0 8px #000;
-    pointer-events:none; z-index:40; user-select:none;
-    animation:ptbPulse 4s infinite;
-    transform:rotate(-90deg);
-    transform-origin:bottom left;
-    padding-left:35%;
-  }`;
-
-  
-  document.head.appendChild(Object.assign(document.createElement("style"),{textContent:CSS}));
 
   /* ---------- DOM helpers ---------- */
-  const el   = (id,tag="div")=>document.getElementById(id)??document.body.appendChild(Object.assign(document.createElement(tag),{id}));
-  const bar   =()=>el(BAR_ID);
-  const label =()=>el(LABEL_ID);
-  const center=()=>el(CENTER_ID);
+  const el     = (id, tag = "div") => document.getElementById(id) ?? document.body.appendChild(Object.assign(document.createElement(tag), { id }));
+  const bar    = () => el(BAR_ID);
+  const label  = () => el(LABEL_ID);
+  const center = () => el(CENTER_ID);
 
   /* ---------- State ---------- */
   let selectedId   = null;
@@ -65,32 +96,31 @@ const CSS = `
   let ownedIds     = [];
 
   /* ---------- Utility ---------- */
-  const combatRunning = ()=>!!(game.combat?.started && game.combat.scene?.id===canvas.scene?.id);
-  const canControl    = t=>t.isOwner || t.actor?.isOwner;
-  const imgSrc        = t=>t.document.texture?.src || t.actor?.prototypeToken?.texture?.src || t.actor?.img || "icons/svg/mystery-man.svg";
-  const setSmall      = (txt,b=false)=>{label().textContent=txt?(b?`[[ ${txt} ]]`:txt):"";};
+  const combatRunning = () => !!(game.combat?.started && game.combat.scene?.id === canvas.scene?.id);
+  const canControl    = t => t.isOwner || t.actor?.isOwner;
+  const imgSrc        = t => t.document.texture?.src || t.actor?.prototypeToken?.texture?.src || t.actor?.img || "icons/svg/mystery-man.svg";
+  const setSmall      = (txt, b = false) => { label().textContent = txt ? (b ? `[[ ${txt} ]]` : txt) : ""; };
 
   /* --- positioning helper --- */
-  function positionCenter(){
-    const sb=document.getElementById("sidebar");
-    if(!sb) return;
-    const c=center();
-    const r=sb.getBoundingClientRect();
+  function positionCenter() {
+    const sb = document.getElementById("sidebar");
+    if (!sb) return;
+    const c = center();
+    const r = sb.getBoundingClientRect();
     c.style.left = `${r.left - 4}px`;
     c.style.top  = `${r.top + r.height}px`;
   }
-  window.addEventListener("resize",positionCenter);
-  const showCenter = txt=>{center().textContent=txt;positionCenter();};
+  window.addEventListener("resize", positionCenter);
+  const showCenter = txt => { center().textContent = txt; positionCenter(); };
 
-  
   /* ---------- Token list for bar ---------- */
-  function displayTokens(){
+  function displayTokens() {
     /* ---------- GM view ---------- */
-    if (game.user.isGM){
+    if (game.user.isGM) {
       /* 1 ) every linked token in the current scene */
       const sceneLinked = canvas.tokens.placeables.filter(t => t.document.actorLink);
 
-      /* 2 ) plus linked tokens whose owners are offline (covers “actors whose players are not logged in”) */
+      /* 2 ) plus linked tokens whose owners are offline */
       const offlineLinked = canvas.tokens.placeables.filter(t => {
         if (!t.document.actorLink) return false;
         const owners = game.users.players.filter(u => t.actor?.testUserPermission(u, CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER));
@@ -101,109 +131,122 @@ const CSS = `
       return [...new Set([...sceneLinked, ...offlineLinked])];
     }
 
-    /* ---------- Regular player view  (only tokens you OWN) ---------- */
+    /* ---------- Regular player view (only tokens you OWN) ---------- */
     return canvas.tokens.placeables.filter(t => canControl(t));
   }
 
-/* ---------- Build / refresh bar (looping carousel) -------------- */
-function refresh() {
-  const b = bar();
+  /* ---------- Build / refresh bar (looping carousel) -------------- */
+  function refresh() {
+    /* Respect setting: is the bar enabled? */
+    if (!barEnabled()) {
+      bar().style.display = "none";
+      label().style.display = "none";
+      center().style.display = "none";
+      return;
+    } else {
+      bar().style.display = "flex";
+      label().style.display = "";
+      center().style.display = "";
+    }
 
-  /* Hide bar while the combat turn list is open */
-  if (combatRunning()) {
-    b.style.opacity       = "0";
-    b.style.pointerEvents = "none";
-    setSmall("");
-    return;
-  }
-  b.style.opacity       = "1";
-  b.style.pointerEvents = "auto";
-  b.replaceChildren();                           // clear old icons
+    const b = bar();
 
-  /* --------------------------------------------------------------- */
-  /* 1. Gather tokens that belong in the bar                         */
-  /* --------------------------------------------------------------- */
-  const allToks = displayTokens();
-  if (!allToks.length) { setSmall(""); return; }
+    /* Hide bar while the combat turn list is open, if configured */
+    if (autoHideCombat() && combatRunning()) {
+      b.style.opacity       = "0";
+      b.style.pointerEvents = "none";
+      setSmall("");
+      return;
+    }
 
-  /* Make sure our current selection is valid */
-  if (!selectedId || !allToks.some(t => t.id === selectedId))
-    selectedId = allToks[0].id;
+    b.style.opacity       = "1";
+    b.style.pointerEvents = "auto";
+    b.replaceChildren();                           // clear old icons
 
-  /* Arrays used by keyboard handlers elsewhere in the script */
-  orderedIds = allToks.map(t => t.id);
-  ownedIds   = allToks.filter(canControl).map(t => t.id);
+    /* --------------------------------------------------------------- */
+    /* 1. Gather tokens that belong in the bar                         */
+    /* --------------------------------------------------------------- */
+    const allToks = displayTokens();
+    if (!allToks.length) { setSmall(""); return; }
 
-  const n       = orderedIds.length;
-  const selIdx  = orderedIds.indexOf(selectedId);
+    /* Make sure our current selection is valid */
+    if (!selectedId || !allToks.some(t => t.id === selectedId))
+      selectedId = allToks[0].id;
 
-  /* How many portraits go on each side? --------------------------- */
-  /* – Show ONE previous token on the left, but only if we have
-     at least 3 tokens in total. All remaining tokens go to the right. */
-  const leftCount  = (n >= 3) ? 1 : 0;          // ← exactly one or zero
-  const rightCount = (n - 1) - leftCount;       // everything else
+    /* Arrays used by keyboard handlers elsewhere in the script */
+    orderedIds = allToks.map(t => t.id);
+    ownedIds   = allToks.filter(canControl).map(t => t.id);
 
-  /* Helpers to wrap the array index */
-  const wrap = idx => (idx + n) % n;
+    const n       = orderedIds.length;
+    const selIdx  = orderedIds.indexOf(selectedId);
 
-  /* Collect tokens to display */
-  const leftTokens  = [];      // previous tokens, nearest first
-  const rightTokens = [];      // next tokens, nearest first
+    /* How many portraits go on each side? --------------------------- */
+    /* – Show ONE previous token on the left, but only if we have
+       at least 3 tokens in total. All remaining tokens go to the right. */
+    const leftCount  = (n >= 3) ? 1 : 0;          // ← exactly one or zero
+    const rightCount = (n - 1) - leftCount;       // everything else
 
-  for (let i = 1; i <= leftCount; i++)
-    leftTokens.push( canvas.tokens.get( orderedIds[ wrap(selIdx - i) ] ) );
+    /* Helpers to wrap the array index */
+    const wrap = idx => (idx + n) % n;
 
-  for (let i = 1; i <= rightCount; i++)
-    rightTokens.push( canvas.tokens.get( orderedIds[ wrap(selIdx + i) ] ) );
+    /* Collect tokens to display */
+    const leftTokens  = [];      // previous tokens, nearest first
+    const rightTokens = [];      // next tokens, nearest first
 
-  /* --------------------------------------------------------------- */
-  /* 2. Helper to build an <img> element                             */
-  /* --------------------------------------------------------------- */
-  function makeImg(token) {
-    const img = document.createElement("img");
-    img.src   = imgSrc(token);
-    img.alt   = token.name;
+    for (let i = 1; i <= leftCount; i++)
+      leftTokens.push(canvas.tokens.get(orderedIds[wrap(selIdx - i)]));
 
-    if (token.id === selectedId)
-      img.classList.add("selected-token");
+    for (let i = 1; i <= rightCount; i++)
+      rightTokens.push(canvas.tokens.get(orderedIds[wrap(selIdx + i)]));
 
-    /* Click → switch selection */
-    img.onclick      = () => selectToken(token);
-    img.onmouseenter = () => setSmall(token.name, alwaysCenter && token.id === selectedId);
-    img.onmouseleave = () => {
-      const cur = canvas.tokens.get(selectedId);
-      setSmall(cur?.name ?? "", alwaysCenter);
-    };
-    return img;
-  }
+    /* --------------------------------------------------------------- */
+    /* 2. Helper to build an <img> element                             */
+    /* --------------------------------------------------------------- */
+    function makeImg(token) {
+      const img = document.createElement("img");
+      img.src   = imgSrc(token);
+      img.alt   = token.name;
 
-  /* --------------------------------------------------------------- */
-  /* 3. Build three flex containers:  left | selected | right        */
-  /* --------------------------------------------------------------- */
-  const leftWrap  = Object.assign(document.createElement("div"), {
-    style: "display:flex; gap:10px; flex-direction:row-reverse;"  // shows nearest‑prev next to centre
-  });
-  const rightWrap = Object.assign(document.createElement("div"), {
-    style: "display:flex; gap:10px;"                              // natural order (nearest first)
-  });
+      if (token.id === selectedId)
+        img.classList.add("selected-token");
 
-  /* Farthest‑to‑nearest for left (row‑reverse flips it back) */
-  leftTokens.forEach(tok => leftWrap.appendChild( makeImg(tok) ));
+      /* Click → switch selection */
+      img.onclick      = () => selectToken(token);
+      img.onmouseenter = () => setSmall(token.name, alwaysCenter && token.id === selectedId);
+      img.onmouseleave = () => {
+        const cur = canvas.tokens.get(selectedId);
+        setSmall(cur?.name ?? "", alwaysCenter);
+      };
+      return img;
+    }
 
-  /* Centre portrait (always selected) */
-  const centreImg = makeImg( canvas.tokens.get(selectedId) );
+    /* --------------------------------------------------------------- */
+    /* 3. Build three flex containers:  left | selected | right        */
+    /* --------------------------------------------------------------- */
+    const leftWrap  = Object.assign(document.createElement("div"), {
+      style: "display:flex; gap:10px; flex-direction:row-reverse;"  // shows nearest‑prev next to centre
+    });
+    const rightWrap = Object.assign(document.createElement("div"), {
+      style: "display:flex; gap:10px;"                              // natural order (nearest first)
+    });
 
-  /* Nearest‑to‑farthest for right */
-  rightTokens.forEach(tok => rightWrap.appendChild( makeImg(tok) ));
+    /* Farthest‑to‑nearest for left (row‑reverse flips it back) */
+    leftTokens.forEach(tok => leftWrap.appendChild(makeImg(tok)));
 
-  /* Assemble the bar */
-  b.appendChild(leftWrap);
-  b.appendChild(centreImg);
-  b.appendChild(rightWrap);
+    /* Centre portrait (always selected) */
+    const centreImg = makeImg(canvas.tokens.get(selectedId));
 
-  /* --------------------------------------------------------------- */
-  /* 4. Update labels & big centre name                              */
-  /* --------------------------------------------------------------- */
+    /* Nearest‑to‑farthest for right */
+    rightTokens.forEach(tok => rightWrap.appendChild(makeImg(tok)));
+
+    /* Assemble the bar */
+    b.appendChild(leftWrap);
+    b.appendChild(centreImg);
+    b.appendChild(rightWrap);
+
+    /* --------------------------------------------------------------- */
+    /* 4. Update labels & big centre name                              */
+    /* --------------------------------------------------------------- */
   const curTok = canvas.tokens.get(selectedId);
   const nm     = curTok?.name ?? "";
   setSmall(nm, alwaysCenter);
@@ -386,85 +429,6 @@ window.addEventListener("keydown", ev => {
   } else {
     sheet.render(true);
   }
-});
-
-
-  /* ===========================================================
-   ACTOR‑SPECIFIC HOTBAR  (save & load on token switch)
-   =========================================================== */
-const HB_FLAG = "ptb.hotbar";    // where we store per‑actor layouts
-let   hotbarActorId = null;      // actor whose layout is currently shown
-
-/* ------------- helpers ------------------------------------------ */
-/* Return an object {slot: macroId, …} for slots 1‑10 of page 1      */
-function captureHotbar(){
-  const map = game.user.getHotbarMacros(1);   // Map<slot, Macro|null>
-  const out = {};
-  for (let s = 1; s <= 10; s++){
-    const macro = map[s];
-    if (macro) out[s] = macro.id;
-  }
-  return out;                                 // empty object = none
-}
-
-/* Apply a saved layout object to the user’s hotbar (page 1)        */
-async function applyHotbar(layout){
-  /* Clear first */
-  const current = game.user.getHotbarMacros(1);
-  for (let s = 1; s <= 10; s++){
-    if (current[s]) await game.user.assignHotbarMacro(null, s);
-  }
-  /* Re‑populate */
-  for (const [slot, mid] of Object.entries(layout)){
-    const macro = game.macros.get(mid);
-    if (macro) await game.user.assignHotbarMacro(macro, Number(slot));
-  }
-}
-
-/* Save the current bar to the given actor’s flag ----------------- */
-async function saveActorHotbar(actor){
-  if (!actor) return;
-  const layout = captureHotbar();
-  await actor.setFlag("ptb", HB_FLAG, layout);
-}
-
-/* Load (if any) from actor; otherwise leave bar empty ------------- */
-async function loadActorHotbar(actor){
-  if (!actor) return;
-  const layout = actor.getFlag("ptb", HB_FLAG) ?? {};
-  await applyHotbar(layout);
-  hotbarActorId = actor.id;
-}
-
-/* ------------- master switch routine ---------------------------- */
-async function switchActorHotbar(newActor){
-  if (!newActor || newActor.id === hotbarActorId) return;
-
-  /* Save previous */
-  const prevActor = game.actors.get(hotbarActorId);
-  await saveActorHotbar(prevActor);
-
-  /* Load new */
-  await loadActorHotbar(newActor);
-}
-
-/* ------------- hook into every way the active token can change -- */
-Hooks.on("controlToken", (tok, controlled)=>{
-  if (controlled && canControl(tok)) switchActorHotbar(tok.actor);
-});
-
-Hooks.on("updateCombat", (c,chg)=>{
-  if (chg.turn === undefined) return;
-  const com = c.combatant;
-  if (com?.sceneId !== canvas.scene?.id) return;
-  const tok = canvas.tokens.get(com.tokenId);
-  if (tok && canControl(tok)) switchActorHotbar(tok.actor);
-});
-
-/* When the module first loads (e.g. page refresh) ---------------- */
-Hooks.once("ready", () =>{
-  const tok = canvas.tokens.controlled[0] || canvas.tokens.placeables.find(t=>t.isOwner);
-  if (tok) switchActorHotbar(tok.actor);
 });
 
   
