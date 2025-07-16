@@ -45,7 +45,7 @@
       animation:ptbPulse 4s infinite;
       transform:rotate(-90deg);
       transform-origin:bottom left;
-      padding-bottom: 35%;
+      padding-bottom: -35%;
     }`;
   document.head.appendChild(Object.assign(document.createElement("style"),{textContent:CSS}));
 
@@ -300,14 +300,6 @@
     });
   });
 
-/* ---------- Disable token drag when token follow mode is active ---------- */
-Hooks.on("preDragToken", (token, event, options, userId) => {
-  if (alwaysCenter) {
-    // Prevent dragging tokens if follow mode is active
-    return false;
-  }
-  // Allow dragging otherwise
-  return true;
-});
+
   
 })();
