@@ -1,5 +1,6 @@
 /***********************************************************************
- * Player Token Bar – with keyboard cycling (1 ⇽ prev | next ⇾ 2)
+ * Player Token Bar – hot‑keys:
+ *   1 ⇽ previous owned | refocus 2 | next owned ⇾ 3
  **********************************************************************/
 (() => {
   const BAR_ID   = "player-token-bar";
@@ -22,8 +23,8 @@
       border:2px solid #fff; flex:0 0 auto; cursor:pointer;
       transition:transform .15s ease;
     }
-    #${BAR_ID} img:hover        {transform:scale(1.3); z-index:1;}
-    #${BAR_ID} img.selected-token{transform:scale(1.3); z-index:2;}
+    #${BAR_ID} img:hover           {transform:scale(1.3); z-index:1;}
+    #${BAR_ID} img.selected-token  {transform:scale(1.3); z-index:2;}
 
     #${LABEL_ID}{
       position:fixed; bottom:90px; left:15%; width:50%;
@@ -31,115 +32,133 @@
       text-shadow:0 0 4px #000; pointer-events:none; z-index:21;
       height:24px; line-height:24px; user-select:none;
     }`;
-  document.head.appendChild(Object.assign(document.createElement("style"), {textContent: CSS}));
+  document.head.appendChild(Object.assign(document.createElement("style"), { textContent: CSS }));
 
   /* ---------- DOM helpers ---------- */
-  const bar   = () => document.getElementById(BAR_ID)   ?? document.body.appendChild(Object.assign(document.createElement("div"),{id:BAR_ID}));
-  const label = () => document.getElementById(LABEL_ID) ?? document.body.appendChild(Object.assign(document.createElement("div"),{id:LABEL_ID}));
+  const bar   = () => document.getElementById(BAR_ID)   ?? document.body.appendChild(Object.assign(document.createElement("div"), { id: BAR_ID }));
+  const label = () => document.getElementById(LABEL_ID) ?? document.body.appendChild(Object.assign(document.createElement("div"), { id: LABEL_ID }));
 
   /* ---------- State ---------- */
-  let lastSelectedTokenId = null;   // currently selected token (for size highlight)
-  let orderedTokens       = [];     // array of player-owned token IDs in display order
+  let lastSelectedTokenId = null;   // token id to keep big
+  let orderedTokenIds     = [];     // all player‑owned tokens (for display order)
+  let ownedTokenIds       = [];     // only tokens current user can control (for cycling)
 
   /* ---------- Utility ---------- */
   const combatRunning = () =>
     !!(game.combat && game.combat.started && game.combat.scene?.id === canvas.scene?.id);
 
+  /** All tokens which *any* player owns (display) */
   const playerOwnedTokens = () => {
     const players = game.users.players;
-    return canvas.tokens.placeables.filter(tok=>{
-      if(!tok.actor) return false;
+    return canvas.tokens.placeables.filter(tok => {
+      if (!tok.actor) return false;
       const tokOwn = tok.document?.ownership ?? tok.ownership ?? {};
       const actOwn = tok.actor.ownership ?? {};
-      const hasTok = Object.entries(tokOwn).some(([u,l])=>players.some(p=>p.id===u)&&l>=CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER);
-      const hasAct = Object.entries(actOwn).some(([u,l])=>players.some(p=>p.id===u)&&l>=CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER);
-      return hasTok||hasAct;
+      const hasTok = Object.entries(tokOwn).some(([u, l]) => players.some(p => p.id === u) &&
+        l >= CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER);
+      const hasAct = Object.entries(actOwn).some(([u, l]) => players.some(p => p.id === u) &&
+        l >= CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER);
+      return hasTok || hasAct;
     });
   };
 
-  const imgSrc = tok =>
-      tok.document.texture?.src ||
-      tok.actor?.prototypeToken?.texture?.src ||
-      tok.actor?.img ||
-      "icons/svg/mystery-man.svg";
+  /** Can current user control this token? */
+  const canControl = tok => tok.isOwner || tok.actor?.isOwner;
 
-  /* ---------- Core: build bar ---------- */
-  function refresh(){
+  const imgSrc = tok =>
+    tok.document.texture?.src ||
+    tok.actor?.prototypeToken?.texture?.src ||
+    tok.actor?.img ||
+    "icons/svg/mystery-man.svg";
+
+  /* ---------- Build / refresh bar ---------- */
+  function refresh() {
     const b   = bar();
     const lbl = label();
 
-    /* Auto‑hide in combat */
-    if(combatRunning()){
-      b.style.opacity="0"; b.style.pointerEvents="none";
-      lbl.style.opacity="0"; lbl.textContent="";
-      b.replaceChildren(); orderedTokens=[];
+    /* Hide bar during combat */
+    if (combatRunning()) {
+      b.style.opacity = "0"; b.style.pointerEvents = "none";
+      lbl.style.opacity = "0"; lbl.textContent = "";
+      b.replaceChildren(); orderedTokenIds = []; ownedTokenIds = [];
       return;
     }
 
-    b.style.opacity="1"; b.style.pointerEvents="auto";
-    lbl.style.opacity="1"; lbl.textContent="";
+    b.style.opacity = "1"; b.style.pointerEvents = "auto";
+    lbl.style.opacity = "1"; lbl.textContent = "";
     b.replaceChildren();
 
-    orderedTokens = [];
-    for(const tok of playerOwnedTokens()){
-      orderedTokens.push(tok.id);
+    orderedTokenIds = [];
+    ownedTokenIds   = [];
+
+    for (const tok of playerOwnedTokens()) {
+      orderedTokenIds.push(tok.id);
+      if (canControl(tok)) ownedTokenIds.push(tok.id);
 
       const img = document.createElement("img");
-      img.src  = imgSrc(tok);
-      img.alt  = tok.name;
+      img.src = imgSrc(tok);
+      img.alt = tok.name;
 
-      if(tok.id === lastSelectedTokenId) img.classList.add("selected-token");
+      if (tok.id === lastSelectedTokenId) img.classList.add("selected-token");
 
-      /* Left‑click = select + pan */
-      img.addEventListener("click", ()=>{
-        selectToken(tok);
-      });
+      /* Click → select */
+      img.addEventListener("click", () => selectToken(tok));
 
-      /* Right‑click = sheet */
-      img.addEventListener("contextmenu", e=>{
+      /* Right‑click → sheet */
+      img.addEventListener("contextmenu", e => {
         e.preventDefault();
         tok.actor?.sheet?.render(true);
       });
 
       /* Hover label */
-      img.addEventListener("mouseenter", ()=>{ lbl.textContent = tok.name; });
-      img.addEventListener("mouseleave", ()=>{ lbl.textContent = "";        });
+      img.addEventListener("mouseenter", () => { lbl.textContent = tok.name; });
+      img.addEventListener("mouseleave", () => { lbl.textContent = "";        });
 
       b.appendChild(img);
     }
   }
 
-  /* ---------- Selection / camera ---------- */
-  function selectToken(tok){
+  /* ---------- Select token & pan ---------- */
+  function selectToken(tok) {
     canvas.animatePan(tok.center);
-    if(tok.actor?.testUserPermission(game.user,"OWNER")){
-      tok.control({releaseOthers:true});
-    }
+    if (canControl(tok)) tok.control({ releaseOthers: true });
     lastSelectedTokenId = tok.id;
-    refresh();                         // update highlight state
+    refresh();                                  // update highlight
   }
 
-  /* ---------- Keyboard cycling ---------- */
-  function cycleToken(offset){
-    if(!orderedTokens.length) return;
+  /* ---------- Keyboard handling ---------- */
+  function cycleOwned(offset) {
+    if (!ownedTokenIds.length) return;
 
-    const currentIndex = orderedTokens.findIndex(id=>id===lastSelectedTokenId);
-    const nextIndex = (currentIndex + offset + orderedTokens.length) % orderedTokens.length;
-    const nextId = orderedTokens[nextIndex];
-    const nextTok = canvas.tokens.get(nextId);
-    if(nextTok) selectToken(nextTok);
+    // If current selection isn't owned or null, start from first owned
+    let idx = ownedTokenIds.indexOf(lastSelectedTokenId);
+    if (idx === -1) idx = 0;
+
+    const nextIdx = (idx + offset + ownedTokenIds.length) % ownedTokenIds.length;
+    const nextTok = canvas.tokens.get(ownedTokenIds[nextIdx]);
+    if (nextTok) selectToken(nextTok);
   }
 
-  /* intercept keydown – ignore if user typing in an input/textarea */
-  window.addEventListener("keydown", event=>{
-    if(event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement || event.target.isContentEditable) return;
+  window.addEventListener("keydown", ev => {
+    // Ignore if typing in input/textarea/contentEditable
+    if (ev.target instanceof HTMLInputElement || ev.target instanceof HTMLTextAreaElement || ev.target.isContentEditable) return;
 
-    if(event.code === "Digit2"){           // key "2"
-      event.preventDefault();
-      cycleToken(+1);
-    }else if(event.code === "Digit1"){     // key "1"
-      event.preventDefault();
-      cycleToken(-1);
+    switch (ev.code) {
+      case "Digit3":            // Next owned
+        ev.preventDefault();
+        cycleOwned(+1);
+        break;
+      case "Digit1":            // Previous owned
+        ev.preventDefault();
+        cycleOwned(-1);
+        break;
+      case "Digit2":            // Refocus on current
+        if (lastSelectedTokenId) {
+          ev.preventDefault();
+          const tok = canvas.tokens.get(lastSelectedTokenId);
+          if (tok) canvas.animatePan(tok.center);
+        }
+        break;
     }
   });
 
@@ -152,8 +171,8 @@
   Hooks.on("updateActor",  refresh);
   Hooks.on("updateCombat", refresh);
   Hooks.on("deleteCombat", refresh);
-  Hooks.on("controlToken",(tok,controlled)=>{
-    if(controlled && tok.actor?.testUserPermission(game.user,"OWNER")){
+  Hooks.on("controlToken", (tok, controlled) => {
+    if (controlled && canControl(tok)) {
       lastSelectedTokenId = tok.id;
       refresh();
     }
