@@ -281,6 +281,23 @@
       }, 200);   /* small delay lets Foundry finish its own handlers */
     });
   });
+  
+  /* ---------- After a chat message is created -------------------- */
+  Hooks.on("createChatMessage", () => {
+    /* Let Foundry finish its own focus work first */
+    requestAnimationFrame(() => {
+      /* 1) Blur the chat input ------------------------------------- */
+      const chatInput =
+        document.querySelector("#chat-message") ||
+        document.querySelector("textarea[name='message']");
+      chatInput?.blur();
+
+      /* 2) Re‑focus the previously selected token ------------------ */
+      const tok =
+        canvas.tokens.controlled[0] || canvas.tokens.get(selectedId);
+      tok?.control({ releaseOthers: false });
+    });
+  });
 
 
   
