@@ -388,28 +388,25 @@ window.addEventListener("keydown", ev => {
   }
 });
 
+  
 /* ---------------------------------------------------------------
- *  Auto‑select the active combatant
- *  (paste this block before the closing "})();" of the main file)
+ *  Auto‑select the NEW active combatant
  * ------------------------------------------------------------- */
-Hooks.on("combatTurn", (combat /* Combat */, updateData /* {round,turn} */, _options) => {
-  /* Ignore combats from other scenes                                       */
-  if (!combat?.scene || combat.scene.id !== canvas.scene?.id) return;
+Hooks.on("combatTurnChange", (combat /* Combat */, _prior, _current) => {
+  /* Only react to the scene that’s currently on‑screen            */
+  if (combat.scene?.id !== canvas.scene?.id) return;
 
-  /* Get the combatant whose turn just began                                */
+  /* Active combatant *after* the turn has advanced                */
   const cb  = combat.combatant;
   if (!cb) return;
 
-  /* Look up its token on the canvas                                        */
   const tok = canvas.tokens.get(cb.tokenId);
   if (!tok) return;
 
-  /* Only auto‑select if you could already control it (or you're the GM)    */
-  if (game.user.isGM || canControl(tok)) {
-    /* Re‑use the Player‑Token‑Bar helper so the UI stays in sync            */
-    selectToken(tok);
-  }
+  /* GMs may always auto‑select; players only if they own control   */
+  if (game.user.isGM || canControl(tok)) selectToken(tok);
 });
+
 
   
 
