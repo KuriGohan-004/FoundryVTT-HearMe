@@ -327,5 +327,22 @@ window.addEventListener("keydown", ev => {
   }
 });
 
+
+  /* ---------- Follow‑mode click: target instead of switch ---------- */
+function clickBarToken(t) {
+  if (alwaysCenter) {
+    /* FOLLOW MODE ON → toggle TARGET for that token */
+    const already = t.isTargeted;
+    /* Shift‑click adds to the current target list, plain click replaces */
+    t.setTarget(!already, {
+      releaseOthers: !game.keyboard?.isModifierActive("Shift"),
+      user: game.user
+    });
+  } else {
+    /* FOLLOW MODE OFF → normal behaviour (switch active token) */
+    selectToken(t);
+  }
+}
+
   
 })();
