@@ -1,34 +1,52 @@
-/** Setting key used to persist the control‑panel position */
-const POS_KEY = 'controlPos';
+/* Image Overlay Toggle – v1.5.0 */
+
+const POS_KEY   = 'controlPos';   // per‑client position
+const STATE_KEY = 'overlayState';  // world‑level overlay data
 
 Hooks.once('init', () => {
-  // Shared styles (players & GM)
   injectStyles();
 
-  // Save per‑client panel position setting
+  // Per‑client setting to remember panel position
   game.settings.register('image-overlay-toggle', POS_KEY, {
     scope: 'client',
     config: false,
     type: Object,
     default: { x: 12, y: window.innerHeight - 60 }
   });
+
+  // World‑scope setting that stores overlay { path, visible }
+  game.settings.register('image-overlay-toggle', STATE_KEY, {
+    scope: 'world',
+    config: false,
+    type: Object,
+    default: { path: null, visible: false }
+  });
 });
 
 Hooks.once('ready', () => {
-  game.socket.on('module.image-overlay-toggle', handleSocket);
+  // Everyone watches for changes to the world‑level state
+  Hooks.on('updateSetting', (namespace, key, value) => {
+    if (namespace === 'image-overlay-toggle' && key === STATE_KEY) {
+      applyOverlay(value.path, value.visible);
+    }
+  });
+
+  // Apply current state immediately on load
+  const state = game.settings.get('image-overlay-toggle', STATE_KEY);
+  applyOverlay(state.path, state.visible);
+
+  // Only GMs get the control panel
   if (game.user.isGM) createOverlayUI();
 });
 
-let currentImagePath = null;
-let overlayVisible   = false;
-let hoverHandler     = null;
-
 /* ------------------------------------------------------------- */
+// Internal helpers and variables
+let hoverHandler = null;
+
 function createOverlayUI() {
   const uiBox = document.createElement('div');
   uiBox.id = 'image-overlay-controls';
 
-  // Restore saved position
   const pos = game.settings.get('image-overlay-toggle', POS_KEY);
   Object.assign(uiBox.style, {
     position: 'fixed',
@@ -43,6 +61,7 @@ function createOverlayUI() {
     borderRadius: '6px'
   });
 
+  // Thumbnail preview
   const thumb = Object.assign(document.createElement('img'), {
     id: 'io-thumb',
     width: 32,
@@ -53,28 +72,44 @@ function createOverlayUI() {
     border: '1px solid #333'
   });
 
+  // Pick button
   const pickBtn = document.createElement('button');
   pickBtn.className = 'io-btn';
   pickBtn.textContent = 'Pick';
   pickBtn.title = 'Choose an image';
-  pickBtn.addEventListener('click', pickImage);
+  pickBtn.addEventListener('click', () => {
+    new FilePicker({
+      type: 'image',
+      callback: path => {
+        thumb.src = path;
+        updateState({ path }); // keep visibility unchanged
+      }
+    }).browse();
+  });
 
+  // Toggle button
   const toggleBtn = document.createElement('button');
   toggleBtn.className = 'io-btn';
   toggleBtn.textContent = 'Show';
   toggleBtn.title = 'Show/Hide overlay';
   toggleBtn.addEventListener('click', () => {
-    if (!currentImagePath) return ui.notifications.warn('No image selected.');
-    overlayVisible = !overlayVisible;
-    toggleBtn.textContent = overlayVisible ? 'Hide' : 'Show';
-    applyOverlay();
-    broadcastState();
+    const state = game.settings.get('image-overlay-toggle', STATE_KEY);
+    if (!state.path) return ui.notifications.warn('No image selected.');
+    updateState({ visible: !state.visible });
   });
 
   uiBox.append(thumb, pickBtn, toggleBtn);
   document.body.appendChild(uiBox);
 
-  // Drag‑n‑drop handling
+  // Update UI when state changes (so toggle label stays correct)
+  Hooks.on('updateSetting', (ns, key, val) => {
+    if (ns === 'image-overlay-toggle' && key === STATE_KEY) {
+      toggleBtn.textContent = val.visible ? 'Hide' : 'Show';
+      thumb.src = val.path ?? '';
+    }
+  });
+
+  // Drag & save position
   let dragging = false, offsetX = 0, offsetY = 0;
   uiBox.addEventListener('mousedown', event => {
     dragging = true;
@@ -100,21 +135,21 @@ function createOverlayUI() {
 }
 
 /* ------------------------------------------------------------- */
-function pickImage() {
-  new FilePicker({
-    type: 'image',
-    callback: path => {
-      currentImagePath = path;
-      document.getElementById('io-thumb').src = path;
-      broadcastState(); // path sync only
-    }
-  }).browse();
+// Update world‑level state with partial changes
+function updateState(partial) {
+  const current = game.settings.get('image-overlay-toggle', STATE_KEY);
+  game.settings.set('image-overlay-toggle', STATE_KEY, {
+    ...current,
+    ...partial
+  });
 }
 
-function applyOverlay() {
+/* ------------------------------------------------------------- */
+// Show / hide overlay on any client
+function applyOverlay(path, visible) {
   let img = document.getElementById('image-overlay-display');
 
-  if (!overlayVisible) {
+  if (!visible || !path) {
     if (img) {
       img.remove();
       removeHoverHandler();
@@ -127,39 +162,24 @@ function applyOverlay() {
     img.id = 'image-overlay-display';
     Object.assign(img.style, {
       position: 'fixed',
-      left: '40%',            // 40 % from left edge
-      top: '50%',             // vertical middle
+      left: '40%',
+      top: '50%',
       transform: 'translate(-50%, -50%)',
-      zIndex: 20,             // beneath chat UI
+      zIndex: 20,
       opacity: 1,
       maxWidth: '90%',
       userSelect: 'none',
       boxShadow: '0 0 0 9999px rgba(0,0,0,1)'
     });
-
     document.body.appendChild(img);
     addHoverHandler(img);
   }
 
-  img.src = currentImagePath;
+  img.src = path;
   img.style.maxHeight = `${window.innerHeight * 0.9}px`;
 }
 
-function broadcastState() {
-  game.socket.emit('module.image-overlay-toggle', {
-    path: currentImagePath,
-    visible: overlayVisible
-  });
-}
-
-function handleSocket(data) {
-  currentImagePath = data.path;
-  overlayVisible   = data.visible;
-  applyOverlay();
-}
-
 /* ------------------------------------------------------------- */
-// Style injector (runs for everyone)
 function injectStyles() {
   if (document.getElementById('io-shared-style')) return;
   const style = document.createElement('style');
@@ -186,14 +206,10 @@ function injectStyles() {
 // Hover fade after 0.5 s of continuous pointer movement; fade opacity 0.35
 function addHoverHandler(img) {
   if (hoverHandler) return;
-
   let movingStart = 0;
-  let lastPosX = 0;
-  let lastPosY = 0;
+  let lastX = 0, lastY = 0;
 
   hoverHandler = event => {
-    if (!img.isConnected) return;
-
     const r = img.getBoundingClientRect();
     const inside = event.clientX >= r.left && event.clientX <= r.right && event.clientY >= r.top && event.clientY <= r.bottom;
 
@@ -203,22 +219,20 @@ function addHoverHandler(img) {
       return;
     }
 
-    const moved = (event.clientX !== lastPosX) || (event.clientY !== lastPosY);
-    lastPosX = event.clientX;
-    lastPosY = event.clientY;
-
+    const moved = (event.clientX !== lastX) || (event.clientY !== lastY);
     if (moved) {
-      movingStart = Date.now();
-    } else if (movingStart && (Date.now() - movingStart > 500)) {
-      img.style.opacity = 0.35;
+      movingStart = movingStart || performance.now();
+      lastX = event.clientX; lastY = event.clientY;
     }
+
+    img.style.opacity = (performance.now() - movingStart > 500) ? 0.35 : 1;
   };
 
-  window.addEventListener('mousemove', hoverHandler);
+  window.addEventListener('pointermove', hoverHandler);
 }
 
 function removeHoverHandler() {
   if (!hoverHandler) return;
-  window.removeEventListener('mousemove', hoverHandler);
+  window.removeEventListener('pointermove', hoverHandler);
   hoverHandler = null;
 }
