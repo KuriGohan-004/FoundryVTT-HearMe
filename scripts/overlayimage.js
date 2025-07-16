@@ -2,12 +2,17 @@
 const POS_KEY = 'controlPos';
 
 Hooks.once('init', () => {
+  // Shared styles (players & GM)
+  injectStyles();
+
+  // Save per‑client panel position setting
   game.settings.register('image-overlay-toggle', POS_KEY, {
     scope: 'client',
     config: false,
     type: Object,
     default: { x: 12, y: window.innerHeight - 60 }
   });
+});
 });
 
 Hooks.once('ready', () => {
@@ -24,39 +29,30 @@ function createOverlayUI() {
   const uiBox = document.createElement('div');
   uiBox.id = 'image-overlay-controls';
 
+  // Restore saved position
   const pos = game.settings.get('image-overlay-toggle', POS_KEY);
-  uiBox.style.position = 'fixed';
-  uiBox.style.left = `${pos.x}px`;
-  uiBox.style.top  = `${pos.y}px`;
-  uiBox.style.display = 'flex';
-  uiBox.style.gap = '4px';
-  uiBox.style.zIndex = 80;
-  uiBox.style.background = 'rgba(0,0,0,0.6)';
-  uiBox.style.padding = '4px';
-  uiBox.style.border = '1px solid #555';
-  uiBox.style.borderRadius = '6px';
+  Object.assign(uiBox.style, {
+    position: 'fixed',
+    left: `${pos.x}px`,
+    top: `${pos.y}px`,
+    display: 'flex',
+    gap: '4px',
+    zIndex: 80,
+    background: 'rgba(0,0,0,0.6)',
+    padding: '4px',
+    border: '1px solid #555',
+    borderRadius: '6px'
+  });
 
-  const style = document.createElement('style');
-  style.textContent = `
-    #image-overlay-controls .io-btn {
-      padding: 4px 6px;
-      border: 1px solid #666;
-      border-radius: 4px;
-      background: rgba(30,30,30,0.9);
-      color: #fff;
-      font-size: 12px;
-      cursor: pointer;
-    }
-    #image-overlay-display { pointer-events: none; transition: opacity 150ms ease; }
-  `;
-  document.head.appendChild(style);
-
-  const thumb = document.createElement('img');
-  thumb.id = 'io-thumb';
-  thumb.width = 32;
-  thumb.height = 32;
-  thumb.style.objectFit = 'cover';
-  thumb.style.border = '1px solid #333';
+  const thumb = Object.assign(document.createElement('img'), {
+    id: 'io-thumb',
+    width: 32,
+    height: 32,
+  });
+  Object.assign(thumb.style, {
+    objectFit: 'cover',
+    border: '1px solid #333'
+  });
 
   const pickBtn = document.createElement('button');
   pickBtn.className = 'io-btn';
@@ -164,6 +160,31 @@ function handleSocket(data) {
 
 /* ------------------------------------------------------------- */
 // Hover fade after 0.5 s of continuous pointer movement; fade opacity 0.35
+// -------------------------------------------------------------
+// Style injector (now runs for everyone)
+function injectStyles() {
+  if (document.getElementById('io-shared-style')) return;
+  const style = document.createElement('style');
+  style.id = 'io-shared-style';
+  style.textContent = `
+    #image-overlay-controls .io-btn {
+      padding: 4px 6px;
+      border: 1px solid #666;
+      border-radius: 4px;
+      background: rgba(30,30,30,0.9);
+      color: #fff;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    #image-overlay-display {
+      pointer-events: none;
+      transition: opacity 150ms ease;
+    }
+  `;
+  document.head.appendChild(style);
+}
+
+// -------------------------------------------------------------
 function addHoverHandler(img) {
   if (hoverHandler) return;
 
