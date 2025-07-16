@@ -45,7 +45,7 @@
       animation:ptbPulse 4s infinite;
       transform:rotate(-90deg);
       transform-origin:bottom left;
-      padding-bottom: -35%;
+      padding-left: 35%;
     }`;
   document.head.appendChild(Object.assign(document.createElement("style"),{textContent:CSS}));
 
