@@ -7,34 +7,37 @@
   const LABEL_ID  = "player-token-bar-label";
   const CENTER_ID = "player-token-bar-center-label";
 
-  /* ---------- Styles (½‑size) ---------- */
+  /* ---------- Styles (full-height, 50 % width) ---------- */
   const CSS = `
     /* Bottom bar --------------------------------------------------- */
     #${BAR_ID}{
-      position:fixed; bottom:0; left:15%; width:50%; height:42px;
-      padding:4px 8px; display:flex; align-items:center; justify-content:center;
-      gap:8px; overflow-x:auto; overflow-y:hidden;
+      position:fixed; bottom:0; left:25%; width:50%; height:84px;
+      padding:6px 10px; display:flex; align-items:center; justify-content:center;
+      gap:10px; overflow-x:auto; overflow-y:hidden;
       background:rgba(0,0,0,.7); border-top:2px solid var(--color-border-light-primary);
       transition:opacity .25s ease; z-index:20; pointer-events:auto;
     }
-    #${BAR_ID}::-webkit-scrollbar{height:6px;}
-    #${BAR_ID}::-webkit-scrollbar-thumb{background:#666;border-radius:3px;}
+    #${BAR_ID}::-webkit-scrollbar{height:8px;}
+    #${BAR_ID}::-webkit-scrollbar-thumb{background:#666;border-radius:4px;}
 
     /* Portraits ----------------------------------------------------- */
     #${BAR_ID} img{
-      width:32px; height:32px; object-fit:cover; border-radius:6px;
+      width:64px; height:64px; object-fit:cover; border-radius:8px;
       border:2px solid #fff; flex:0 0 auto; cursor:pointer;
       transition:transform .15s ease;
     }
-    #${BAR_ID} img:hover          {transform:scale(1.3); z-index:1;}
-    #${BAR_ID} img.selected-token {transform:scale(1.3); z-index:2;}
+    /* Hover preview (slightly larger) */
+    #${BAR_ID} img:hover               {transform:scale(1.20); z-index:1;}
+    /* Selected token – 25 % larger at all times */
+    #${BAR_ID} img.selected-token,
+    #${BAR_ID} img.selected-token:hover{transform:scale(1.25); z-index:2;}
 
     /* Small label above bar ---------------------------------------- */
     #${LABEL_ID}{
-      position:fixed; bottom:48px; left:15%; width:50%;
-      text-align:center; font-size:12px; font-weight:bold; color:#fff;
+      position:fixed; bottom:90px; left:25%; width:50%;
+      text-align:center; font-size:16px; font-weight:bold; color:#fff;
       text-shadow:0 0 4px #000; pointer-events:none; z-index:21;
-      height:18px; line-height:18px; user-select:none;
+      height:24px; line-height:24px; user-select:none;
     }
 
     /* Rotated, pulsing name aligned to sidebar --------------------- */
@@ -48,6 +51,7 @@
       transform-origin:bottom left;
       padding-left:35%;
     }`;
+  
   document.head.appendChild(Object.assign(document.createElement("style"),{textContent:CSS}));
 
   /* ---------- DOM helpers ---------- */
