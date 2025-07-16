@@ -75,7 +75,9 @@ function createOverlayUI() {
     updateState({ visible: !st.visible });
   });
 
+  const state = game.settings.get('image-overlay-toggle', STATE_KEY);
   refreshGMUI(state);
+
   uiBox.append(thumbImg, pickBtn, toggleBtn);
   document.body.appendChild(uiBox);
   makeDraggable(uiBox);
