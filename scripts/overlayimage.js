@@ -7,50 +7,48 @@
   const LABEL_ID  = "player-token-bar-label";
   const CENTER_ID = "player-token-bar-center-label";
 
-  /* ---------- Styles (full-height, 50 % width) ---------- */
-  const CSS = `
-    /* Bottom bar --------------------------------------------------- */
-    #${BAR_ID}{
-      position:fixed; bottom:0; left:25%; width:50%; height:84px;
-      padding:6px 10px; display:flex; align-items:center; justify-content:center;
-      gap:10px; overflow-x:auto; overflow-y:hidden;
-      background:rgba(0,0,0,.7); border-top:2px solid var(--color-border-light-primary);
-      transition:opacity .25s ease; z-index:20; pointer-events:auto;
-    }
-    #${BAR_ID}::-webkit-scrollbar{height:8px;}
-    #${BAR_ID}::-webkit-scrollbar-thumb{background:#666;border-radius:4px;}
+/* ---------- Styles (50 % width, transparent) ---------- */
+const CSS = `
+  /* Bottom bar --------------------------------------------------- */
+  #${BAR_ID}{
+    position:fixed; bottom:0; left:25%; width:50%; height:84px;
+    padding:6px 10px; display:flex;
+    align-items:center; justify-content:center;      /* keep centred */
+    gap:10px; overflow:hidden;                       /* no scrollbar */
+    background:none; border:none;                    /* ← removed bar */
+    z-index:20; pointer-events:auto; transition:opacity .25s ease;
+  }
 
-    /* Portraits ----------------------------------------------------- */
-    #${BAR_ID} img{
-      width:64px; height:64px; object-fit:cover; border-radius:8px;
-      border:2px solid #fff; flex:0 0 auto; cursor:pointer;
-      transition:transform .15s ease;
-    }
-    /* Hover preview (slightly larger) */
-    #${BAR_ID} img:hover               {transform:scale(1.20); z-index:1;}
-    /* Selected token – 25 % larger at all times */
-    #${BAR_ID} img.selected-token,
-    #${BAR_ID} img.selected-token:hover{transform:scale(1.25); z-index:2;}
+  /* Portraits ----------------------------------------------------- */
+  #${BAR_ID} img{
+    width:64px; height:64px; object-fit:cover; border-radius:8px;
+    border:2px solid #fff; flex:0 0 auto; cursor:pointer;
+    transition:transform .15s ease;
+  }
+  #${BAR_ID} img:hover               {transform:scale(1.20); z-index:1;}
+  #${BAR_ID} img.selected-token,
+  #${BAR_ID} img.selected-token:hover{transform:scale(1.25); z-index:2;}
 
-    /* Small label above bar ---------------------------------------- */
-    #${LABEL_ID}{
-      position:fixed; bottom:90px; left:25%; width:50%;
-      text-align:center; font-size:16px; font-weight:bold; color:#fff;
-      text-shadow:0 0 4px #000; pointer-events:none; z-index:21;
-      height:24px; line-height:24px; user-select:none;
-    }
+  /* Small label above bar ---------------------------------------- */
+  #${LABEL_ID}{
+    position:fixed; bottom:90px; left:25%; width:50%;
+    text-align:center; font-size:16px; font-weight:bold; color:#fff;
+    text-shadow:0 0 4px #000; pointer-events:none; z-index:21;
+    height:24px; line-height:24px; user-select:none;
+  }
 
-    /* Rotated, pulsing name aligned to sidebar --------------------- */
-    @keyframes ptbPulse{0%,100%{opacity:1;}50%{opacity:.5;}}
-    #${CENTER_ID}{
-      position:fixed;
-      font-size:48px; font-weight:bold; font-style:italic; color:#fff; text-shadow:0 0 8px #000;
-      pointer-events:none; z-index:40; user-select:none;
-      animation:ptbPulse 4s infinite;
-      transform:rotate(-90deg);
-      transform-origin:bottom left;
-      padding-left:35%;
-    }`;
+  /* Rotated, pulsing name aligned to sidebar --------------------- */
+  @keyframes ptbPulse{0%,100%{opacity:1;}50%{opacity:.5;}}
+  #${CENTER_ID}{
+    position:fixed;
+    font-size:48px; font-weight:bold; font-style:italic; color:#fff; text-shadow:0 0 8px #000;
+    pointer-events:none; z-index:40; user-select:none;
+    animation:ptbPulse 4s infinite;
+    transform:rotate(-90deg);
+    transform-origin:bottom left;
+    padding-left:35%;
+  }`;
+
   
   document.head.appendChild(Object.assign(document.createElement("style"),{textContent:CSS}));
 
@@ -106,31 +104,67 @@
     return canvas.tokens.placeables.filter(t => canControl(t));
   }
 
-  /* ---------- Build / refresh bar ---------- */
-  function refresh(){
-    const b=bar();
-    if(combatRunning()){b.style.opacity="0";b.style.pointerEvents="none";setSmall("");return;}
+/* ---------- Build / refresh bar ---------- */
+function refresh(){
+  const b = bar();
 
-    b.style.opacity="1";b.style.pointerEvents="auto";b.replaceChildren();
-    orderedIds=[];ownedIds=[];
-    for(const t of displayTokens()){
-      orderedIds.push(t.id);
-      if(canControl(t)) ownedIds.push(t.id);
-
-      const img=document.createElement("img");
-      img.src=imgSrc(t); img.alt=t.name;
-      if(t.id===selectedId) img.classList.add("selected-token");
-
-      img.onclick       = ()  => clickBarToken(t);
-      img.onmouseenter  = ()  => setSmall(t.name,alwaysCenter&&t.id===selectedId);
-      img.onmouseleave  = ()  => {const s=canvas.tokens.get(selectedId); setSmall(s?.name??"",alwaysCenter);};
-
-      b.appendChild(img);
-    }
-    const sTok=canvas.tokens.get(selectedId);
-    const nm=sTok?.name??"";
-    setSmall(nm,alwaysCenter); showCenter(nm);
+  /* Hide during combat turn list */
+  if (combatRunning()){
+    b.style.opacity = "0";
+    b.style.pointerEvents = "none";
+    setSmall("");
+    return;
   }
+  b.style.opacity = "1";
+  b.style.pointerEvents = "auto";
+  b.replaceChildren();
+
+  /* All tokens that should exist in the bar (GM vs player view) */
+  const allToks   = displayTokens();
+  if (!allToks.length) { setSmall(""); return; }
+
+  /* Ensure we have a valid selection */
+  if (!selectedId || !allToks.some(t => t.id === selectedId))
+    selectedId = allToks[0].id;
+
+  /* Rebuild navigation arrays used by key‑bindings */
+  ownedIds   = allToks.filter(canControl).map(t => t.id);
+  orderedIds = allToks.map(t => t.id);
+
+  /* ---- Determine which icons to show (prev • selected • next) ---- */
+  const selIdx = allToks.findIndex(t => t.id === selectedId);
+  const prev   = allToks[(selIdx - 1 + allToks.length) % allToks.length];
+  const next   = allToks[(selIdx + 1) % allToks.length];
+
+  /* De‑duplicate when only 1‑2 tokens exist */
+  const toShow = [prev, allToks[selIdx], next]
+    .filter((t,i,self) => self.findIndex(o => o.id === t.id) === i);
+
+  /* ---- Render icons ---- */
+  for (const t of toShow){
+    const img = document.createElement("img");
+    img.src = imgSrc(t);
+    img.alt = t.name;
+    if (t.id === selectedId) img.classList.add("selected-token");
+
+    /* CLICK → switch selection (fixes the “clicking no longer works” issue) */
+    img.onclick      = () => selectToken(t);
+    img.onmouseenter = () => setSmall(t.name, alwaysCenter && t.id === selectedId);
+    img.onmouseleave = () => {
+      const s = canvas.tokens.get(selectedId);
+      setSmall(s?.name ?? "", alwaysCenter);
+    };
+
+    b.appendChild(img);
+  }
+
+  /* Label + big centre name */
+  const curTok = canvas.tokens.get(selectedId);
+  const nm     = curTok?.name ?? "";
+  setSmall(nm, alwaysCenter);
+  showCenter(nm);
+}
+
 
   /* ---------- Selection helpers (unchanged) ---------- */
   function selectToken(t){
