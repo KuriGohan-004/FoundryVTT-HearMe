@@ -1,11 +1,16 @@
-// === INIT SOUND & SKIP KEY SETTINGS ===
+// === VN Chat Module with GM‑Controlled Portrait & Speaker‑Specific Sounds ===
+//  Full script.  Portrait: size & offsets via GM settings.  Custom ping per speaker:
+//    * customPingMap (object): keys = name fragments, values = sound paths.
+//      Longest matching fragment in actor name wins (ties -> first entered).
+
+/* ---------------------------------------------------------------------
+ *  INIT: register settings
+ * ------------------------------------------------------------------ */
 Hooks.once("init", () => {
-  /* ---------------------------------------------------------------------
-   * ORIGINAL SETTINGS
-   * ------------------------------------------------------------------ */
+  /* Default ping sound */
   game.settings.register("hearme-chat-notification", "pingSound", {
-    name: "Chat Notification Sound",
-    hint: "The sound to play when a new VN chat message is displayed.",
+    name: "Default Chat Ping Sound",
+    hint: "Sound that plays if no speaker‑specific match is found.",
     scope: "world",
     config: true,
     type: String,
@@ -13,48 +18,73 @@ Hooks.once("init", () => {
     filePicker: "audio"
   });
 
+  /* Per‑client skip key */
   game.settings.register("hearme-chat-notification", "skipKey", {
-    name: "Skip Key",
-    hint: "Key to press to skip chat dialogue (default: Q).",
+    name: "Skip Key (client)",
     scope: "client",
     config: true,
     type: String,
     default: "q"
   });
 
-  /* ---------------------------------------------------------------------
-   * NEW SETTINGS
-   * ------------------------------------------------------------------ */
+  /* Speaker‑specific ping map */
+  game.settings.register("hearme-chat-notification", "customPingMap", {
+    name: "Speaker Sound Map",
+    hint: "Object where keys = name fragments (case‑insensitive) and values = sound file paths. Longest matching key contained in actor name is used.",
+    scope: "world",
+    config: true,
+    type: Object,
+    default: {}
+  });
+
+  /* GM‑controlled portrait settings */
   game.settings.register("hearme-chat-notification", "portraitEnabled", {
-    name: "Enable Character Portrait",
-    hint: "Toggle display of character portraits in VN banner.",
-    scope: "client",
+    name: "Enable Portrait",
+    scope: "world",
     config: true,
     type: Boolean,
     default: true
   });
 
-  game.settings.register("hearme-chat-notification", "portraitSize", {
-    name: "Portrait Size (vw)",
-    hint: "Width/height of the portrait as viewport‑width units.",
-    scope: "client",
+  game.settings.register("hearme-chat-notification", "portraitSizePercent", {
+    name: "Portrait Size (% of screen width)",
+    scope: "world",
     config: true,
     type: Number,
-    range: { min: 10, max: 60, step: 1 },
-    default: 31
+    range: { min: 5, max: 23, step: 1 },
+    default: 13
+  });
+
+  game.settings.register("hearme-chat-notification", "portraitOffsetXPercent", {
+    name: "Portrait Offset X (% from left)",
+    scope: "world",
+    config: true,
+    type: Number,
+    range: { min: 0, max: 50, step: 1 },
+    default: 0
+  });
+
+  game.settings.register("hearme-chat-notification", "portraitOffsetYPercent", {
+    name: "Portrait Offset Y (% from bottom)",
+    scope: "world",
+    config: true,
+    type: Number,
+    range: { min: 0, max: 50, step: 1 },
+    default: 0
   });
 });
 
-/* ========================================================================
+/* =====================================================================
  *  MAIN MODULE LOGIC (IIFE)
- * ===================================================================== */
+ * ===================================================================*/
 (() => {
-  /* --------------------------- CONSTANTS ----------------------------- */
+  /* --------------------------- CONSTANTS ------------------------- */
   const AUTO_SKIP_MIN_SECONDS = 3;
-  const AUTO_SKIP_BASE_DELAY  = 5000;   // ms
-  const AUTO_SKIP_CHAR_DELAY  = 50;     // ms / character
+  const AUTO_SKIP_BASE_DELAY  = 5000;
+  const AUTO_SKIP_CHAR_DELAY  = 50;
+  const TYPE_SPEED_MS         = 20;
 
-  /* --------------------------- STATE -------------------------------- */
+  /* --------------------------- STATE ----------------------------- */
   let banner   = document.getElementById("vn-chat-banner");
   let imgElem  = document.getElementById("vn-chat-image");
   let arrow    = document.getElementById("vn-chat-arrow");
@@ -67,25 +97,35 @@ Hooks.once("init", () => {
   let currentSpeaker = null;
   const queue        = [];
 
-  /* --------------------------- HELPERS ------------------------------ */
-  const portraitEnabled = () => game.settings.get("hearme-chat-notification", "portraitEnabled");
-  const portraitSize    = ()  => game.settings.get("hearme-chat-notification", "portraitSize");
+  /* --------------------------- HELPERS --------------------------- */
+  const gSetting = (key) => game.settings.get("hearme-chat-notification", key);
 
-  function playChatSound() {
-    const src = game.settings.get("hearme-chat-notification", "pingSound");
+  /* Speaker‑specific sound selection */
+  function selectSoundForName(name) {
+    const map = gSetting("customPingMap") || {};
+    const lowerName = name.toLowerCase();
+    let bestKey = null;
+    for (const key of Object.keys(map)) {
+      if (!key) continue;
+      const lk = key.toLowerCase();
+      if (lowerName.includes(lk)) {
+        if (!bestKey || lk.length > bestKey.length) bestKey = key;
+      }
+    }
+    return bestKey ? map[bestKey] : gSetting("pingSound");
+  }
+
+  function playChatSound(speakerName) {
+    const src = selectSoundForName(speakerName);
     if (!src) return;
     if (game.audio?.context?.state === "suspended") game.audio.context.resume();
     AudioHelper.play({ src, volume: 0.8, autoplay: true, loop: false }, true);
   }
 
-  function sanitizeHtml(str) {
-    // Allow <br>, <b>, <strong>, <i>, <em>, <u>
-    return str.replace(/<(?!\/?(br|b|strong|i|em|u)\b)[^>]*>/gi, "");
-  }
+  function sanitizeHtml(str) { return str.replace(/<(?!\/?(br|b|strong|i|em|u)\b)[^>]*>/gi, ""); }
 
-  /* --------------------------- DOM SETUP ---------------------------- */
+  /* --------------------------- DOM SETUP ------------------------- */
   function ensureDom() {
-    /* Banner --------------------------------------------------------- */
     if (!banner) {
       banner = document.createElement("div");
       banner.id = "vn-chat-banner";
@@ -112,29 +152,26 @@ Hooks.once("init", () => {
         opacity: "0",
         pointerEvents: "none"
       });
-      banner.innerHTML = 
+      banner.innerHTML = `
         <div id="vn-chat-name" style="font-weight:bold;font-size:1.2em;margin-bottom:4px;"></div>
-        <div id="vn-chat-msg" style="font-size:2.2em;"></div>
+        <div id="vn-chat-msg"  style="font-size:2.2em;"></div>
         <div id="vn-chat-arrow" style="position:absolute;bottom:8px;right:16px;font-size:1.5em;opacity:0.5;display:none;">&#8595;</div>
-        <div id="vn-chat-timer" style="position:absolute;bottom:0;left:0;height:5px;width:100%;background:white;transform-origin:left;transform:scaleX(1);transition:transform linear;opacity:1;"></div>;
+        <div id="vn-chat-timer" style="position:absolute;bottom:0;left:0;height:5px;width:100%;background:white;transform-origin:left;transform:scaleX(1);"></div>`;
       document.body.appendChild(banner);
       arrow    = document.getElementById("vn-chat-arrow");
       timerBar = document.getElementById("vn-chat-timer");
     }
 
-    /* Portrait ------------------------------------------------------- */
     if (!imgElem) {
       imgElem = document.createElement("img");
       imgElem.id = "vn-chat-image";
       Object.assign(imgElem.style, {
         position: "fixed",
-        objectFit: "contain",
+        objectFit: "cover",
         zIndex: 98,
         pointerEvents: "none",
         transition: "opacity 0.5s ease",
-        opacity: "0",
-        left: "0",
-        top: "0"
+        opacity: "0"
       });
       document.body.appendChild(imgElem);
     }
@@ -142,130 +179,88 @@ Hooks.once("init", () => {
     applyPortraitSettings();
   }
 
+  /* --------------- PORTRAIT SIZE & POSITION (GM SETTINGS) -------- */
   function applyPortraitSettings() {
     if (!imgElem) return;
-    const size = portraitSize();
-    imgElem.style.width  = ${size}vw;
-    imgElem.style.height = ${size}vw;
-    imgElem.style.display = portraitEnabled() ? "block" : "none";
-    positionPortrait();
+
+    imgElem.style.display = gSetting("portraitEnabled") ? "block" : "none";
+
+    const sizePct    = gSetting("portraitSizePercent");
+    const offsetXPct = gSetting("portraitOffsetXPercent");
+    const offsetYPct = gSetting("portraitOffsetYPercent");
+
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+
+    const sizePx   = (sizePct / 100) * vw;
+    const leftPx   = (offsetXPct / 100) * vw;
+    const bottomPx = (offsetYPct / 100) * vh;
+
+    Object.assign(imgElem.style, {
+      width:  `${sizePx}px`,
+      height: `${sizePx}px`,
+      left:   `${leftPx}px`,
+      bottom: `${bottomPx}px`
+    });
   }
 
-  Hooks.on("closeSettingsConfig", applyPortraitSettings);
-  window.addEventListener("resize", positionPortrait);
+  Hooks.on("updateSetting", (ns, key) => {
+    if (ns !== "hearme-chat-notification") return;
+    if (["portraitEnabled", "portraitSizePercent", "portraitOffsetXPercent", "portraitOffsetYPercent"].includes(key)) applyPortraitSettings();
+  });
+  window.addEventListener("resize", applyPortraitSettings);
 
-  /* ---------------------- PORTRAIT POSITIONING --------------------- */
-  function positionPortrait() {
-    if (!portraitEnabled() || !banner || !imgElem) return;
-    const bannerRect = banner.getBoundingClientRect();
-    const imgRect    = imgElem.getBoundingClientRect();
+  /* ----------------------- PORTRAIT FADE‑IN ----------------------- */
+  function showPortraitForSpeaker(name, imgSrc) {
+    if (!gSetting("portraitEnabled")) return;
+    if (name === currentSpeaker) return;
 
-    // Right edge flush against banner's left edge
-    const left = bannerRect.left - imgRect.width;
-    // Vertical centre alignment
-    const top  = bannerRect.top + (bannerRect.height / 2) - (imgRect.height / 2);
-
-    imgElem.style.left = ${left}px;
-    imgElem.style.top  = ${top}px;
+    imgElem.style.opacity = "0";
+    if (imgSrc) imgElem.src = imgSrc;
+    imgElem.onload = () => { applyPortraitSettings(); imgElem.style.opacity = "1"; };
+    currentSpeaker = name;
   }
 
-  /* --------------------------- TYPEWRITER -------------------------- */
-  function typeHtml(el, html, speed = 20, done) {
+  /* --------------------------- TYPEWRITER ------------------------ */
+  function typeHtml(element, html, callback) {
     typing = true;
     const parts = sanitizeHtml(html).split(/(<[^>]+>)/).filter(Boolean);
-    el.innerHTML = "";
+    element.innerHTML = "";
     let p = 0, c = 0;
-    const next = () => {
-      if (p >= parts.length) { typing = false; done?.(); return; }
+    (function next() {
+      if (p >= parts.length) { typing = false; callback?.(); return; }
       const seg = parts[p];
-      if (seg.startsWith("<")) { el.innerHTML += seg; p++; next(); }
+      if (seg.startsWith("<")) { element.innerHTML += seg; p++; next(); }
       else {
-        if (c < seg.length) { el.innerHTML += seg.charAt(c++); setTimeout(next, speed); }
+        if (c < seg.length) { element.innerHTML += seg.charAt(c++); setTimeout(next, TYPE_SPEED_MS); }
         else { p++; c = 0; next(); }
       }
-    };
-    next();
+    })();
   }
 
-  /* ------------------------ AUTO‑SKIP TIMER ------------------------ */
-  function resetTimer() {
-    clearTimeout(autoSkipTimer);
-    autoSkipTimer = null;
-    timerBar.style.transition = "none";
-    timerBar.style.transform  = "scaleX(1)";
-    timerBar.style.opacity    = "1";
-  }
-
+  /* ------------------------ AUTO‑SKIP TIMER ---------------------- */
+  function resetTimer() { clearTimeout(autoSkipTimer); autoSkipTimer = null; timerBar.style.transition = "none"; timerBar.style.transform = "scaleX(1)"; timerBar.style.opacity = "1"; }
   function startTimer(chars) {
-    const duration = Math.max(AUTO_SKIP_MIN_SECONDS * 1000, AUTO_SKIP_BASE_DELAY + chars * AUTO_SKIP_CHAR_DELAY);
-    autoSkipStart  = Date.now();
-    autoSkipRemain = duration;
-
-    timerBar.style.transition = "none";
-    timerBar.style.transform  = "scaleX(1)";
-    setTimeout(() => {
-      timerBar.style.transition = transform ${duration}ms linear;
-      timerBar.style.transform  = "scaleX(0)";
-    }, 20);
-
-    autoSkipTimer = setTimeout(skipMessage, duration);
+    const dur = Math.max(AUTO_SKIP_MIN_SECONDS*1000, AUTO_SKIP_BASE_DELAY + chars*AUTO_SKIP_CHAR_DELAY);
+    autoSkipStart = Date.now(); autoSkipRemain = dur;
+    timerBar.style.transition = `transform ${dur}ms linear`; timerBar.style.transform = "scaleX(0)";
+    autoSkipTimer = setTimeout(skipMessage, dur);
   }
+  window.addEventListener("blur", () => { if(!autoSkipTimer)return; clearTimeout(autoSkipTimer); autoSkipRemain -= Date.now()-autoSkipStart; autoSkipTimer=null; timerBar.style.transition="none"; timerBar.style.transform=`scaleX(${autoSkipRemain/(AUTO_SKIP_BASE_DELAY+AUTO_SKIP_MIN_SECONDS*1000)})`; });
+  window.addEventListener("focus", () => { if(autoSkipTimer||!autoSkipRemain)return; autoSkipStart=Date.now(); timerBar.style.transition=`transform ${autoSkipRemain}ms linear`; timerBar.style.transform="scaleX(0)"; autoSkipTimer=setTimeout(skipMessage,autoSkipRemain); });
 
-  function pauseTimer() {
-    if (!autoSkipTimer) return;
-    clearTimeout(autoSkipTimer);
-    autoSkipRemain -= Date.now() - autoSkipStart;
-    autoSkipTimer   = null;
-    const ratio = autoSkipRemain / (AUTO_SKIP_BASE_DELAY + AUTO_SKIP_MIN_SECONDS * 1000);
-    timerBar.style.transition = "none";
-    timerBar.style.transform  = scaleX(${ratio});
-  }
-
-  function resumeTimer() {
-    if (autoSkipTimer || !autoSkipRemain) return;
-    autoSkipStart = Date.now();
-    timerBar.style.transition = transform ${autoSkipRemain}ms linear;
-    timerBar.style.transform  = "scaleX(0)";
-    autoSkipTimer = setTimeout(skipMessage, autoSkipRemain);
-  }
-
-  /* -------------------------- DISPLAY MSG ------------------------- */
+  /* -------------------------- DISPLAY MSG ------------------------ */
   function updateArrow() { arrow.style.display = queue.length ? "block" : "none"; }
 
   function displayMessage({ name, msg, image, userId }) {
     resetTimer();
-
     const nameEl = banner.querySelector("#vn-chat-name");
     const msgEl  = banner.querySelector("#vn-chat-msg");
-
     nameEl.textContent = name;
-    banner.style.display = "flex";
-    requestAnimationFrame(() => {
-      banner.style.opacity = "1";
-      positionPortrait();
-    });
-
-    if (portraitEnabled()) {
-      if (name !== currentSpeaker) {
-        imgElem.style.opacity = "0";
-        if (image) imgElem.src = image;
-        // Wait for layout to settle, then fade in & reposition
-        setTimeout(() => {
-          positionPortrait();
-          imgElem.style.opacity = "1";
-        }, 50);
-        currentSpeaker = name;
-      } else {
-        positionPortrait();
-      }
-    }
-
-    if (userId === game.user.id) playChatSound();
-
-    typeHtml(msgEl, msg, 20, () => {
-      updateArrow();
-      if (document.hasFocus()) startTimer(msgEl.textContent.length);
-    });
+    banner.style.display = "flex"; requestAnimationFrame(() => banner.style.opacity = "1");
+    showPortraitForSpeaker(name, image);
+    if (userId === game.user.id) playChatSound(name);
+    typeHtml(msgEl, msg, () => { updateArrow(); if (document.hasFocus()) startTimer(msgEl.textContent.length); });
   }
 
   function skipMessage() {
@@ -275,26 +270,21 @@ Hooks.once("init", () => {
     else {
       banner.style.opacity = "0";
       imgElem.style.opacity = "0";
-      setTimeout(() => {
-        banner.style.display = "none";
-        currentSpeaker = null;
-      }, 250);
+      setTimeout(() => { banner.style.display = "none"; currentSpeaker = null; }, 250);
     }
   }
 
-  /* --------------------------- EVENTS ----------------------------- */
-  document.addEventListener("keydown", ev => {
+  /* ----------------------------- INPUT --------------------------- */
+  document.addEventListener("keydown", (ev) => {
     if (document.activeElement?.closest(".chat-message") || document.activeElement?.tagName === "TEXTAREA") return;
     if (document.querySelector(".app.window-app.sheet:not(.minimized)")) return;
-    const key = game.settings.get("hearme-chat-notification", "skipKey").toLowerCase();
+    const key = gSetting("skipKey").toLowerCase();
     if (ev.key.toLowerCase() === key || ev.key === "Tab") { ev.preventDefault(); skipMessage(); }
   });
 
-  window.addEventListener("blur", pauseTimer);
-  window.addEventListener("focus", resumeTimer);
-
-  Hooks.on("createChatMessage", message => {
-    if (!message.visible || message.isRoll) return; // Ignore dice rolls / hidden
+  /* ---------------------------- CHAT ----------------------------- */
+  Hooks.on("createChatMessage", (message) => {
+    if (!message.visible || message.isRoll) return;
     if (!message.speaker?.actor) return;
 
     const actor = game.actors.get(message.speaker.actor);
@@ -314,6 +304,6 @@ Hooks.once("init", () => {
     else displayMessage(entry);
   });
 
-  /* -------------------------- INIT -------------------------------- */
+  /* --------------------------- INIT ------------------------------ */
   ensureDom();
 })();
