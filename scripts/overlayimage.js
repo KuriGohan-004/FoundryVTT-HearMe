@@ -407,6 +407,63 @@ Hooks.on("combatTurnChange", (combat /* Combat */, _prior, _current) => {
   if (game.user.isGM || canControl(tok)) selectToken(tok);
 });
 
+/* -------------------------------------------------------------------
+ *  Auto‑kill tokens whose **both** bars hit 0
+ * ----------------------------------------------------------------- */
+(function registerDeathWatcher(){
+
+  /** Helper: does this token have both bars reduced to ≤ 0 ? */
+  function isReallyDead(tok){
+    if (!tok?.document) return false;
+    /* Grab the data behind each bar (null if bar not configured) */
+    const b1 = tok.document.getBarAttribute("bar1") /* bar 1 */;   // :contentReference[oaicite:0]{index=0}
+    const b2 = tok.document.getBarAttribute("bar2") /* bar 2 */;
+
+    if (!b1 || !b2) return false;                 /* need both bars present */
+
+    return (Number(b1.value) <= 0) && (Number(b2.value) <= 0);
+  }
+
+  /** Do the appropriate ‘death’ behaviour for a token */
+  async function handleDeath(tok){
+    if (!tok) return;
+
+    if (!tok.document.actorLink){                 /* === un‑linked clone === */
+      await tok.document.delete();                /* remove from scene      */
+      return;
+    }
+
+    /* === linked token: slap on a big skull overlay ================ */
+    const icon = CONFIG.controlIcons?.defeated ?? "icons/svg/skull.svg";   // :contentReference[oaicite:1]{index=1}
+
+    /* Skip if it’s already marked dead */
+    if (tok.document.overlayEffect === icon) return;
+
+    await tok.document.update({ overlayEffect: icon });
+    /* If you prefer a right‑click status effect instead, swap to:
+       await tok.document.toggleActiveEffect({icon, label:"Dead", id:"dead"}, {overlay:true, active:true});
+       // toggleActiveEffect is a TokenDocument helper :contentReference[oaicite:2]{index=2}
+    */
+  }
+
+  /** Main checker */
+  async function checkTokenDeath(tok){
+    if (!tok || !isReallyDead(tok)) return;
+    await handleDeath(tok);
+  }
+
+  /* ---------------------------------------------------------------
+   * React to *any* change that might affect bar values
+   * ------------------------------------------------------------- */
+  Hooks.on("updateToken",  (doc)         => checkTokenDeath(canvas.tokens.get(doc.id)));
+  Hooks.on("updateActor",  (actor)       => {
+    /* An actor may have several linked tokens on this scene         */
+    canvas.tokens.placeables
+      .filter(t => t?.actor?.id === actor.id)
+      .forEach(checkTokenDeath);
+  });
+
+})();   /*  ← keep this *inside* the big IIFE, but above its own }); */
 
   
 
