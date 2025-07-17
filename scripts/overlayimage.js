@@ -1,7 +1,7 @@
 /***********************************************************************
  * Player Token Bar  – rotated fading name aligned to sidebar
  *  • v2 – user‑owned only, GM omnibus view, half‑sized bar
- *  • Bugfixed to avoid selection lag in Follow mode
+ *  • Bugfixed: Follow mode lag resolved by deduping camera pans
  **********************************************************************/
 (() => {
   const BAR_ID = "player-token-bar";
@@ -158,8 +158,14 @@
       ignoreNextControl = true;
       t.control({ releaseOthers: true });
     }
-    if (alwaysCenter) lastFollowedPos = { x: t.center.x, y: t.center.y };
-    canvas.animatePan({ x: t.center.x, y: t.center.y, scale: canvas.stage.scale.x, duration: 250 });
+
+    if (alwaysCenter) {
+      lastFollowedPos = { x: t.center.x, y: t.center.y };
+      canvas.pan({ x: t.center.x, y: t.center.y, scale: canvas.stage.scale.x }); // Instant pan to avoid lag
+    } else {
+      canvas.animatePan({ x: t.center.x, y: t.center.y, scale: canvas.stage.scale.x, duration: 250 }); // Smooth if not in follow
+    }
+
     showCenter(t.name);
     refresh();
   }
@@ -179,7 +185,7 @@
     const token = canvas.tokens.get(doc.id);
     if (!token) return;
 
-    refresh(); // consolidated update handler
+    refresh();
 
     if (alwaysCenter && doc.id === selectedId) {
       const gridSize = canvas.grid.size;
@@ -277,7 +283,6 @@
   Hooks.on("deleteToken", refresh);
   Hooks.on("updateActor", refresh);
   Hooks.on("deleteCombat", refresh);
-
 
 
   /* ---------- Improved ENTER behaviour --------------------------- */
