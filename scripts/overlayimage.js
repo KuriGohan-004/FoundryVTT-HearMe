@@ -3,7 +3,6 @@
   const LABEL_ID = "player-token-bar-label";
   const CENTER_ID = "player-token-bar-center-label";
 
-  // ✅ Define this FIRST so the toggle button can see it
   let alwaysCenter = false;
 
   Hooks.on("getSceneControlButtons", (controls) => {
@@ -203,6 +202,14 @@
 
   function selectToken(t) {
     if (!t) return;
+
+    // Close all open actor sheets before switching
+    for (const app of Object.values(ui.windows)) {
+      if (app?.object instanceof Actor) {
+        app.close();
+      }
+    }
+
     selectedId = t.id;
     if (canControl(t)) {
       ignoreNextControl = true;
@@ -272,6 +279,8 @@
     }
     if (!controlled) return;
     if (!canControl(token)) return;
+    if (!alwaysCenter) return;
+
     if (token.id !== selectedId) {
       selectToken(token);
     }
@@ -330,6 +339,7 @@
     setFollowMode,
     isFollowMode
   };
+
 
 
   /* ---------- Improved ENTER behaviour --------------------------- */
