@@ -475,38 +475,35 @@ Hooks.once("ready", () => {
 /***********************************************************************
    * Follow Mode: Smart Clicks & Disable Dragging
    **********************************************************************/
-Hooks.once("canvasReady", () => {
-  // Use delegated event listener on the tokens layer
-  const tokensLayer = canvas.tokens?.layer?.element;
-  if (!tokensLayer) return;
+// Save original _onClickLeft method for restoring later if needed
+const originalOnClickLeft = Token.prototype._onClickLeft;
 
-  tokensLayer.on("click", ".token", async (event) => {
-    if (!window.playerTokenBar.isFollowMode()) return;  // Only act if Follow Mode ON
-
-    // Prevent default token control/selection behavior
-    event.stopImmediatePropagation();
+Token.prototype._onClickLeft = async function(event) {
+  // Check if Follow Mode is ON
+  if (window.playerTokenBar?.isFollowMode()) {
     event.preventDefault();
+    event.stopPropagation();
 
-    // Find the token id from the clicked element
-    const tokenId = event.currentTarget?.id;
-    if (!tokenId) return;
-
-    const token = canvas.tokens.get(tokenId);
-    if (!token) return;
-
+    const token = this;
     const userTargets = game.user.targets;
     const isTargeted = userTargets.has(token.document);
 
     if (isTargeted) {
-      // If already targeted, clear ALL targets
+      // Clear all targets
       await game.user.updateTokenTargets([], false);
     } else {
-      // Otherwise, clear all targets and target this token
+      // Clear all targets, then target clicked token
       await game.user.updateTokenTargets([], false);
       await game.user.updateTokenTargets(token.document, true);
     }
-  });
-});
+    // Return here so original selection logic does NOT run
+    return;
+  } else {
+    // Follow Mode off, run original token click behavior
+    return originalOnClickLeft.call(this, event);
+  }
+};
+
 
 
 
