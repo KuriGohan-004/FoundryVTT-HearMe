@@ -35,9 +35,7 @@
       user-select:none; animation:ptbPulse 4s infinite;
       transform:rotate(-90deg) translateY(100%);
       transform-origin:bottom left;
-      white-space:nowrap; overflow:visible; /* FIX rotated name overflow */
-      max-width: 120vh; /* arbitrary max width to prevent clipping */
-      left:0;
+      white-space:nowrap; overflow:visible; left:0;
     }`;
 
   document.head.appendChild(Object.assign(document.createElement("style"), { textContent: CSS }));
@@ -52,6 +50,7 @@
   let orderedIds = [];
   let ownedIds = [];
   let lastFollowedPos = null;
+  let isSelecting = false; // flag to prevent rapid re-selection
 
   const combatRunning = () => !!(game.combat?.started && game.combat.scene?.id === canvas.scene?.id);
   const canControl = t => t.isOwner || t.actor?.isOwner;
@@ -88,7 +87,8 @@
     if (combatRunning()) {
       b.style.opacity = "0";
       b.style.pointerEvents = "none";
-      setSmall(""); return;
+      setSmall(""); 
+      return;
     }
 
     b.style.opacity = "1";
@@ -154,34 +154,41 @@
     showCenter(nm);
   }
 
-  function selectToken(t) {
-    if (!t) return;
-    selectedId = t.id;
-    if (canControl(t)) t.control({ releaseOthers: true });
-    if (alwaysCenter) lastFollowedPos = { x: t.center.x, y: t.center.y };
-    // FOLLOW MODE CAMERA MOVEMENT (Instant, no animation) - FIX
-    if (alwaysCenter) {
-      canvas.pan({ x: t.center.x, y: t.center.y, scale: canvas.stage.scale.x });
-    } else {
-      canvas.animatePan({ x: t.center.x, y: t.center.y, scale: canvas.stage.scale.x, duration: 250 });
+  // Updated selectToken with async animated pan and debounce
+  async function selectToken(token) {
+    if (!token) return;
+    if (token.id === selectedId || isSelecting) return;
+
+    isSelecting = true;
+
+    selectedId = token.id;
+
+    if (canControl(token)) {
+      token.control({ releaseOthers: true });
     }
-    showCenter(t.name);
+
+    lastFollowedPos = { x: token.center.x, y: token.center.y };
+    showCenter(token.name);
+
+    await canvas.animatePan({ x: token.center.x, y: token.center.y, scale: canvas.stage.scale.x, duration: 500 });
+
     refresh();
+
+    isSelecting = false;
   }
 
+  // Updated toggleFollow to use animated pan
   function toggleFollow() {
     if (!selectedId) return;
     alwaysCenter = !alwaysCenter;
     const t = canvas.tokens.get(selectedId);
     if (t && alwaysCenter) {
       lastFollowedPos = { x: t.center.x, y: t.center.y };
-      // FOLLOW MODE CAMERA MOVEMENT (Instant) - FIX
-      canvas.pan({ x: t.center.x, y: t.center.y, scale: canvas.stage.scale.x });
+      canvas.animatePan({ x: t.center.x, y: t.center.y, scale: canvas.stage.scale.x, duration: 500 });
     }
     setSmall(t?.name ?? "", alwaysCenter);
   }
 
-  // UPDATE TOKEN - ONLY PAN IF MOVED 3 SQUARES - SMOOTH PAN - FIX
   Hooks.on("updateToken", (doc) => {
     if (!alwaysCenter || doc.id !== selectedId) return;
     const token = canvas.tokens.get(doc.id);
@@ -200,27 +207,13 @@
     const movedSquares = Math.max(dx, dy) / gridSize;
 
     if (movedSquares >= 3) {
-      // Smooth pan - you can change duration to 0 for instant
       canvas.animatePan({ x: newPos.x, y: newPos.y, scale: canvas.stage.scale.x, duration: 250 });
       lastFollowedPos = newPos;
     }
   });
 
-  // CONTROL TOKEN - FOLLOW MODE BUG FIX - RESELECT IF DESELECTED - FIX
   Hooks.on("controlToken", (token, controlled) => {
-    if (!token) return;
-
-    // If follow mode is on and no token is controlled, reselect last selected token
-    if (alwaysCenter && !controlled && token.id === selectedId) {
-      // Reselect to keep WASD & selection working
-      token.control({ releaseOthers: true });
-      lastFollowedPos = { x: token.center.x, y: token.center.y };
-      refresh();
-      return;
-    }
-
-    if (!controlled) return;
-
+    if (!token || !controlled) return;
     const alreadySelected = token.id === selectedId;
 
     if (alwaysCenter && !alreadySelected) {
@@ -239,105 +232,28 @@
 
   function cycleOwned(o) {
     if (!ownedIds.length) return;
-    let idx = ownedIds.indexOf(selectedId); if (idx === -1) idx = 0;
-    const next = canvas.tokens.get(ownedIds[(idx + o + ownedIds.length) % ownedIds.length]);
-    if (next) selectToken(next);
+    let idx = ownedIds.indexOf(selectedId);
+    if (idx < 0) idx = 0;
+    else idx = (idx + o + ownedIds.length) % ownedIds.length;
+    selectToken(canvas.tokens.get(ownedIds[idx]));
   }
 
-  function closeAllSheets() {
-    for (const app of Object.values(ui.windows)) {
-      if (app instanceof ActorSheet) app.close();
+  function onKeyDown(event) {
+    if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) {
+      event.preventDefault();
+      if (event.key === "ArrowLeft" || event.key === "ArrowUp") cycleOwned(-1);
+      else if (event.key === "ArrowRight" || event.key === "ArrowDown") cycleOwned(1);
+    } else if (event.key.toLowerCase() === "r") {
+      event.preventDefault();
+      toggleFollow();
     }
   }
 
-  window.addEventListener("keydown", ev => {
-    if (ev.target instanceof HTMLInputElement || ev.target instanceof HTMLTextAreaElement || ev.target.isContentEditable) return;
-
-    if (["KeyW", "KeyA", "KeyS", "KeyD", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(ev.code)) {
-      if (canvas.tokens.controlled.length === 0 && selectedId) {
-        const t = canvas.tokens.get(selectedId);
-        if (t && canControl(t)) t.control({ releaseOthers: true });
-      }
-      return;
-    }
-
-    // DISABLE Q/E KEYS IN COMBAT - FIX
-    if (combatRunning() && (ev.code === "KeyQ" || ev.code === "KeyE")) {
-      ev.preventDefault();
-      return;
-    }
-
-    switch (ev.code) {
-      // DISABLE TOGGLING FOLLOW MODE ON 'R' KEY - FIX
-      case "KeyR":
-        ev.preventDefault();
-        // Do nothing on R to disable toggling
-        break;
-
-      case "KeyE":
-        ev.preventDefault();
-        if (!combatRunning()) {
-          closeAllSheets();
-          cycleOwned(+1);
-        }
-        break;
-      case "KeyQ":
-        ev.preventDefault();
-        if (!combatRunning()) {
-          closeAllSheets();
-          cycleOwned(-1);
-        }
-        break;
-      case "Space": {
-        if (combatRunning()) {
-          const cb = game.combat.combatant; const tok = cb ? canvas.tokens.get(cb.tokenId) : null;
-          if (tok && (game.user.isGM || tok.isOwner)) { ev.preventDefault(); game.combat.nextTurn(); }
-        }
-        break;
-      }
-      case "KeyF":
-        ev.preventDefault();
-        toggleFollow();
-        break;
-    }
-  });
-
-  Hooks.once("ready", () => {
-    refresh();
-    positionCenter();
-    // Re-center camera if follow mode is active on ready
-    if (alwaysCenter && selectedId) {
-      const t = canvas.tokens.get(selectedId);
-      if (t) canvas.pan({ x: t.center.x, y: t.center.y, scale: canvas.stage.scale.x });
-    }
-  });
-
-  Hooks.on("canvasReady", () => {
+  Hooks.on("renderCanvas", () => {
     refresh();
   });
 
-  Hooks.on("deleteToken", (doc) => {
-    if (doc.id === selectedId) {
-      selectedId = null;
-      refresh();
-    }
-  });
-
-  Hooks.on("createToken", () => {
-    refresh();
-  });
-
-  // PREVENT MULTI-SELECT WHEN FOLLOW MODE IS ENABLED - FIX
-  Hooks.on("preUpdateToken", (token, update, options, userId) => {
-    if (alwaysCenter && !Array.isArray(canvas.tokens.controlled)) return;
-    if (alwaysCenter && canvas.tokens.controlled.length > 1) {
-      // Deselect all but selected token
-      for (const t of canvas.tokens.controlled) {
-        if (t.id !== selectedId) t.release();
-      }
-      refresh();
-    }
-  });
+  window.addEventListener("keydown", onKeyDown);
 
   
   /* ---------- Improved ENTER behaviour --------------------------- */
