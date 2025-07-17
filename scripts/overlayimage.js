@@ -47,7 +47,7 @@
       transform:rotate(-90deg) translateY(100%);
       transform-origin:bottom left;
       white-space:nowrap; overflow:visible; left:0;
-      padding-left: -35%; padding-bottom: 5%;
+      padding-left: 35%; padding-bottom: 5%;
     }`;
 
   document.head.appendChild(Object.assign(document.createElement("style"), { textContent: CSS }));
