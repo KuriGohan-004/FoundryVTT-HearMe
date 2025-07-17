@@ -417,6 +417,21 @@ Hooks.on("getSceneControlButtons", (controls) => {
   });
 });
 
+// Wait 2 seconds after window load, then auto-select the first token in the player bar
+window.addEventListener("load", () => {
+  setTimeout(() => {
+    // Get the token IDs currently in the bar (orderedIds is from your main script)
+    const tokens = window.playerTokenBar && window.playerTokenBar.orderedIds;
+    if (tokens && tokens.length > 0) {
+      const firstTokenId = tokens[0];
+      const token = canvas.tokens.get(firstTokenId);
+      if (token) {
+        window.playerTokenBar.selectToken(token);
+      }
+    }
+  }, 2000);
+});
 
+  
   
 })();
