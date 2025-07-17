@@ -137,7 +137,17 @@
       img.src = imgSrc(token);
       img.alt = token.name;
       if (token.id === selectedId) img.classList.add("selected-token");
-      img.onclick = () => selectToken(token);
+      img.onclick = () => {
+        if (alwaysCenter) {
+          if (token.isTargeted) {
+            token.setTarget(false, { releaseOthers: false });
+          } else {
+            token.setTarget(true, { releaseOthers: false });
+          }
+        } else {
+          selectToken(token);
+        }
+      };
       img.onmouseenter = () => setSmall(token.name, false);
       img.onmouseleave = () => {
         const cur = canvas.tokens.get(selectedId);
@@ -203,7 +213,6 @@
   function selectToken(t) {
     if (!t) return;
 
-    // Close all open actor sheets before switching
     for (const app of Object.values(ui.windows)) {
       if (app?.object instanceof Actor) {
         app.close();
@@ -298,57 +307,36 @@
     }
   });
 
-  /* Hooks Controls */
-Hooks.once("canvasReady", () => {
-  bar().style.opacity = "1";
-  bar().style.pointerEvents = "auto";
-  label();
-  center();
-  positionCenter();
-  refresh();
+  Hooks.once("canvasReady", () => {
+    bar().style.opacity = "1";
+    bar().style.pointerEvents = "auto";
+    label();
+    center();
+    positionCenter();
+    refresh();
 
-  setTimeout(() => {
-    const allToks = displayTokens();
-    if (allToks.length) {
-      const firstToken = allToks[0];
-      selectToken(firstToken);
-    }
-
-    setFollowMode(true);
-
-    setInterval(() => {
-      if (!alwaysCenter) return;
-      const t = canvas.tokens.get(selectedId);
-      if (!t) return;
-      const dist = lastFollowedPos
-        ? Math.hypot(t.center.x - lastFollowedPos.x, t.center.y - lastFollowedPos.y)
-        : 9999;
-      if (dist > canvas.grid.size * 3) {
-        lastFollowedPos = { x: t.center.x, y: t.center.y };
-        panSmoothlyToToken(t);
+    setTimeout(() => {
+      const allToks = displayTokens();
+      if (allToks.length) {
+        const firstToken = allToks[0];
+        selectToken(firstToken);
       }
-    }, 200);
-  }, 1000);
-});
 
-// Override left-click behavior to target instead of switch when Follow Mode is on
-Hooks.on("clickToken", (token, event) => {
-  if (!alwaysCenter) return; // Only override in Follow Mode
-
-  // Prevent switching selected token
-  event.stopPropagation();
-  event.preventDefault();
-
-  const userTargets = game.user.targets;
-  const isTargeted = userTargets.has(token);
-
-  if (isTargeted) {
-    game.user.removeTarget(token);
-  } else {
-    game.user.setTarget(token, { releaseOthers: false, groupSelection: true });
-  }
-});
-
+      setFollowMode(true);
+      setInterval(() => {
+        if (!alwaysCenter) return;
+        const t = canvas.tokens.get(selectedId);
+        if (!t) return;
+        const dist = lastFollowedPos
+          ? Math.hypot(t.center.x - lastFollowedPos.x, t.center.y - lastFollowedPos.y)
+          : 9999;
+        if (dist > canvas.grid.size * 3) {
+          lastFollowedPos = { x: t.center.x, y: t.center.y };
+          panSmoothlyToToken(t);
+        }
+      }, 200);
+    }, 1000);
+  });
 
   window.playerTokenBar = {
     selectToken,
@@ -360,7 +348,6 @@ Hooks.on("clickToken", (token, event) => {
     setFollowMode,
     isFollowMode
   };
-
 
 
   /* ---------- Improved ENTER behaviour --------------------------- */
