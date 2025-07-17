@@ -409,29 +409,27 @@ Hooks.on("combatTurnChange", (combat /* Combat */, _prior, _current) => {
 });
 
 
-/***********************************************************************
- * Disable click-to-select when Follow Mode is active
+
+  /***********************************************************************
+ * Block token selection on canvas when Follow Mode is active
  **********************************************************************/
-Hooks.once("ready", () => {
-  // Monkey-patch the makeImg function after it's defined
-  const oldMakeImg = makeImg;
-  makeImg = function (token) {
-    const img = oldMakeImg(token);
+Hooks.on("controlToken", (token, controlled) => {
+  // Block selection completely while follow mode is on
+  if (alwaysCenter && controlled) {
+    // Cancel control
+    token.release();
+    return false;
+  }
 
-    // Replace onclick with a wrapped version that respects follow mode
-    const originalOnClick = img.onclick;
-    img.onclick = () => {
-      if (alwaysCenter) return;  // Follow mode is active — do not allow selection
-      originalOnClick?.();
-    };
-
-    return img;
-  };
-
-  // Re-render the bar to apply the patched makeImg
-  refresh();
+  // If follow mode is off and a token is selected on the canvas,
+  // switch the bar to that token if it's one the user can control
+  if (!alwaysCenter && controlled && canControl(token)) {
+    selectedId = token.id;
+    refresh();
+  }
 });
 
+  
   
   
 })();
