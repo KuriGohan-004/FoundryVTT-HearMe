@@ -8,7 +8,7 @@
   const LABEL_ID = "player-token-bar-label";
   const CENTER_ID = "player-token-bar-center-label";
 
-  const CSS = `
+  const CSS = 
     #${BAR_ID}{ position:fixed; bottom:0; left:25%; width:50%; height:84px;
       padding:6px 10px; display:flex; align-items:center; justify-content:center;
       gap:10px; overflow:hidden; background:none; border:none;
@@ -36,7 +36,7 @@
       transform:rotate(-90deg) translateY(100%);
       transform-origin:bottom left;
       white-space:nowrap; overflow:visible; left:0;
-    }`;
+    };
 
   document.head.appendChild(Object.assign(document.createElement("style"), { textContent: CSS }));
 
@@ -50,20 +50,19 @@
   let orderedIds = [];
   let ownedIds = [];
   let lastFollowedPos = null;
-  let isSelecting = false; // flag to prevent rapid re-selection
 
   const combatRunning = () => !!(game.combat?.started && game.combat.scene?.id === canvas.scene?.id);
   const canControl = t => t.isOwner || t.actor?.isOwner;
   const imgSrc = t => t.document.texture?.src || t.actor?.prototypeToken?.texture?.src || t.actor?.img || "icons/svg/mystery-man.svg";
-  const setSmall = (txt, b = false) => { label().textContent = txt ? (b ? `[[ ${txt} ]]` : txt) : ""; };
+  const setSmall = (txt, b = false) => { label().textContent = txt ? (b ? [[ ${txt} ]] : txt) : ""; };
 
   function positionCenter() {
     const sb = document.getElementById("sidebar");
     if (!sb) return;
     const c = center();
     const r = sb.getBoundingClientRect();
-    c.style.left = `${r.left - 4}px`;
-    c.style.top = `${r.top + r.height}px`;
+    c.style.left = ${r.left - 4}px;
+    c.style.top = ${r.top + r.height}px;
   }
 
   window.addEventListener("resize", positionCenter);
@@ -87,8 +86,7 @@
     if (combatRunning()) {
       b.style.opacity = "0";
       b.style.pointerEvents = "none";
-      setSmall(""); 
-      return;
+      setSmall(""); return;
     }
 
     b.style.opacity = "1";
@@ -154,37 +152,23 @@
     showCenter(nm);
   }
 
-  // Updated selectToken with async animated pan and debounce
-  async function selectToken(token) {
-    if (!token) return;
-    if (token.id === selectedId || isSelecting) return;
-
-    isSelecting = true;
-
-    selectedId = token.id;
-
-    if (canControl(token)) {
-      token.control({ releaseOthers: true });
-    }
-
-    lastFollowedPos = { x: token.center.x, y: token.center.y };
-    showCenter(token.name);
-
-    await canvas.animatePan({ x: token.center.x, y: token.center.y, scale: canvas.stage.scale.x, duration: 500 });
-
+  function selectToken(t) {
+    if (!t) return;
+    selectedId = t.id;
+    if (canControl(t)) t.control({ releaseOthers: true });
+    if (alwaysCenter) lastFollowedPos = { x: t.center.x, y: t.center.y };
+    canvas.animatePan({ x: t.center.x, y: t.center.y, scale: canvas.stage.scale.x, duration: 250 });
+    showCenter(t.name);
     refresh();
-
-    isSelecting = false;
   }
 
-  // Updated toggleFollow to use animated pan
   function toggleFollow() {
     if (!selectedId) return;
     alwaysCenter = !alwaysCenter;
     const t = canvas.tokens.get(selectedId);
     if (t && alwaysCenter) {
       lastFollowedPos = { x: t.center.x, y: t.center.y };
-      canvas.animatePan({ x: t.center.x, y: t.center.y, scale: canvas.stage.scale.x, duration: 500 });
+      canvas.pan({ x: t.center.x, y: t.center.y, scale: canvas.stage.scale.x });
     }
     setSmall(t?.name ?? "", alwaysCenter);
   }
@@ -232,28 +216,102 @@
 
   function cycleOwned(o) {
     if (!ownedIds.length) return;
-    let idx = ownedIds.indexOf(selectedId);
-    if (idx < 0) idx = 0;
-    else idx = (idx + o + ownedIds.length) % ownedIds.length;
-    selectToken(canvas.tokens.get(ownedIds[idx]));
+    let idx = ownedIds.indexOf(selectedId); if (idx === -1) idx = 0;
+    const next = canvas.tokens.get(ownedIds[(idx + o + ownedIds.length) % ownedIds.length]);
+    if (next) selectToken(next);
   }
 
-  function onKeyDown(event) {
-    if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) {
-      event.preventDefault();
-      if (event.key === "ArrowLeft" || event.key === "ArrowUp") cycleOwned(-1);
-      else if (event.key === "ArrowRight" || event.key === "ArrowDown") cycleOwned(1);
-    } else if (event.key.toLowerCase() === "r") {
-      event.preventDefault();
-      toggleFollow();
+  function closeAllSheets() {
+    for (const app of Object.values(ui.windows)) {
+      if (app instanceof ActorSheet) app.close();
     }
   }
 
-  Hooks.on("renderCanvas", () => {
-    refresh();
+  window.addEventListener("keydown", ev => {
+    if (ev.target instanceof HTMLInputElement || ev.target instanceof HTMLTextAreaElement || ev.target.isContentEditable) return;
+
+    if (["KeyW", "KeyA", "KeyS", "KeyD", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(ev.code)) {
+      if (canvas.tokens.controlled.length === 0 && selectedId) {
+        const t = canvas.tokens.get(selectedId);
+        if (t && canControl(t)) t.control({ releaseOthers: true });
+      }
+      return;
+    }
+
+    switch (ev.code) {
+      case "KeyE": ev.preventDefault(); if (!combatRunning()) { closeAllSheets(); cycleOwned(+1); } break;
+      case "KeyQ": ev.preventDefault(); if (!combatRunning()) { closeAllSheets(); cycleOwned(-1); } break;
+      case "Space": {
+        if (combatRunning()) {
+          const cb = game.combat.combatant; const tok = cb ? canvas.tokens.get(cb.tokenId) : null;
+          if (tok && (game.user.isGM || tok.isOwner)) { ev.preventDefault(); game.combat.nextTurn(); }
+        } else { ev.preventDefault(); game.togglePause(); }
+        break;
+      }
+    }
   });
 
-  window.addEventListener("keydown", onKeyDown);
+  const setup = () => {
+    refresh();
+    const t = canvas.tokens.get(selectedId);
+    if (t && canControl(t)) t.control({ releaseOthers: true });
+  };
+
+  Hooks.once("ready", setup);
+  Hooks.on("canvasReady", setup);
+  Hooks.on("createToken", refresh);
+  Hooks.on("updateToken", refresh);
+  Hooks.on("deleteToken", refresh);
+  Hooks.on("updateActor", refresh);
+  Hooks.on("deleteCombat", refresh);
+
+  /***********************************************************************
+   * Follow Mode: Smart Clicks & Disable Dragging
+   **********************************************************************/
+  Hooks.once("ready", () => {
+    Hooks.on("controlToken", (token, controlled) => {
+      if (!controlled) return;
+
+      const isBarToken = ownedIds.includes(token.id);
+      const isGM = game.user.isGM;
+      const isOwner = token.isOwner;
+
+      if (alwaysCenter) {
+        if (token.id === selectedId) return;
+
+        if (isGM) {
+          token.setTarget(true, { user: game.user, releaseOthers: true });
+        } else if (isOwner) {
+          selectedId = token.id;
+
+          const dx = Math.abs(token.center.x - (lastFollowedPos?.x ?? 0));
+          const dy = Math.abs(token.center.y - (lastFollowedPos?.y ?? 0));
+          const moved = dx > 10 || dy > 10;
+
+          if (canControl(token)) token.control({ releaseOthers: true });
+          if (moved) canvas.animatePan({ x: token.center.x, y: token.center.y, scale: canvas.stage.scale.x, duration: 250 });
+
+          lastFollowedPos = { x: token.center.x, y: token.center.y };
+          setSmall(token.name ?? "", true);
+          refresh();
+        } else {
+          game.user.targets.clear();
+          token.setTarget(true, { user: game.user, releaseOthers: false });
+        }
+      }
+
+      if (!alwaysCenter && isBarToken) {
+        selectedId = token.id;
+        refresh();
+      }
+    });
+
+    const origCanDragToken = Token.prototype._canDrag;
+    Token.prototype._canDrag = function (event) {
+      if (alwaysCenter && this.id === selectedId) return false;
+      return origCanDragToken.call(this, event);
+    };
+  });
 
   
   /* ---------- Improved ENTER behaviour --------------------------- */
