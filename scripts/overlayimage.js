@@ -503,6 +503,36 @@ Hooks.once("ready", () => {
 
 
 
+Hooks.once("ready", () => {
+  console.log("Combat Turn Skipper | Module ready");
+
+  window.addEventListener("keydown", async (event) => {
+    if (event.code !== "Space") return;
+
+    // Prevent default spacebar behavior
+    event.preventDefault();
+
+    const combat = game.combat;
+    if (!combat || !combat.started) return;
+
+    const user = game.user;
+    const currentCombatant = combat.combatant;
+    if (!currentCombatant) return;
+
+    const currentToken = canvas.tokens.get(currentCombatant.tokenId);
+    if (!currentToken) return;
+
+    const isGM = user.isGM;
+    const isOwner = currentToken.isOwner;
+
+    if (isGM || isOwner) {
+      // Only advance turn if not already advancing
+      if (!combat.combatants.some(c => c.isTurn)) return;
+      console.log("Combat Turn Skipper | Ending current turn...");
+      await combat.nextTurn();
+    }
+  });
+});
 
 
 
