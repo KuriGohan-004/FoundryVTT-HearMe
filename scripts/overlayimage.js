@@ -137,17 +137,11 @@
       img.src = imgSrc(token);
       img.alt = token.name;
       if (token.id === selectedId) img.classList.add("selected-token");
-      img.onclick = () => {
-        if (alwaysCenter) {
-          if (token.isTargeted) {
-            token.setTarget(false, { releaseOthers: false });
-          } else {
-            token.setTarget(true, { releaseOthers: false });
-          }
-        } else {
-          selectToken(token);
-        }
-      };
+
+img.onclick = () => {
+  selectToken(token);
+};
+
       img.onmouseenter = () => setSmall(token.name, false);
       img.onmouseleave = () => {
         const cur = canvas.tokens.get(selectedId);
@@ -281,20 +275,32 @@
     }
   });
 
-  Hooks.on("controlToken", (token, controlled) => {
-    if (ignoreNextControl) {
-      ignoreNextControl = false;
-      return;
-    }
-    if (!controlled) return;
-    if (!canControl(token)) return;
-    if (!alwaysCenter) return;
+Hooks.on("controlToken", (token, controlled) => {
+  if (ignoreNextControl) {
+    ignoreNextControl = false;
+    return;
+  }
+  
+  if (!canControl(token)) return;
 
-    if (token.id !== selectedId) {
+  if (alwaysCenter) {
+    // In Follow Mode: toggle target on clicked token
+    if (controlled) {
+      token.setTarget(!token.isTargeted, { releaseOthers: false });
+    } else {
+      token.setTarget(false, { releaseOthers: false });
+    }
+    // Do NOT change selection on map token clicks in follow mode
+  } else {
+    // Follow mode OFF: default behavior - select token normally
+    if (controlled && token.id !== selectedId) {
       selectToken(token);
     }
-    refresh();
-  });
+  }
+
+  refresh();
+});
+
 
   window.addEventListener("keydown", e => {
     if (document.activeElement?.tagName === "INPUT" || document.activeElement?.tagName === "TEXTAREA") return;
