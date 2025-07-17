@@ -1,7 +1,8 @@
 /***********************************************************************
- * Player Token Bar  – rotated fading name aligned to sidebar
- *  • v2 – user‑owned only, GM omnibus view, half‑sized bar
- *  • Bugfixed: Follow mode lag resolved by deduping camera pans
+ * Player Token Bar – rotated fading name aligned to sidebar
+ *  • v2 – user-owned only, GM omnibus view, half-sized bar
+ *  • Bugfixed: Follow mode lag resolved by debouncing refresh and
+ *    only rebuilding UI when necessary
  **********************************************************************/
 (() => {
   const BAR_ID = "player-token-bar";
@@ -50,6 +51,9 @@
   let lastFollowedPos = null;
   let ignoreNextControl = false;
 
+  let lastTokenIdsHash = ""; // To detect token list changes
+  let lastSelectedId = null;  // To detect selection changes
+
   const combatRunning = () => !!(game.combat?.started && game.combat.scene?.id === canvas.scene?.id);
   const canControl = t => t.isOwner || t.actor?.isOwner;
   const imgSrc = t => t.document.texture?.src || t.actor?.prototypeToken?.texture?.src || t.actor?.img || "icons/svg/mystery-man.svg";
@@ -80,30 +84,15 @@
     return canvas.tokens.placeables.filter(t => canControl(t));
   }
 
-  function refresh() {
+  // Helper to create hash string from token IDs array to detect changes
+  function hashTokenIds(tokens) {
+    return tokens.map(t => t.id).sort().join(",");
+  }
+
+  // Full rebuild of token bar UI
+  function rebuildTokenBarUI(allToks) {
     const b = bar();
-    if (combatRunning()) {
-      b.style.opacity = "0";
-      b.style.pointerEvents = "none";
-      setSmall(""); return;
-    }
-
-    b.style.opacity = "1";
-    b.style.pointerEvents = "auto";
     b.replaceChildren();
-
-    const allToks = displayTokens();
-    if (!allToks.length) { setSmall(""); return; }
-
-    if (!selectedId || !allToks.some(t => t.id === selectedId)) {
-      selectedId = allToks[0]?.id;
-      const t = canvas.tokens.get(selectedId);
-      if (t && canControl(t)) {
-        ignoreNextControl = true;
-        t.control({ releaseOthers: true });
-        lastFollowedPos = { x: t.center.x, y: t.center.y };
-      }
-    }
 
     orderedIds = allToks.map(t => t.id);
     ownedIds = allToks.filter(canControl).map(t => t.id);
@@ -151,6 +140,57 @@
     showCenter(nm);
   }
 
+  // Throttled refresh function to reduce UI lag on rapid events
+  let refreshScheduled = false;
+  function refresh() {
+    if (refreshScheduled) return;
+    refreshScheduled = true;
+    setTimeout(() => {
+      refreshScheduled = false;
+
+      if (combatRunning()) {
+        bar().style.opacity = "0";
+        bar().style.pointerEvents = "none";
+        setSmall("");
+        return;
+      }
+
+      bar().style.opacity = "1";
+      bar().style.pointerEvents = "auto";
+
+      const allToks = displayTokens();
+      if (!allToks.length) {
+        setSmall("");
+        return;
+      }
+
+      // Auto-select if selected token is gone or none selected
+      if (!selectedId || !allToks.some(t => t.id === selectedId)) {
+        selectedId = allToks[0].id;
+        const t = canvas.tokens.get(selectedId);
+        if (t && canControl(t)) {
+          ignoreNextControl = true;
+          t.control({ releaseOthers: true });
+          lastFollowedPos = { x: t.center.x, y: t.center.y };
+        }
+      }
+
+      // Check if tokens list or selection changed
+      const currentIdsHash = hashTokenIds(allToks);
+      if (currentIdsHash !== lastTokenIdsHash || selectedId !== lastSelectedId) {
+        rebuildTokenBarUI(allToks);
+        lastTokenIdsHash = currentIdsHash;
+        lastSelectedId = selectedId;
+      } else {
+        // No list/selection change, only update the label and center display
+        const curTok = canvas.tokens.get(selectedId);
+        const nm = curTok?.name ?? "";
+        setSmall(nm, alwaysCenter);
+        showCenter(nm);
+      }
+    }, 50); // 50ms debounce interval
+  }
+
   function selectToken(t) {
     if (!t) return;
     selectedId = t.id;
@@ -159,129 +199,86 @@
       t.control({ releaseOthers: true });
     }
 
-    // Removed camera pan on token select to avoid lag
     if (alwaysCenter) {
       lastFollowedPos = { x: t.center.x, y: t.center.y };
+      canvas.pan({ x: t.center.x, y: t.center.y, scale: canvas.stage.scale.x });
     }
 
     showCenter(t.name);
     refresh();
   }
 
-  function toggleFollow() {
+  // Cycle selection forward/backward
+  function cycleSelection(offset) {
+    if (!orderedIds.length) return;
+    let i = orderedIds.indexOf(selectedId);
+    if (i < 0) i = 0;
+    i = (i + offset + orderedIds.length) % orderedIds.length;
+    const t = canvas.tokens.get(orderedIds[i]);
+    if (t) selectToken(t);
+  }
+
+  // Follow mode: camera follows token only if moved >3 squares
+  Hooks.on("updateToken", (scene, tokenDoc, diff, options, userId) => {
+    if (!alwaysCenter) return;
     if (!selectedId) return;
-    alwaysCenter = !alwaysCenter;
-    const t = canvas.tokens.get(selectedId);
-    if (t && alwaysCenter) {
+    if (tokenDoc.id !== selectedId) return;
+
+    const t = canvas.tokens.get(tokenDoc.id);
+    if (!t) return;
+
+    const dist = lastFollowedPos
+      ? Math.hypot(t.center.x - lastFollowedPos.x, t.center.y - lastFollowedPos.y)
+      : 9999;
+
+    if (dist > canvas.grid.size * 3) {
       lastFollowedPos = { x: t.center.x, y: t.center.y };
       canvas.pan({ x: t.center.x, y: t.center.y, scale: canvas.stage.scale.x });
     }
-    setSmall(t?.name ?? "", alwaysCenter);
-  }
-
-  Hooks.on("updateToken", (doc) => {
-    const token = canvas.tokens.get(doc.id);
-    if (!token) return;
-
-    refresh();
-
-    if (alwaysCenter && doc.id === selectedId) {
-      const gridSize = canvas.grid.size;
-      const newPos = { x: token.center.x, y: token.center.y };
-
-      if (!lastFollowedPos) {
-        lastFollowedPos = newPos;
-        return;
-      }
-
-      const dx = Math.abs(newPos.x - lastFollowedPos.x);
-      const dy = Math.abs(newPos.y - lastFollowedPos.y);
-      const movedSquares = Math.max(dx, dy) / gridSize;
-
-      if (movedSquares >= 3) {
-        canvas.animatePan({ x: newPos.x, y: newPos.y, scale: canvas.stage.scale.x, duration: 250 });
-        lastFollowedPos = newPos;
-      }
-    }
   });
 
+  // Hook to token control to sync bar selection
   Hooks.on("controlToken", (token, controlled) => {
-    if (!token || !controlled) return;
-
     if (ignoreNextControl) {
       ignoreNextControl = false;
       return;
     }
-
-    const alreadySelected = token.id === selectedId;
-
-    if (alwaysCenter && !alreadySelected) {
-      canvas.tokens.releaseAll();
-      token.control({ releaseOthers: true });
-      selectedId = token.id;
-      lastFollowedPos = { x: token.center.x, y: token.center.y };
-      refresh();
+    if (!controlled) return;
+    if (!canControl(token)) return;
+    if (token.id !== selectedId) {
+      selectToken(token);
     }
+  });
 
-    if (!alwaysCenter) {
-      selectedId = token.id;
+  // Keyboard support
+  window.addEventListener("keydown", e => {
+    if (document.activeElement?.tagName === "INPUT" || document.activeElement?.tagName === "TEXTAREA") return;
+    if (e.key === "a" || e.key === "ArrowLeft") {
+      e.preventDefault();
+      cycleSelection(-1);
+    } else if (e.key === "d" || e.key === "ArrowRight") {
+      e.preventDefault();
+      cycleSelection(1);
+    } else if (e.key === "f") {
+      e.preventDefault();
+      alwaysCenter = !alwaysCenter;
       refresh();
     }
   });
 
-  function cycleOwned(o) {
-    if (!ownedIds.length) return;
-    let idx = ownedIds.indexOf(selectedId); if (idx === -1) idx = 0;
-    const next = canvas.tokens.get(ownedIds[(idx + o + ownedIds.length) % ownedIds.length]);
-    if (next) selectToken(next);
-  }
-
-  function closeAllSheets() {
-    for (const app of Object.values(ui.windows)) {
-      if (app instanceof ActorSheet) app.close();
-    }
-  }
-
-  window.addEventListener("keydown", ev => {
-    if (ev.target instanceof HTMLInputElement || ev.target instanceof HTMLTextAreaElement || ev.target.isContentEditable) return;
-
-    if (["KeyW", "KeyA", "KeyS", "KeyD", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(ev.code)) {
-      if (canvas.tokens.controlled.length === 0 && selectedId) {
-        const t = canvas.tokens.get(selectedId);
-        if (t && canControl(t)) t.control({ releaseOthers: true });
-      }
-      return;
-    }
-
-    switch (ev.code) {
-      case "KeyE": ev.preventDefault(); if (!combatRunning()) { closeAllSheets(); cycleOwned(+1); } break;
-      case "KeyQ": ev.preventDefault(); if (!combatRunning()) { closeAllSheets(); cycleOwned(-1); } break;
-      case "Space": {
-        if (combatRunning()) {
-          const cb = game.combat.combatant; const tok = cb ? canvas.tokens.get(cb.tokenId) : null;
-          if (tok && (game.user.isGM || tok.isOwner)) { ev.preventDefault(); game.combat.nextTurn(); }
-        } else { ev.preventDefault(); game.togglePause(); }
-        break;
-      }
-    }
-  });
-
-  const setup = () => {
+  // Initialize UI elements on DOM ready
+  window.addEventListener("load", () => {
+    bar().style.opacity = "1";
+    center().style.userSelect = "none";
     refresh();
-    const t = canvas.tokens.get(selectedId);
-    if (t && canControl(t)) {
-      ignoreNextControl = true;
-      t.control({ releaseOthers: true });
-    }
+  });
+
+  // Expose some functions for debugging
+  window.playerTokenBar = {
+    selectToken,
+    cycleSelection,
+    refresh,
   };
-
-  Hooks.once("ready", setup);
-  Hooks.on("canvasReady", setup);
-  Hooks.on("createToken", refresh);
-  Hooks.on("deleteToken", refresh);
-  Hooks.on("updateActor", refresh);
-  Hooks.on("deleteCombat", refresh);
-
 
   /* ---------- Improved ENTER behaviour --------------------------- */
   /**
