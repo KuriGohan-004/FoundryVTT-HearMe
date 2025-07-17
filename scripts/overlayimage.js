@@ -473,43 +473,47 @@ Hooks.once("ready", () => {
   
 
 /***********************************************************************
-   * Follow Mode: Smart Clicks & Disable Dragging + Target Toggle
-   **********************************************************************/
-// Save original _onClickLeft method for restoring later if needed
-const originalOnClickLeft = Token.prototype._onClickLeft;
+ * Follow Mode: Smart Clicks & Disable Dragging + Target Toggle
+ **********************************************************************/
 
-Token.prototype._onClickLeft = async function(event) {
-  if (window.playerTokenBar?.isFollowMode()) {
+Hooks.on("canvasReady", () => {
+  const tokensLayerElement = canvas.tokens?.layer?.element;
+  if (!tokensLayerElement) return;
+
+  // Delegate click event on tokens container
+  tokensLayerElement.addEventListener("click", async (event) => {
+    // Only act if Follow Mode is ON
+    if (!window.playerTokenBar?.isFollowMode()) return;
+
+    // Find the closest token element clicked
+    const tokenEl = event.target.closest(".token");
+    if (!tokenEl) return;
+
+    // Get the token object by matching the DOM id
+    const clickedToken = canvas.tokens.placeables.find(t => t.id === tokenEl.id);
+    if (!clickedToken) return;
+
     event.preventDefault();
     event.stopPropagation();
 
-    const token = this;
     const user = game.user;
-
-    // Check if token is already targeted
-    const isTargeted = user.targets.has(token.document);
+    const isTargeted = user.targets.has(clickedToken.document);
 
     if (isTargeted) {
       // Clear all targets if token is already targeted
       await user.updateTokenTargets([], false);
     } else {
-      // Clear all targets, then add this token as the only target
-      // Because updateTokenTargets replaces target set, just pass single-element array
-      await user.updateTokenTargets([token.document], false);
+      // Clear all targets, then add this token as target
+      await user.updateTokenTargets([clickedToken.document], false);
     }
 
-    // Also update the HUD so it visually updates immediately
+    // Refresh HUD to update UI immediately
     if (canvas.tokens.hud) {
       canvas.tokens.hud.refresh();
     }
+  }, true); // Use capture phase to get event first
+});
 
-    // Return here to prevent the normal selection behavior
-    return;
-  } else {
-    // Normal token selection when Follow Mode off
-    return originalOnClickLeft.call(this, event);
-  }
-};
 
 
 
