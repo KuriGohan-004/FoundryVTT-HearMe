@@ -3,6 +3,26 @@
   const LABEL_ID = "player-token-bar-label";
   const CENTER_ID = "player-token-bar-center-label";
 
+  // ✅ Define this FIRST so the toggle button can see it
+  let alwaysCenter = false;
+
+  Hooks.on("getSceneControlButtons", (controls) => {
+    const tokenControls = controls.find(c => c.name === "token");
+    if (!tokenControls) return;
+
+    tokenControls.tools.push({
+      name: "toggle-follow-mode",
+      title: `Follow Mode: ${alwaysCenter ? "On" : "Off"}`,
+      icon: alwaysCenter ? "fas fa-crosshairs" : "far fa-circle",
+      toggle: true,
+      active: alwaysCenter,
+      onClick: (toggle) => {
+        alwaysCenter = toggle;
+        ui.notifications.info(`Follow Mode ${toggle ? "Enabled" : "Disabled"}`);
+      }
+    });
+  });
+
   const CSS = `
     #${BAR_ID}{ position:fixed; bottom:0; left:25%; width:50%; height:84px;
       padding:6px 10px; display:flex; align-items:center; justify-content:center;
@@ -47,7 +67,6 @@
   const center = () => el(CENTER_ID);
 
   let selectedId = null;
-  let alwaysCenter = false;
   let orderedIds = [];
   let ownedIds = [];
   let lastFollowedPos = null;
