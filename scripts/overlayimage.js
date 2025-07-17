@@ -367,64 +367,6 @@ Hooks.once("ready", () => {
     return origCanDragToken.call(this, event);
   };
 });
-
-/***********************************************************************
- * Follow Mode: Smart Clicks & Disable Dragging
- **********************************************************************/
-Hooks.once("ready", () => {
-  // Enhanced click control behavior
-  Hooks.on("controlToken", (token, controlled) => {
-    if (!controlled) return;
-
-    const isBarToken = ownedIds.includes(token.id);
-    const isGM = game.user.isGM;
-    const isOwner = token.isOwner;
-
-    // Follow Mode behavior
-    if (alwaysCenter) {
-      if (token.id === selectedId) return false; // Same token: do nothing
-
-      if (isGM) {
-        // GM in follow mode → target clicked token
-        token.setTarget(true, { user: game.user, releaseOthers: true });
-      } else if (isOwner) {
-        // Player clicks owned token → switch to it
-        alwaysCenter = false;  // Temporarily disable Follow Mode
-        selectedId = token.id;
-        if (canControl(token)) token.control({ releaseOthers: true });
-        canvas.animatePan(token.center);
-        refresh();
-
-        // Re-enable Follow Mode
-        setTimeout(() => {
-          alwaysCenter = true;
-          setSmall(token.name ?? "", true);
-        }, 200);
-      } else {
-        // Player clicks unowned token → target it only
-        game.user.targets.clear(); // Clear all other targets
-        token.setTarget(true, { user: game.user, releaseOthers: false });
-      }
-
-      // Prevent Foundry's default control behavior
-      setTimeout(() => token.release(), 0);
-      return false;
-    }
-
-    // Follow Mode OFF: selecting a bar token updates selection
-    if (isBarToken) {
-      selectedId = token.id;
-      refresh();
-    }
-  });
-
-  // Disable drag interaction in Follow Mode
-  const origCanDragToken = Token.prototype._canDrag;
-  Token.prototype._canDrag = function (event) {
-    if (alwaysCenter && this.id === selectedId) return false;
-    return origCanDragToken.call(this, event);
-  };
-});
   
 
 /***********************************************************************
@@ -448,6 +390,63 @@ Hooks.on("getSceneControlButtons", (controls) => {
   });
 });
 
-  
+
+ /***********************************************************************
+ * Follow Mode: Smart Clicks & Disable Dragging
+ **********************************************************************/
+Hooks.once("ready", () => {
+  // Enhanced click control behavior
+  Hooks.on("controlToken", (token, controlled) => {
+    if (!controlled) return;
+
+    const isBarToken = ownedIds.includes(token.id);
+    const isGM = game.user.isGM;
+    const isOwner = token.isOwner;
+
+    // Follow Mode behavior
+    if (alwaysCenter) {
+      if (token.id === selectedId) return; // Same token: do nothing
+
+      if (isGM) {
+        // GM in follow mode → target clicked token
+        token.setTarget(true, { user: game.user, releaseOthers: true });
+      } else if (isOwner) {
+        // Player clicks owned token → switch to it
+        alwaysCenter = false;  // Temporarily disable Follow Mode
+        selectedId = token.id;
+        if (canControl(token)) token.control({ releaseOthers: true });
+        canvas.animatePan(token.center);
+        refresh();
+
+        // Re-enable Follow Mode
+        setTimeout(() => {
+          alwaysCenter = true;
+          setSmall(token.name ?? "", true);
+        }, 200);
+      } else {
+        // Player clicks unowned token → target it only
+        game.user.targets.clear(); // Clear all other targets
+        token.setTarget(true, { user: game.user, releaseOthers: false });
+      }
+
+      // Do not block default control behavior
+      // Removed: return false;
+    }
+
+    // Follow Mode OFF: selecting a bar token updates selection
+    if (!alwaysCenter && isBarToken) {
+      selectedId = token.id;
+      refresh();
+    }
+  });
+
+  // Disable drag interaction in Follow Mode
+  const origCanDragToken = Token.prototype._canDrag;
+  Token.prototype._canDrag = function (event) {
+    if (alwaysCenter && this.id === selectedId) return false;
+    return origCanDragToken.call(this, event);
+  };
+});
+
   
 })();
