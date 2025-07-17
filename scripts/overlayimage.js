@@ -35,6 +35,8 @@
       transform:rotate(-90deg) translateY(100%);
       transform-origin:bottom left;
       white-space:nowrap; overflow:visible; left:0;
+      padding-left: -35%;
+      padding-bottom: 5%;
     }`;
 
   document.head.appendChild(Object.assign(document.createElement("style"), { textContent: CSS }));
@@ -268,58 +270,76 @@
  * Follow Mode: Smart Clicks & Disable Dragging
  **********************************************************************/
 Hooks.once("ready", () => {
-  Hooks.on("controlToken", (token, controlled) => {
-    if (!controlled) return;
+  let isProcessing = false;
 
-    const isBarToken = ownedIds.includes(token.id);
-    const isGM = game.user.isGM;
-    const isOwner = token.isOwner;
+  Hooks.on("controlToken", async (token, controlled) => {
+    if (!controlled || isProcessing) return;
 
-    if (alwaysCenter) {
-      if (token.id === selectedId) return;
+    isProcessing = true;
 
-      if (isGM) {
-        if (!token.isTargeted) {
-          token.setTarget(true, { user: game.user, releaseOthers: true });
-        }
-      } else if (isOwner) {
-        selectedId = token.id;
+    try {
+      const isBarToken = ownedIds.includes(token.id);
+      const isGM = game.user.isGM;
+      const isOwner = token.isOwner;
 
-        const dx = Math.abs(token.center.x - (lastFollowedPos?.x ?? 0));
-        const dy = Math.abs(token.center.y - (lastFollowedPos?.y ?? 0));
-        const moved = dx > 10 || dy > 10;
-
-        if (canControl(token)) {
-          token.control({ releaseOthers: true });
+      if (alwaysCenter) {
+        if (token.id === selectedId) {
+          isProcessing = false;
+          return;
         }
 
-        if (moved) {
-          canvas.animatePan({
-            x: token.center.x,
-            y: token.center.y,
-            scale: canvas.stage.scale.x,
-            duration: 250
-          });
-        }
+        // Skip unnecessary re-targeting
+        if (isGM) {
+          if (!token.isTargeted) {
+            await token.setTarget(true, { user: game.user, releaseOthers: true });
+          }
+        } else if (isOwner) {
+          selectedId = token.id;
 
-        lastFollowedPos = { x: token.center.x, y: token.center.y };
-        setSmall(token.name ?? "", true);
-        refresh();
-      } else {
-        if (!token.isTargeted) {
-          game.user.targets.clear();
-          token.setTarget(true, { user: game.user, releaseOthers: false });
+          const dx = Math.abs(token.center.x - (lastFollowedPos?.x ?? 0));
+          const dy = Math.abs(token.center.y - (lastFollowedPos?.y ?? 0));
+          const moved = dx > 10 || dy > 10;
+
+          // Avoid control loops
+          if (!token.controlled) {
+            await token.control({ releaseOthers: true });
+          }
+
+          if (moved) {
+            await canvas.animatePan({
+              x: token.center.x,
+              y: token.center.y,
+              scale: canvas.stage.scale.x,
+              duration: 250
+            });
+          }
+
+          lastFollowedPos = { x: token.center.x, y: token.center.y };
+
+          setSmall(token.name ?? "", true);
+          refresh();
+        } else {
+          // Only target if not already targeted
+          if (!token.isTargeted) {
+            game.user.targets.clear();
+            await token.setTarget(true, { user: game.user, releaseOthers: false });
+          }
         }
       }
-    }
 
-    if (!alwaysCenter && isBarToken) {
-      selectedId = token.id;
-      refresh();
+      if (!alwaysCenter && isBarToken) {
+        selectedId = token.id;
+        refresh();
+      }
+
+    } catch (err) {
+      console.error("Follow Mode error in controlToken hook:", err);
+    } finally {
+      isProcessing = false;
     }
   });
 
-  // Disable dragging while follow mode is active on the selected token
+  // Prevent dragging if follow mode is active and this is the selected token
   const origCanDragToken = Token.prototype._canDrag;
   Token.prototype._canDrag = function (event) {
     if (alwaysCenter && this.id === selectedId) return false;
