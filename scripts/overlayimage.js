@@ -1,6 +1,7 @@
 /***********************************************************************
  * Player Token Bar  – rotated fading name aligned to sidebar
  *  • v2 – user‑owned only, GM omnibus view, half‑sized bar
+ *  • Bugfixed to avoid selection lag in Follow mode
  **********************************************************************/
 (() => {
   const BAR_ID = "player-token-bar";
@@ -12,7 +13,6 @@
       padding:6px 10px; display:flex; align-items:center; justify-content:center;
       gap:10px; overflow:hidden; background:none; border:none;
       z-index:20; pointer-events:auto; transition:opacity .25s ease; }
-
     #${BAR_ID} img{
       width:64px; height:64px; object-fit:cover; border-radius:8px;
       border:2px solid #fff; flex:0 0 auto; cursor:pointer;
@@ -21,12 +21,10 @@
     #${BAR_ID} img:hover               {transform:scale(1.20); z-index:1;}
     #${BAR_ID} img.selected-token,
     #${BAR_ID} img.selected-token:hover{transform:scale(1.25); z-index:2;}
-
     #${LABEL_ID}{ position:fixed; bottom:90px; left:25%; width:50%;
       text-align:center; font-size:16px; font-weight:bold; color:#fff;
       text-shadow:0 0 4px #000; pointer-events:none; z-index:21;
       height:24px; line-height:24px; user-select:none; }
-
     @keyframes ptbPulse{0%,100%{opacity:1;}50%{opacity:.5;}}
     #${CENTER_ID}{
       position:fixed; font-size:48px; font-weight:bold; font-style:italic;
@@ -35,8 +33,7 @@
       transform:rotate(-90deg) translateY(100%);
       transform-origin:bottom left;
       white-space:nowrap; overflow:visible; left:0;
-      padding-left: -35%;
-      padding-bottom: 5%;
+      padding-left: -35%; padding-bottom: 5%;
     }`;
 
   document.head.appendChild(Object.assign(document.createElement("style"), { textContent: CSS }));
@@ -51,6 +48,7 @@
   let orderedIds = [];
   let ownedIds = [];
   let lastFollowedPos = null;
+  let ignoreNextControl = false;
 
   const combatRunning = () => !!(game.combat?.started && game.combat.scene?.id === canvas.scene?.id);
   const canControl = t => t.isOwner || t.actor?.isOwner;
@@ -101,6 +99,7 @@
       selectedId = allToks[0]?.id;
       const t = canvas.tokens.get(selectedId);
       if (t && canControl(t)) {
+        ignoreNextControl = true;
         t.control({ releaseOthers: true });
         lastFollowedPos = { x: t.center.x, y: t.center.y };
       }
@@ -111,7 +110,6 @@
 
     const n = orderedIds.length;
     const selIdx = orderedIds.indexOf(selectedId);
-
     const leftCount = (n >= 3) ? 1 : 0;
     const rightCount = (n - 1) - leftCount;
     const wrap = idx => (idx + n) % n;
@@ -156,7 +154,10 @@
   function selectToken(t) {
     if (!t) return;
     selectedId = t.id;
-    if (canControl(t)) t.control({ releaseOthers: true });
+    if (canControl(t)) {
+      ignoreNextControl = true;
+      t.control({ releaseOthers: true });
+    }
     if (alwaysCenter) lastFollowedPos = { x: t.center.x, y: t.center.y };
     canvas.animatePan({ x: t.center.x, y: t.center.y, scale: canvas.stage.scale.x, duration: 250 });
     showCenter(t.name);
@@ -175,30 +176,39 @@
   }
 
   Hooks.on("updateToken", (doc) => {
-    if (!alwaysCenter || doc.id !== selectedId) return;
     const token = canvas.tokens.get(doc.id);
     if (!token) return;
 
-    const gridSize = canvas.grid.size;
-    const newPos = { x: token.center.x, y: token.center.y };
+    refresh(); // consolidated update handler
 
-    if (!lastFollowedPos) {
-      lastFollowedPos = newPos;
-      return;
-    }
+    if (alwaysCenter && doc.id === selectedId) {
+      const gridSize = canvas.grid.size;
+      const newPos = { x: token.center.x, y: token.center.y };
 
-    const dx = Math.abs(newPos.x - lastFollowedPos.x);
-    const dy = Math.abs(newPos.y - lastFollowedPos.y);
-    const movedSquares = Math.max(dx, dy) / gridSize;
+      if (!lastFollowedPos) {
+        lastFollowedPos = newPos;
+        return;
+      }
 
-    if (movedSquares >= 3) {
-      canvas.animatePan({ x: newPos.x, y: newPos.y, scale: canvas.stage.scale.x, duration: 250 });
-      lastFollowedPos = newPos;
+      const dx = Math.abs(newPos.x - lastFollowedPos.x);
+      const dy = Math.abs(newPos.y - lastFollowedPos.y);
+      const movedSquares = Math.max(dx, dy) / gridSize;
+
+      if (movedSquares >= 3) {
+        canvas.animatePan({ x: newPos.x, y: newPos.y, scale: canvas.stage.scale.x, duration: 250 });
+        lastFollowedPos = newPos;
+      }
     }
   });
 
   Hooks.on("controlToken", (token, controlled) => {
     if (!token || !controlled) return;
+
+    if (ignoreNextControl) {
+      ignoreNextControl = false;
+      return;
+    }
+
     const alreadySelected = token.id === selectedId;
 
     if (alwaysCenter && !alreadySelected) {
@@ -255,18 +265,100 @@
   const setup = () => {
     refresh();
     const t = canvas.tokens.get(selectedId);
-    if (t && canControl(t)) t.control({ releaseOthers: true });
+    if (t && canControl(t)) {
+      ignoreNextControl = true;
+      t.control({ releaseOthers: true });
+    }
   };
 
   Hooks.once("ready", setup);
   Hooks.on("canvasReady", setup);
   Hooks.on("createToken", refresh);
-  Hooks.on("updateToken", refresh);
   Hooks.on("deleteToken", refresh);
   Hooks.on("updateActor", refresh);
   Hooks.on("deleteCombat", refresh);
 
 
+/***********************************************************************
+ * Follow Mode: Smart Clicks & Disable Dragging
+ **********************************************************************/
+Hooks.once("ready", () => {
+  let isProcessing = false;
+
+  Hooks.on("controlToken", async (token, controlled) => {
+    if (!controlled || isProcessing) return;
+
+    isProcessing = true;
+
+    try {
+      const isBarToken = ownedIds.includes(token.id);
+      const isGM = game.user.isGM;
+      const isOwner = token.isOwner;
+
+      if (alwaysCenter) {
+        if (token.id === selectedId) {
+          isProcessing = false;
+          return;
+        }
+
+        // Skip unnecessary re-targeting
+        if (isGM) {
+          if (!token.isTargeted) {
+            await token.setTarget(true, { user: game.user, releaseOthers: true });
+          }
+        } else if (isOwner) {
+          selectedId = token.id;
+
+          const dx = Math.abs(token.center.x - (lastFollowedPos?.x ?? 0));
+          const dy = Math.abs(token.center.y - (lastFollowedPos?.y ?? 0));
+          const moved = dx > 10 || dy > 10;
+
+          // Avoid control loops
+          if (!token.controlled) {
+            await token.control({ releaseOthers: true });
+          }
+
+          if (moved) {
+            await canvas.animatePan({
+              x: token.center.x,
+              y: token.center.y,
+              scale: canvas.stage.scale.x,
+              duration: 250
+            });
+          }
+
+          lastFollowedPos = { x: token.center.x, y: token.center.y };
+
+          setSmall(token.name ?? "", true);
+          refresh();
+        } else {
+          // Only target if not already targeted
+          if (!token.isTargeted) {
+            game.user.targets.clear();
+            await token.setTarget(true, { user: game.user, releaseOthers: false });
+          }
+        }
+      }
+
+      if (!alwaysCenter && isBarToken) {
+        selectedId = token.id;
+        refresh();
+      }
+
+    } catch (err) {
+      console.error("Follow Mode error in controlToken hook:", err);
+    } finally {
+      isProcessing = false;
+    }
+  });
+
+  // Prevent dragging if follow mode is active and this is the selected token
+  const origCanDragToken = Token.prototype._canDrag;
+  Token.prototype._canDrag = function (event) {
+    if (alwaysCenter && this.id === selectedId) return false;
+    return origCanDragToken.call(this, event);
+  };
+});
 
 
 
