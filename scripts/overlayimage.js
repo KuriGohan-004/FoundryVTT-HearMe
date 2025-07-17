@@ -408,6 +408,30 @@ Hooks.on("combatTurnChange", (combat /* Combat */, _prior, _current) => {
   if (game.user.isGM || canControl(tok)) selectToken(tok);
 });
 
+
+/***********************************************************************
+ * Disable click-to-select when Follow Mode is active
+ **********************************************************************/
+Hooks.once("ready", () => {
+  // Monkey-patch the makeImg function after it's defined
+  const oldMakeImg = makeImg;
+  makeImg = function (token) {
+    const img = oldMakeImg(token);
+
+    // Replace onclick with a wrapped version that respects follow mode
+    const originalOnClick = img.onclick;
+    img.onclick = () => {
+      if (alwaysCenter) return;  // Follow mode is active — do not allow selection
+      originalOnClick?.();
+    };
+
+    return img;
+  };
+
+  // Re-render the bar to apply the patched makeImg
+  refresh();
+});
+
   
   
 })();
