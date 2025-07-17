@@ -427,45 +427,49 @@ Hooks.once("ready", () => {
 });
 
 /***********************************************************************
- * Refined Token Click Behavior (Players vs GM)
+ * Refined Token Click Behavior – Safe Version (Players + GM)
  **********************************************************************/
-Hooks.on("controlToken", (token, controlled) => {
-  if (!controlled) return;
+Hooks.once("ready", () => {
+  Hooks.on("controlToken", (token, controlled) => {
+    if (!controlled) return;
 
-  const isBarToken = ownedIds.includes(token.id);
-  const isGM = game.user.isGM;
+    const isGM = game.user.isGM;
+    const isOwned = token.isOwner || token.actor?.isOwner;
+    const isBarToken = ownedIds?.includes(token.id);
 
-  if (alwaysCenter) {
-    if (isGM) {
-      // GM in follow mode → only target, never select
-      canvas.targets.clear();
-      token.setTarget(true, { user: game.user, releaseOthers: false });
+    if (alwaysCenter) {
+      if (isGM) {
+        // GM in Follow Mode: only target, never select
+        game.user.targets.clear();
+        token.setTarget(true, { user: game.user, releaseOthers: false });
 
-      setTimeout(() => token.release(), 0);  // Prevent selection
-      return false;
+        // Prevent control
+        setTimeout(() => token.release(), 0);
+        return false;
+      }
+
+      // Player in Follow Mode
+      if (isOwned && isBarToken) {
+        // Switch to owned token
+        selectedId = token.id;
+        refresh();
+        return; // Allow control
+      } else {
+        // Not owned → target it
+        game.user.targets.clear();
+        token.setTarget(true, { user: game.user, releaseOthers: false });
+
+        setTimeout(() => token.release(), 0);
+        return false;
+      }
     }
 
-    // Player in follow mode:
-    if (isBarToken) {
-      // Own token → select and control it
+    // Follow Mode is OFF
+    if (!alwaysCenter && !isGM && isOwned && isBarToken) {
       selectedId = token.id;
       refresh();
-      return; // Allow control
     }
-
-    // Not owned → target only
-    canvas.targets.clear();
-    token.setTarget(true, { user: game.user, releaseOthers: false });
-
-    setTimeout(() => token.release(), 0);  // Prevent selection
-    return false;
-  }
-
-  // Follow Mode OFF
-  if (!alwaysCenter && isBarToken && !isGM) {
-    selectedId = token.id;
-    refresh();
-  }
+  });
 });
 
   // Disable drag interaction in Follow Mode
