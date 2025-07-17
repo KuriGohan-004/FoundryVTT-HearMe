@@ -462,6 +462,23 @@ Hooks.once("ready", () => {
   };
 });
 
+/***********************************************************************
+ * Disable token dragging when only one token is selected
+ **********************************************************************/
+Hooks.once("ready", () => {
+  const origCanDragToken = Token.prototype._canDrag;
+
+  Token.prototype._canDrag = function (event) {
+    // If exactly one token is selected (controlled), disable drag
+    const controlled = canvas.tokens.controlled;
+    if (controlled.length === 1 && controlled[0].id === this.id) {
+      return false;
+    }
+
+    // Otherwise, allow normal drag
+    return origCanDragToken.call(this, event);
+  };
+});
 
 
 
