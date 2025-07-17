@@ -84,26 +84,27 @@ const CSS = `
 
   
   /* ---------- Token list for bar ---------- */
-  function displayTokens(){
-    /* ---------- GM view ---------- */
-    if (game.user.isGM){
-      /* 1 ) every linked token in the current scene */
-      const sceneLinked = canvas.tokens.placeables.filter(t => t.document.actorLink);
+function displayTokens() {
+  if (game.user.isGM) {
+    const unlinked = canvas.tokens.placeables.filter(t => !t.document.actorLink);
 
-      /* 2 ) plus linked tokens whose owners are offline (covers “actors whose players are not logged in”) */
-      const offlineLinked = canvas.tokens.placeables.filter(t => {
-        if (!t.document.actorLink) return false;
-        const owners = game.users.players.filter(u => t.actor?.testUserPermission(u, CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER));
-        return owners.length && owners.every(u => !u.active);
-      });
+    const linkedTokens = canvas.tokens.placeables.filter(t => {
+      if (!t.document.actorLink) return false;
 
-      /* Combine & de‑dupe */
-      return [...new Set([...sceneLinked, ...offlineLinked])];
-    }
+      const owners = game.users.players.filter(u =>
+        t.actor?.testUserPermission(u, CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER)
+      );
 
-    /* ---------- Regular player view  (only tokens you OWN) ---------- */
-    return canvas.tokens.placeables.filter(t => canControl(t));
+      // Show this token only if it has no owners or all owners are offline
+      return owners.length === 0 || owners.every(u => !u.active);
+    });
+
+    return [...new Set([...unlinked, ...linkedTokens])];
   }
+
+  // Regular player view – show only tokens the user can control
+  return canvas.tokens.placeables.filter(t => canControl(t));
+}
 
 /* ---------- Build / refresh bar (looping carousel) -------------- */
 function refresh() {
@@ -463,7 +464,43 @@ Hooks.on("combatTurnChange", (combat /* Combat */, _prior, _current) => {
       .forEach(checkTokenDeath);
   });
 
-})();   /*  ← keep this *inside* the big IIFE, but above its own }); */
+/***********************************************************************
+ * Disable click-to-select when Follow Mode is active
+ **********************************************************************/
+Hooks.once("ready", () => {
+  // Patch the original makeImg function if it exists
+  const oldRefresh = refresh;
+  refresh = function patchedRefresh() {
+    // Temporarily override makeImg
+    const originalMakeImg = makeImg;
+    makeImg = function patchedMakeImg(token) {
+      const img = document.createElement("img");
+      img.src   = imgSrc(token);
+      img.alt   = token.name;
+
+      if (token.id === selectedId)
+        img.classList.add("selected-token");
+
+      // Click → switch selection only if follow mode is disabled
+      if (!alwaysCenter) {
+        img.onclick = () => selectToken(token);
+      }
+
+      img.onmouseenter = () => setSmall(token.name, alwaysCenter && token.id === selectedId);
+      img.onmouseleave = () => {
+        const cur = canvas.tokens.get(selectedId);
+        setSmall(cur?.name ?? "", alwaysCenter);
+      };
+      return img;
+    };
+
+    // Call the original refresh logic
+    oldRefresh();
+
+    // Restore original makeImg (clean override)
+    makeImg = originalMakeImg;
+  };
+});
 
   
 
