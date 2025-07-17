@@ -193,7 +193,16 @@
   });
 
   Hooks.on("controlToken", (token, controlled, options) => {
-    if (alwaysCenter && controlled) canvas.tokens.releaseAll();
+    if (controlled) {
+      temporarilyDisableFollow(() => {
+        selectedId = token.id;
+        if (canControl(token)) {
+          canvas.tokens.releaseAll();
+          token.control({ releaseOthers: true });
+          game.user.updateTokenTargets([token]);
+        }
+      });
+    }
   });
 
   function cycleOwned(o) {
@@ -216,8 +225,15 @@
     if (ev.target instanceof HTMLInputElement || ev.target instanceof HTMLTextAreaElement || ev.target.isContentEditable) return;
 
     if (["KeyW", "KeyA", "KeyS", "KeyD", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(ev.code)) {
-      if (canvas.tokens.controlled.length === 0 && selectedId) {
-        const t = canvas.tokens.get(selectedId);
+      if (canvas.tokens.controlled.length === 0) {
+        let t = selectedId ? canvas.tokens.get(selectedId) : null;
+        if (!t || !canControl(t)) {
+          const fallback = displayTokens().find(t => canControl(t));
+          if (fallback) {
+            selectedId = fallback.id;
+            t = fallback;
+          }
+        }
         if (t && canControl(t)) {
           canvas.tokens.releaseAll();
           t.control({ releaseOthers: true });
@@ -233,8 +249,14 @@
       case "Space": {
         if (combatRunning()) {
           const cb = game.combat.combatant; const tok = cb ? canvas.tokens.get(cb.tokenId) : null;
-          if (tok && (game.user.isGM || tok.isOwner)) { ev.preventDefault(); game.combat.nextTurn(); }
-        } else { ev.preventDefault(); game.togglePause(); }
+          if (tok && (game.user.isGM || tok.isOwner)) {
+            ev.preventDefault();
+            temporarilyDisableFollow(() => game.combat.nextTurn());
+          }
+        } else {
+          ev.preventDefault();
+          game.togglePause();
+        }
         break;
       }
     }
@@ -262,11 +284,6 @@
   Hooks.on("deleteToken", refresh);
   Hooks.on("updateActor", refresh);
   Hooks.on("deleteCombat", refresh);
-
-
-
-
-
 
 
 
