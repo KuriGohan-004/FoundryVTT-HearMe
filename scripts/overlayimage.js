@@ -473,46 +473,39 @@ Hooks.once("ready", () => {
   
 
 /***********************************************************************
- * Follow Mode: Smart Clicks & Disable Dragging + Target Toggle
+ * Follow Mode: Smart Target Toggle on Click (like pressing T)
  **********************************************************************/
 
-Hooks.on("canvasReady", () => {
+Hooks.once("canvasReady", () => {
   const tokensLayerElement = canvas.tokens?.layer?.element;
   if (!tokensLayerElement) return;
 
-  // Delegate click event on tokens container
   tokensLayerElement.addEventListener("click", async (event) => {
     // Only act if Follow Mode is ON
     if (!window.playerTokenBar?.isFollowMode()) return;
 
-    // Find the closest token element clicked
     const tokenEl = event.target.closest(".token");
     if (!tokenEl) return;
 
-    // Get the token object by matching the DOM id
-    const clickedToken = canvas.tokens.placeables.find(t => t.id === tokenEl.id);
-    if (!clickedToken) return;
-
+    // Prevent Foundry's default click behavior (selection, sheet open)
     event.preventDefault();
     event.stopPropagation();
 
+    // Find the clicked Token object
+    const token = canvas.tokens.placeables.find(t => t.id === tokenEl.id);
+    if (!token) return;
+
+    // Emulate pressing "T": toggle target status of token
     const user = game.user;
-    const isTargeted = user.targets.has(clickedToken.document);
+    const isTargeted = user.targets.has(token.document);
 
-    if (isTargeted) {
-      // Clear all targets if token is already targeted
-      await user.updateTokenTargets([], false);
-    } else {
-      // Clear all targets, then add this token as target
-      await user.updateTokenTargets([clickedToken.document], false);
-    }
+    await user.updateTokenTargets([token.document], !isTargeted);
 
-    // Refresh HUD to update UI immediately
-    if (canvas.tokens.hud) {
-      canvas.tokens.hud.refresh();
-    }
-  }, true); // Use capture phase to get event first
+    // Optional: refresh HUD (helps visual consistency)
+    canvas.tokens.hud?.refresh();
+  }, true); // Capture phase = intercept before Foundry handles
 });
+
 
 
 
