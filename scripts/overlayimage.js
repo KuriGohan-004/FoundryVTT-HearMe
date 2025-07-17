@@ -276,35 +276,45 @@
     }
   });
 
-  Hooks.on("controlToken", (token, controlled) => {
-    if (ignoreNextControl) {
-      ignoreNextControl = false;
-      return;
-    }
+Hooks.on("controlToken", (token, controlled) => {
+  if (ignoreNextControl) {
+    ignoreNextControl = false;
+    return;
+  }
 
-    if (lastClickWasFromBar) {
-      lastClickWasFromBar = false;
-      return;
-    }
+  if (lastClickWasFromBar) {
+    lastClickWasFromBar = false;
+    return;
+  }
 
-    if (!canControl(token)) return;
+  if (!canControl(token)) return;
 
-    if (alwaysCenter) {
-      if (controlled) {
-        token.setTarget(!token.isTargeted, { releaseOthers: false });
-        token.control({ releaseOthers: false, active: false });
-      } else {
-        token.setTarget(false, { releaseOthers: false });
-      }
+  if (!alwaysCenter && controlled && token.id !== selectedId) {
+    selectToken(token);
+  }
+
+  refresh();
+});
+
+
+Hooks.on("preControlToken", (token, controlled, event, options) => {
+  if (!canControl(token)) return true; // Allow others to work normally
+
+  if (alwaysCenter && !lastClickWasFromBar) {
+    // Follow Mode ON + map click: prevent control
+    // Just toggle target manually
+    if (controlled) {
+      token.setTarget(!token.isTargeted, { releaseOthers: false });
     } else {
-      if (controlled && token.id !== selectedId) {
-        selectToken(token);
-      }
+      token.setTarget(false, { releaseOthers: false });
     }
+    return false; // ❌ BLOCK the control change
+  }
 
-    refresh();
-  });
+  return true; // Allow normal behavior
+});
 
+  
   window.addEventListener("keydown", e => {
     if (document.activeElement?.tagName === "INPUT" || document.activeElement?.tagName === "TEXTAREA") return;
     if (e.key === "q" || e.key === "Q") {
