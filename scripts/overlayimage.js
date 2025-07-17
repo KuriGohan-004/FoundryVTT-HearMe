@@ -215,7 +215,6 @@ Hooks.on("updateToken",refresh);
 Hooks.on("deleteToken",refresh);
 Hooks.on("updateActor",refresh);
 Hooks.on("deleteCombat",refresh);
-})();
 
 
   /* ---------- Improved ENTER behaviour --------------------------- */
