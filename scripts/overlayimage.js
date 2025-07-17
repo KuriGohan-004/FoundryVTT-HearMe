@@ -48,7 +48,7 @@
   const center = () => el(CENTER_ID);
 
   let selectedId = null;
-  let alwaysCenter = true;
+  let alwaysCenter = false;
   let orderedIds = [];
   let ownedIds = [];
   let moveCounter = 0;
@@ -124,7 +124,7 @@
       if (token.id === selectedId) img.classList.add("selected-token");
       img.onclick = () => {
         closeAllSheets();
-        selectToken(token);
+        temporarilyDisableFollow(() => selectToken(token));
       };
       img.onmouseenter = () => setSmall(token.name, alwaysCenter && token.id === selectedId);
       img.onmouseleave = () => {
@@ -174,6 +174,13 @@
     setSmall(t?.name ?? "", alwaysCenter);
   }
 
+  function temporarilyDisableFollow(callback) {
+    const prev = alwaysCenter;
+    alwaysCenter = false;
+    callback();
+    alwaysCenter = prev;
+  }
+
   Hooks.on("updateToken", doc => {
     if (alwaysCenter && doc.id === selectedId) {
       moveCounter++;
@@ -195,7 +202,7 @@
     const next = canvas.tokens.get(ownedIds[(idx + o + ownedIds.length) % ownedIds.length]);
     if (next) {
       closeAllSheets();
-      selectToken(next);
+      temporarilyDisableFollow(() => selectToken(next));
     }
   }
 
@@ -233,32 +240,21 @@
     }
   });
 
-  Hooks.once("ready", () => {
+  Hooks.once("canvasReady", () => {
     refresh();
     const all = displayTokens();
     if (all.length && !selectedId) {
       selectedId = all.find(t => canControl(t))?.id ?? all[0].id;
-      const t = canvas.tokens.get(selectedId);
-      if (t && canControl(t)) {
-        canvas.tokens.releaseAll();
-        t.control({ releaseOthers: true });
-        game.user.updateTokenTargets([t]);
-      }
     }
-  });
-
-  Hooks.on("canvasReady", () => {
-    refresh();
-    const all = displayTokens();
-    if (all.length && !selectedId) {
-      selectedId = all.find(t => canControl(t))?.id ?? all[0].id;
-      const t = canvas.tokens.get(selectedId);
-      if (t && canControl(t)) {
-        canvas.tokens.releaseAll();
-        t.control({ releaseOthers: true });
-        game.user.updateTokenTargets([t]);
-      }
+    const t = canvas.tokens.get(selectedId);
+    if (t && canControl(t)) {
+      canvas.tokens.releaseAll();
+      t.control({ releaseOthers: true });
+      game.user.updateTokenTargets([t]);
     }
+    alwaysCenter = true;
+    if (t) canvas.animatePan({ x: t.center.x, y: t.center.y, scale: canvas.stage.scale.x, duration: PAN_DURATION });
+    setSmall(t?.name ?? "", alwaysCenter);
   });
 
   Hooks.on("createToken", refresh);
@@ -266,6 +262,8 @@
   Hooks.on("deleteToken", refresh);
   Hooks.on("updateActor", refresh);
   Hooks.on("deleteCombat", refresh);
+
+
 
 
 
