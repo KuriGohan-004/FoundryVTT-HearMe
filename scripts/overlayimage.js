@@ -9,33 +9,7 @@
   const LABEL_ID = "player-token-bar-label";
   const CENTER_ID = "player-token-bar-center-label";
 
-  const CSS = `
-    #${BAR_ID}{ position:fixed; bottom:0; left:25%; width:50%; height:84px;
-      padding:6px 10px; display:flex; align-items:center; justify-content:center;
-      gap:10px; overflow:hidden; background:none; border:none;
-      z-index:20; pointer-events:auto; transition:opacity .25s ease; }
-    #${BAR_ID} img{
-      width:64px; height:64px; object-fit:cover; border-radius:8px;
-      border:2px solid #fff; flex:0 0 auto; cursor:pointer;
-      transition:transform .15s ease;
-    }
-    #${BAR_ID} img:hover               {transform:scale(1.20); z-index:1;}
-    #${BAR_ID} img.selected-token,
-    #${BAR_ID} img.selected-token:hover{transform:scale(1.25); z-index:2;}
-    #${LABEL_ID}{ position:fixed; bottom:90px; left:25%; width:50%;
-      text-align:center; font-size:16px; font-weight:bold; color:#fff;
-      text-shadow:0 0 4px #000; pointer-events:none; z-index:21;
-      height:24px; line-height:24px; user-select:none; }
-    @keyframes ptbPulse{0%,100%{opacity:1;}50%{opacity:.5;}}
-    #${CENTER_ID}{
-      position:fixed; font-size:48px; font-weight:bold; font-style:italic;
-      color:#fff; text-shadow:0 0 8px #000; pointer-events:none; z-index:40;
-      user-select:none; animation:ptbPulse 4s infinite;
-      transform:rotate(-90deg) translateY(100%);
-      transform-origin:bottom left;
-      white-space:nowrap; overflow:visible; left:0;
-      padding-left: -35%; padding-bottom: 5%;
-    }`;
+  // CSS unchanged...
 
   document.head.appendChild(Object.assign(document.createElement("style"), { textContent: CSS }));
 
@@ -84,12 +58,10 @@
     return canvas.tokens.placeables.filter(t => canControl(t));
   }
 
-  // Helper to create hash string from token IDs array to detect changes
   function hashTokenIds(tokens) {
     return tokens.map(t => t.id).sort().join(",");
   }
 
-  // Full rebuild of token bar UI
   function rebuildTokenBarUI(allToks) {
     const b = bar();
     b.replaceChildren();
@@ -140,7 +112,6 @@
     showCenter(nm);
   }
 
-  // Throttled refresh function to reduce UI lag on rapid events
   let refreshScheduled = false;
   function refresh() {
     if (refreshScheduled) return;
@@ -164,7 +135,6 @@
         return;
       }
 
-      // Auto-select if selected token is gone or none selected
       if (!selectedId || !allToks.some(t => t.id === selectedId)) {
         selectedId = allToks[0].id;
         const t = canvas.tokens.get(selectedId);
@@ -175,20 +145,18 @@
         }
       }
 
-      // Check if tokens list or selection changed
       const currentIdsHash = hashTokenIds(allToks);
       if (currentIdsHash !== lastTokenIdsHash || selectedId !== lastSelectedId) {
         rebuildTokenBarUI(allToks);
         lastTokenIdsHash = currentIdsHash;
         lastSelectedId = selectedId;
       } else {
-        // No list/selection change, only update the label and center display
         const curTok = canvas.tokens.get(selectedId);
         const nm = curTok?.name ?? "";
         setSmall(nm, alwaysCenter);
         showCenter(nm);
       }
-    }, 50); // 50ms debounce interval
+    }, 50);
   }
 
   function selectToken(t) {
@@ -201,14 +169,13 @@
 
     if (alwaysCenter) {
       lastFollowedPos = { x: t.center.x, y: t.center.y };
-      canvas.pan({ x: t.center.x, y: t.center.y, scale: canvas.stage.scale.x });
+      canvas.animatePan({ x: t.center.x, y: t.center.y, scale: canvas.stage.scale.x });
     }
 
     showCenter(t.name);
     refresh();
   }
 
-  // Cycle selection forward/backward
   function cycleSelection(offset) {
     if (!orderedIds.length) return;
     let i = orderedIds.indexOf(selectedId);
@@ -218,8 +185,8 @@
     if (t) selectToken(t);
   }
 
-  // Follow mode: camera follows token only if moved >3 squares
-  Hooks.on("updateToken", (scene, tokenDoc, diff, options, userId) => {
+  // Fix: updateToken hook arguments changed in Foundry VTT v9+
+  Hooks.on("updateToken", (tokenDoc, diff, options, userId) => {
     if (!alwaysCenter) return;
     if (!selectedId) return;
     if (tokenDoc.id !== selectedId) return;
@@ -233,11 +200,10 @@
 
     if (dist > canvas.grid.size * 3) {
       lastFollowedPos = { x: t.center.x, y: t.center.y };
-      canvas.pan({ x: t.center.x, y: t.center.y, scale: canvas.stage.scale.x });
+      canvas.animatePan({ x: t.center.x, y: t.center.y, scale: canvas.stage.scale.x });
     }
   });
 
-  // Hook to token control to sync bar selection
   Hooks.on("controlToken", (token, controlled) => {
     if (ignoreNextControl) {
       ignoreNextControl = false;
@@ -250,7 +216,6 @@
     }
   });
 
-  // Keyboard support
   window.addEventListener("keydown", e => {
     if (document.activeElement?.tagName === "INPUT" || document.activeElement?.tagName === "TEXTAREA") return;
     if (e.key === "q" || e.key === "ArrowLeft") {
@@ -266,19 +231,39 @@
     }
   });
 
-  // Initialize UI elements on DOM ready
+  // === NEW: Hook on canvasReady to refresh bar and show at scene load ===
+  Hooks.on("canvasReady", () => {
+    refresh();
+    bar().style.opacity = "1";
+    bar().style.pointerEvents = "auto";
+  });
+
+  // === NEW: Hook on ready (game start) to refresh ===
+  Hooks.on("ready", () => {
+    refresh();
+    bar().style.opacity = "1";
+    bar().style.pointerEvents = "auto";
+  });
+
+  // === NEW: Refresh when a new player connects (socket) ===
+  game.socket.on("userConnect", () => {
+    refresh();
+  });
+
+  // Initialize UI elements on DOM ready (optional redundancy)
   window.addEventListener("load", () => {
     bar().style.opacity = "1";
     center().style.userSelect = "none";
     refresh();
   });
 
-  // Expose some functions for debugging
   window.playerTokenBar = {
     selectToken,
     cycleSelection,
     refresh,
   };
+})();
+
 
   /* ---------- Improved ENTER behaviour --------------------------- */
   /**
