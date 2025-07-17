@@ -139,8 +139,15 @@
       if (token.id === selectedId) img.classList.add("selected-token");
 
 img.onclick = () => {
-  selectToken(token);
+  if (alwaysCenter) {
+    // Follow mode ON: portraits should always select token, no targeting
+    selectToken(token);
+  } else {
+    // Follow mode OFF: portraits also just select token normally
+    selectToken(token);
+  }
 };
+
 
       img.onmouseenter = () => setSmall(token.name, false);
       img.onmouseleave = () => {
@@ -280,19 +287,22 @@ Hooks.on("controlToken", (token, controlled) => {
     ignoreNextControl = false;
     return;
   }
-  
+
   if (!canControl(token)) return;
 
   if (alwaysCenter) {
-    // In Follow Mode: toggle targeting only, DO NOT switch selection
+    // Follow mode ON, clicking tokens on map toggles targeting but does NOT select
     if (controlled) {
+      // Toggle target state
       token.setTarget(!token.isTargeted, { releaseOthers: false });
+      // Now release control immediately so token is NOT selected
+      token.control({releaseOthers: false, active: false});
     } else {
+      // If token is uncontrolled, clear target
       token.setTarget(false, { releaseOthers: false });
     }
-    // NO selectToken(token) here
   } else {
-    // Follow mode OFF: default behavior — select token normally
+    // Follow mode OFF normal behavior: selecting token controls it normally
     if (controlled && token.id !== selectedId) {
       selectToken(token);
     }
@@ -300,6 +310,7 @@ Hooks.on("controlToken", (token, controlled) => {
 
   refresh();
 });
+
 
 
 
