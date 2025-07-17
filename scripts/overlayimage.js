@@ -290,32 +290,31 @@ Hooks.on("controlToken", (token, controlled) => {
   if (!canControl(token)) return;
 
   if (alwaysCenter) {
-    // Follow Mode ON
-
     if (controlled) {
-      // Target clicked token and clear other targets
-      token.setTarget(!token.isTargeted, { releaseOthers: true });
+      // Save clicked token ID
+      const clickedTokenId = token.id;
 
-      // Re-control the followed token
-      if (token.id !== selectedId) {
-        setTimeout(() => {
-          const followedToken = canvas.tokens.get(selectedId);
-          if (followedToken) {
-            ignoreNextControl = true;
-            followedToken.control({ releaseOthers: true });
+      // Delay to allow Foundry to finish selecting the clicked token
+      setTimeout(() => {
+        const followedToken = canvas.tokens.get(selectedId);
+        const clickedToken = canvas.tokens.get(clickedTokenId);
 
-            // Delay clearing of its target so it doesn't interfere
-            setTimeout(() => {
-              followedToken.setTarget(false, { releaseOthers: false });
-            }, 30); // Slight delay
-          }
-        }, 50); // Let Foundry process the first control first
-      }
+        if (followedToken && clickedToken && followedToken.id !== clickedToken.id) {
+          ignoreNextControl = true;
+
+          // Re-control the followed token
+          followedToken.control({ releaseOthers: true });
+
+          // Re-target the originally clicked token (and only it)
+          setTimeout(() => {
+            clickedToken.setTarget(true, { releaseOthers: true });
+          }, 20); // Delay to let control settle
+        }
+      }, 30);
     } else {
       token.setTarget(false, { releaseOthers: false });
     }
   } else {
-    // Follow Mode OFF: normal behavior
     if (controlled && token.id !== selectedId) {
       selectToken(token);
     }
@@ -323,6 +322,7 @@ Hooks.on("controlToken", (token, controlled) => {
 
   refresh();
 });
+
 
 
 
