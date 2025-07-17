@@ -159,11 +159,9 @@
       t.control({ releaseOthers: true });
     }
 
+    // Removed camera pan on token select to avoid lag
     if (alwaysCenter) {
       lastFollowedPos = { x: t.center.x, y: t.center.y };
-      canvas.pan({ x: t.center.x, y: t.center.y, scale: canvas.stage.scale.x }); // Instant pan to avoid lag
-    } else {
-      canvas.animatePan({ x: t.center.x, y: t.center.y, scale: canvas.stage.scale.x, duration: 250 }); // Smooth if not in follow
     }
 
     showCenter(t.name);
