@@ -475,36 +475,31 @@ Hooks.once("ready", () => {
 /***********************************************************************
  * Follow Mode: Smart Target Toggle on Click (like pressing T)
  **********************************************************************/
-Hooks.on("canvasReady", () => {
-  canvas.stage.on("mousedown", event => {
-    if (!isFollowMode()) return;
-    if (event.data.button !== 0) return; // Only intercept left-click
+Hooks.once("ready", () => {
+  // Patch Token layer click handling
+  const origHandleClickLeft = Token.prototype._onClickLeft;
 
-    const interaction = event.interactionData;
-    const mousePosition = interaction?.destination;
-    if (!mousePosition) return;
-
-    const clickedToken = canvas.tokens.placeables.find(t => {
-      const bounds = t.bounds;
-      return bounds.contains(mousePosition.x, mousePosition.y);
-    });
-
-    if (clickedToken) {
-      // Prevent default selection and instead target it
-      event.stopPropagation();
-      event.stopImmediatePropagation();
-
-      if (canControl(clickedToken)) {
-        const wasTargeted = clickedToken.isTargeted;
-        if (!wasTargeted) {
-          game.user.updateTokenTargets([clickedToken.id]);
-        } else {
-          game.user.updateTokenTargets([]);
-        }
-      }
+  Token.prototype._onClickLeft = function (event) {
+    if (!isFollowMode()) {
+      // If follow mode is off, do default behavior
+      return origHandleClickLeft.call(this, event);
     }
-  }, true); // Use capture phase to intercept before default handling
+
+    // Prevent default click behavior (selection)
+    event.stopPropagation();
+
+    // Toggle target state like pressing 'T'
+    const alreadyTargeted = this.isTargeted;
+    const tokenIds = alreadyTargeted
+      ? game.user.targets.filter(t => t.id !== this.id).map(t => t.id)
+      : [...game.user.targets.map(t => t.id), this.id];
+
+    game.user.updateTokenTargets(tokenIds);
+
+    return false;
+  };
 });
+
 
 
 
