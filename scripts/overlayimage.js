@@ -6,6 +6,8 @@
   const BAR_ID    = "player-token-bar";
   const LABEL_ID  = "player-token-bar-label";
   const CENTER_ID = "player-token-bar-center-label";
+  const MOVE_THRESHOLD = 3; // How many moves before re-centering
+  const PAN_DURATION = 500; // Duration of camera pan in ms
 
   /* ---------- Styles (50% width, transparent) ---------- */
   const CSS = `
@@ -54,6 +56,7 @@
   let alwaysCenter = true;
   let orderedIds = [];
   let ownedIds = [];
+  let moveCounter = 0;
 
   const combatRunning = () => !!(game.combat?.started && game.combat.scene?.id === canvas.scene?.id);
   const canControl = t => t.isOwner || t.actor?.isOwner;
@@ -161,7 +164,8 @@
     } else {
       t.setTarget(true, { user: game.user, releaseOthers: true });
     }
-    canvas.animatePan({ x: t.center.x, y: t.center.y, scale: canvas.stage.scale.x, duration: alwaysCenter ? 500 : 250 });
+    canvas.animatePan({ x: t.center.x, y: t.center.y, scale: canvas.stage.scale.x, duration: PAN_DURATION });
+    moveCounter = 0;
     showCenter(t.name);
     refresh();
   }
@@ -170,14 +174,18 @@
     if (!selectedId) return;
     alwaysCenter = !alwaysCenter;
     const t = canvas.tokens.get(selectedId);
-    if (t && alwaysCenter) canvas.animatePan({ x: t.center.x, y: t.center.y, scale: canvas.stage.scale.x, duration: 500 });
+    if (t && alwaysCenter) canvas.animatePan({ x: t.center.x, y: t.center.y, scale: canvas.stage.scale.x, duration: PAN_DURATION });
     setSmall(t?.name ?? "", alwaysCenter);
   }
 
   Hooks.on("updateToken", doc => {
     if (alwaysCenter && doc.id === selectedId) {
-      const t = canvas.tokens.get(doc.id);
-      if (t) canvas.animatePan({ x: t.center.x, y: t.center.y, scale: canvas.stage.scale.x, duration: 500 });
+      moveCounter++;
+      if (moveCounter >= MOVE_THRESHOLD) {
+        moveCounter = 0;
+        const t = canvas.tokens.get(doc.id);
+        if (t) canvas.animatePan({ x: t.center.x, y: t.center.y, scale: canvas.stage.scale.x, duration: PAN_DURATION });
+      }
     }
   });
 
@@ -235,12 +243,22 @@
     }
   });
 
-  Hooks.on("canvasReady", refresh);
+  Hooks.on("canvasReady", () => {
+    refresh();
+    const all = displayTokens();
+    if (all.length && !selectedId) {
+      selectedId = all.find(t => canControl(t))?.id ?? all[0].id;
+      const t = canvas.tokens.get(selectedId);
+      if (t && canControl(t)) t.control({ releaseOthers: true });
+    }
+  });
+
   Hooks.on("createToken", refresh);
   Hooks.on("updateToken", refresh);
   Hooks.on("deleteToken", refresh);
   Hooks.on("updateActor", refresh);
   Hooks.on("deleteCombat", refresh);
+
 
 
 
