@@ -1,3 +1,9 @@
+/***********************************************************************
+ * Player Token Bar – rotated fading name aligned to sidebar
+ *  • v2 – user-owned only, GM omnibus view, half-sized bar
+ *  • Bugfixed: Follow mode lag resolved by debouncing refresh and
+ *    only rebuilding UI when necessary
+ **********************************************************************/
 (() => {
   const BAR_ID = "player-token-bar";
   const LABEL_ID = "player-token-bar-label";
@@ -33,29 +39,20 @@
 
   document.head.appendChild(Object.assign(document.createElement("style"), { textContent: CSS }));
 
-  // Create element helper: creates or gets existing element by id
-  const el = (id, tag = "div") => {
-    let existing = document.getElementById(id);
-    if (existing) return existing;
-    const created = document.createElement(tag);
-    created.id = id;
-    document.body.appendChild(created);
-    return created;
-  };
-
+  const el = (id, tag = "div") => document.getElementById(id) ?? document.body.appendChild(Object.assign(document.createElement(tag), { id }));
   const bar = () => el(BAR_ID);
   const label = () => el(LABEL_ID);
   const center = () => el(CENTER_ID);
 
   let selectedId = null;
-  let alwaysCenter = false; // follow mode flag, not affecting bar visibility now
+  let alwaysCenter = true;
   let orderedIds = [];
   let ownedIds = [];
   let lastFollowedPos = null;
   let ignoreNextControl = false;
 
-  let lastTokenIdsHash = "";
-  let lastSelectedId = null;
+  let lastTokenIdsHash = ""; // To detect token list changes
+  let lastSelectedId = null;  // To detect selection changes
 
   const combatRunning = () => !!(game.combat?.started && game.combat.scene?.id === canvas.scene?.id);
   const canControl = t => t.isOwner || t.actor?.isOwner;
@@ -87,10 +84,12 @@
     return canvas.tokens.placeables.filter(t => canControl(t));
   }
 
+  // Helper to create hash string from token IDs array to detect changes
   function hashTokenIds(tokens) {
     return tokens.map(t => t.id).sort().join(",");
   }
 
+  // Full rebuild of token bar UI
   function rebuildTokenBarUI(allToks) {
     const b = bar();
     b.replaceChildren();
@@ -116,10 +115,10 @@
       img.alt = token.name;
       if (token.id === selectedId) img.classList.add("selected-token");
       img.onclick = () => selectToken(token);
-      img.onmouseenter = () => setSmall(token.name, false);
+      img.onmouseenter = () => setSmall(token.name, alwaysCenter && token.id === selectedId);
       img.onmouseleave = () => {
         const cur = canvas.tokens.get(selectedId);
-        setSmall(cur?.name ?? "", false);
+        setSmall(cur?.name ?? "", alwaysCenter);
       };
       return img;
     }
@@ -137,10 +136,11 @@
 
     const curTok = canvas.tokens.get(selectedId);
     const nm = curTok?.name ?? "";
-    setSmall(nm, false);
+    setSmall(nm, alwaysCenter);
     showCenter(nm);
   }
 
+  // Throttled refresh function to reduce UI lag on rapid events
   let refreshScheduled = false;
   function refresh() {
     if (refreshScheduled) return;
@@ -148,12 +148,23 @@
     setTimeout(() => {
       refreshScheduled = false;
 
+      if (combatRunning()) {
+        bar().style.opacity = "0";
+        bar().style.pointerEvents = "none";
+        setSmall("");
+        return;
+      }
+
+      bar().style.opacity = "1";
+      bar().style.pointerEvents = "auto";
+
       const allToks = displayTokens();
       if (!allToks.length) {
         setSmall("");
         return;
       }
 
+      // Auto-select if selected token is gone or none selected
       if (!selectedId || !allToks.some(t => t.id === selectedId)) {
         selectedId = allToks[0].id;
         const t = canvas.tokens.get(selectedId);
@@ -164,18 +175,20 @@
         }
       }
 
+      // Check if tokens list or selection changed
       const currentIdsHash = hashTokenIds(allToks);
       if (currentIdsHash !== lastTokenIdsHash || selectedId !== lastSelectedId) {
         rebuildTokenBarUI(allToks);
         lastTokenIdsHash = currentIdsHash;
         lastSelectedId = selectedId;
       } else {
+        // No list/selection change, only update the label and center display
         const curTok = canvas.tokens.get(selectedId);
         const nm = curTok?.name ?? "";
-        setSmall(nm, false);
+        setSmall(nm, alwaysCenter);
         showCenter(nm);
       }
-    }, 50);
+    }, 50); // 50ms debounce interval
   }
 
   function selectToken(t) {
@@ -185,13 +198,17 @@
       ignoreNextControl = true;
       t.control({ releaseOthers: true });
     }
-    lastFollowedPos = { x: t.center.x, y: t.center.y };
-    canvas.pan({ x: t.center.x, y: t.center.y, scale: canvas.stage.scale.x });
+
+    if (alwaysCenter) {
+      lastFollowedPos = { x: t.center.x, y: t.center.y };
+      canvas.pan({ x: t.center.x, y: t.center.y, scale: canvas.stage.scale.x });
+    }
 
     showCenter(t.name);
     refresh();
   }
 
+  // Cycle selection forward/backward
   function cycleSelection(offset) {
     if (!orderedIds.length) return;
     let i = orderedIds.indexOf(selectedId);
@@ -201,7 +218,9 @@
     if (t) selectToken(t);
   }
 
+  // Follow mode: camera follows token only if moved >3 squares
   Hooks.on("updateToken", (scene, tokenDoc, diff, options, userId) => {
+    if (!alwaysCenter) return;
     if (!selectedId) return;
     if (tokenDoc.id !== selectedId) return;
 
@@ -218,6 +237,7 @@
     }
   });
 
+  // Hook to token control to sync bar selection
   Hooks.on("controlToken", (token, controlled) => {
     if (ignoreNextControl) {
       ignoreNextControl = false;
@@ -230,37 +250,36 @@
     }
   });
 
+  // Keyboard support
   window.addEventListener("keydown", e => {
     if (document.activeElement?.tagName === "INPUT" || document.activeElement?.tagName === "TEXTAREA") return;
-    if (e.key === "q" || e.key === "Q") {
+    if (e.key === "q" || e.key === "ArrowLeft") {
       e.preventDefault();
       cycleSelection(-1);
-    } else if (e.key === "e" || e.key === "E") {
+    } else if (e.key === "e" || e.key === "ArrowRight") {
       e.preventDefault();
       cycleSelection(1);
+    } else if (e.key === "f") {
+      e.preventDefault();
+      alwaysCenter = !alwaysCenter;
+      refresh();
     }
   });
 
-  // Immediately create bar and label elements on load
+  // Initialize UI elements on DOM ready
   window.addEventListener("load", () => {
     bar().style.opacity = "1";
-    bar().style.pointerEvents = "auto";
-    label();
-    center();
-    positionCenter();
+    center().style.userSelect = "none";
     refresh();
   });
 
-  // Public API to refresh or select tokens if needed
+  // Expose some functions for debugging
   window.playerTokenBar = {
     selectToken,
     cycleSelection,
-    refresh
+    refresh,
   };
-})();
 
-
-  /* ############################################################### */
   /* ---------- Improved ENTER behaviour --------------------------- */
   /**
    *  • If Enter is pressed while a text‑editable element is focused → do nothing
