@@ -408,60 +408,6 @@ Hooks.on("combatTurnChange", (combat /* Combat */, _prior, _current) => {
   if (game.user.isGM || canControl(tok)) selectToken(tok);
 });
 
-
-
-/***********************************************************************
- * Follow Mode: Smart Clicks & Disable Dragging
- **********************************************************************/
-Hooks.once("ready", () => {
-  // Enhanced click control behavior
-  Hooks.on("controlToken", (token, controlled) => {
-    if (!controlled) return;
-
-    const isBarToken = ownedIds.includes(token.id);
-
-    if (alwaysCenter) {
-      if (token.id === selectedId) return; // Same token: allow
-
-      if (isBarToken) {
-        // Owned token → switch to it
-        alwaysCenter = false;  // Disable Follow Mode briefly
-        selectedId = token.id;
-        if (canControl(token)) token.control({ releaseOthers: true });
-        canvas.animatePan(token.center);
-        refresh();
-
-        // Re-enable Follow Mode after a short delay
-        setTimeout(() => {
-          alwaysCenter = true;
-          setSmall(token.name ?? "", true);
-        }, 200);
-      } else {
-        // Not your token → target it
-        token.setTarget(true, { user: game.user, releaseOthers: false });
-      }
-
-      // Prevent default control behavior
-      setTimeout(() => token.release(), 0);
-      return false;
-    }
-
-    // Follow mode OFF: selecting a bar token updates selection
-    if (isBarToken) {
-      selectedId = token.id;
-      refresh();
-    }
-  });
-
-  // Disable drag interaction in Follow Mode
-  const origCanDragToken = Token.prototype._canDrag;
-  Token.prototype._canDrag = function (event) {
-    // If Follow Mode is active and this is the currently selected token, block drag
-    if (alwaysCenter && this.id === selectedId) return false;
-    return origCanDragToken.call(this, event);
-  };
-});
-
 /***********************************************************************
  * Disable token dragging when only one token is selected
  **********************************************************************/
@@ -480,7 +426,56 @@ Hooks.once("ready", () => {
   };
 });
 
+/***********************************************************************
+ * Refined Token Click Behavior (Players vs GM)
+ **********************************************************************/
+Hooks.on("controlToken", (token, controlled) => {
+  if (!controlled) return;
 
+  const isBarToken = ownedIds.includes(token.id);
+  const isGM = game.user.isGM;
+
+  if (alwaysCenter) {
+    if (isGM) {
+      // GM in follow mode → only target, never select
+      canvas.targets.clear();
+      token.setTarget(true, { user: game.user, releaseOthers: false });
+
+      setTimeout(() => token.release(), 0);  // Prevent selection
+      return false;
+    }
+
+    // Player in follow mode:
+    if (isBarToken) {
+      // Own token → select and control it
+      selectedId = token.id;
+      refresh();
+      return; // Allow control
+    }
+
+    // Not owned → target only
+    canvas.targets.clear();
+    token.setTarget(true, { user: game.user, releaseOthers: false });
+
+    setTimeout(() => token.release(), 0);  // Prevent selection
+    return false;
+  }
+
+  // Follow Mode OFF
+  if (!alwaysCenter && isBarToken && !isGM) {
+    selectedId = token.id;
+    refresh();
+  }
+});
+
+  // Disable drag interaction in Follow Mode
+  const origCanDragToken = Token.prototype._canDrag;
+  Token.prototype._canDrag = function (event) {
+    // If Follow Mode is active and this is the currently selected token, block drag
+    if (alwaysCenter && this.id === selectedId) return false;
+    return origCanDragToken.call(this, event);
+  };
+});
 
 
   
