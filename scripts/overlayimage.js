@@ -472,7 +472,53 @@ Hooks.once("ready", () => {
 });
   
 
+/***********************************************************************
+   * Follow Mode: Smart Clicks & Disable Dragging
+   **********************************************************************/
+  Hooks.once("ready", () => {
+    Hooks.on("controlToken", (token, controlled) => {
+      if (!controlled) return;
 
+      const isBarToken = ownedIds.includes(token.id);
+      const isGM = game.user.isGM;
+      const isOwner = token.isOwner;
+
+      if (alwaysCenter) {
+        if (token.id === selectedId) return;
+
+        if (isGM) {
+          token.setTarget(true, { user: game.user, releaseOthers: true });
+        } else if (isOwner) {
+          selectedId = token.id;
+
+          const dx = Math.abs(token.center.x - (lastFollowedPos?.x ?? 0));
+          const dy = Math.abs(token.center.y - (lastFollowedPos?.y ?? 0));
+          const moved = dx > 10 || dy > 10;
+
+          if (canControl(token)) token.control({ releaseOthers: true });
+          if (moved) canvas.animatePan({ x: token.center.x, y: token.center.y, scale: canvas.stage.scale.x, duration: 250 });
+
+          lastFollowedPos = { x: token.center.x, y: token.center.y };
+          setSmall(token.name ?? "", true);
+          refresh();
+        } else {
+          game.user.targets.clear();
+          token.setTarget(true, { user: game.user, releaseOthers: false });
+        }
+      }
+
+      if (!alwaysCenter && isBarToken) {
+        selectedId = token.id;
+        refresh();
+      }
+    });
+
+    const origCanDragToken = Token.prototype._canDrag;
+    Token.prototype._canDrag = function (event) {
+      if (alwaysCenter && this.id === selectedId) return false;
+      return origCanDragToken.call(this, event);
+    };
+  });
 
 
   
