@@ -3,6 +3,7 @@
  *  • v2 – user-owned only, GM omnibus view, half-sized bar
  *  • Bugfixed: Follow mode lag resolved by debouncing refresh and
  *    only rebuilding UI when necessary
+ *  • NEW: Follow mode toggle and camera tracking
  **********************************************************************/
 (() => {
   const BAR_ID = "player-token-bar";
@@ -39,7 +40,6 @@
 
   document.head.appendChild(Object.assign(document.createElement("style"), { textContent: CSS }));
 
-  // Create element helper: creates or gets existing element by id
   const el = (id, tag = "div") => {
     let existing = document.getElementById(id);
     if (existing) return existing;
@@ -54,7 +54,7 @@
   const center = () => el(CENTER_ID);
 
   let selectedId = null;
-  let alwaysCenter = false; // follow mode flag, not affecting bar visibility now
+  let alwaysCenter = false;
   let orderedIds = [];
   let ownedIds = [];
   let lastFollowedPos = null;
@@ -103,6 +103,7 @@
 
     orderedIds = allToks.map(t => t.id);
     ownedIds = allToks.filter(canControl).map(t => t.id);
+    window.playerTokenBar.orderedIds = orderedIds;
 
     const n = orderedIds.length;
     const selIdx = orderedIds.indexOf(selectedId);
@@ -207,12 +208,29 @@
     if (t) selectToken(t);
   }
 
+  function setFollowMode(on) {
+    alwaysCenter = on;
+    if (on) {
+      const t = canvas.tokens.get(selectedId);
+      if (t) {
+        lastFollowedPos = { x: t.center.x, y: t.center.y };
+        canvas.pan({ x: t.center.x, y: t.center.y, scale: canvas.stage.scale.x });
+      }
+    }
+  }
+
+  function isFollowMode() {
+    return alwaysCenter;
+  }
+
   Hooks.on("updateToken", (scene, tokenDoc, diff, options, userId) => {
     if (!selectedId) return;
     if (tokenDoc.id !== selectedId) return;
 
     const t = canvas.tokens.get(tokenDoc.id);
     if (!t) return;
+
+    if (!alwaysCenter) return;
 
     const dist = lastFollowedPos
       ? Math.hypot(t.center.x - lastFollowedPos.x, t.center.y - lastFollowedPos.y)
@@ -247,7 +265,6 @@
     }
   });
 
-  // Immediately create bar and label elements on load
   window.addEventListener("load", () => {
     bar().style.opacity = "1";
     bar().style.pointerEvents = "auto";
@@ -255,13 +272,41 @@
     center();
     positionCenter();
     refresh();
+
+    // Auto-select first token after 2 seconds
+    setTimeout(() => {
+      const allIds = orderedIds;
+      if (allIds.length) {
+        const token = canvas.tokens.get(allIds[0]);
+        if (token) selectToken(token);
+      }
+
+      // Enable follow mode and start interval loop
+      setFollowMode(true);
+      setInterval(() => {
+        if (!alwaysCenter) return;
+        const t = canvas.tokens.get(selectedId);
+        if (!t) return;
+        const dist = lastFollowedPos
+          ? Math.hypot(t.center.x - lastFollowedPos.x, t.center.y - lastFollowedPos.y)
+          : 9999;
+        if (dist > 4) {
+          lastFollowedPos = { x: t.center.x, y: t.center.y };
+          canvas.pan({ x: t.center.x, y: t.center.y, scale: canvas.stage.scale.x });
+        }
+      }, 200);
+    }, 2000);
   });
 
-  // Public API to refresh or select tokens if needed
   window.playerTokenBar = {
     selectToken,
     cycleSelection,
-    refresh
+    refresh,
+    orderedIds,
+    selectedId,
+    lastFollowedPos,
+    setFollowMode,
+    isFollowMode
   };
 
 
