@@ -49,6 +49,7 @@ let selectedId   = null;
 let alwaysCenter = true;
 let orderedIds   = [];
 let ownedIds     = [];
+let lastFollowedPos = null;
 
 const combatRunning = ()=>!!(game.combat?.started && game.combat.scene?.id===canvas.scene?.id);
 const canControl    = t=>t.isOwner || t.actor?.isOwner;
@@ -147,6 +148,7 @@ function selectToken(t){
     const options = alwaysCenter ? { releaseOthers: true } : {};
     t.control(options);
   }
+  if(alwaysCenter) lastFollowedPos = { x: t.center.x, y: t.center.y };
   canvas.pan({ x: t.center.x, y: t.center.y, scale: canvas.stage.scale.x });
   showCenter(t.name);
   refresh();
@@ -156,14 +158,34 @@ function toggleFollow(){
   if(!selectedId) return;
   alwaysCenter=!alwaysCenter;
   const t=canvas.tokens.get(selectedId);
-  if(t&&alwaysCenter) canvas.pan({ x: t.center.x, y: t.center.y, scale: canvas.stage.scale.x });
+  if(t&&alwaysCenter){
+    lastFollowedPos = { x: t.center.x, y: t.center.y };
+    canvas.pan({ x: t.center.x, y: t.center.y, scale: canvas.stage.scale.x });
+  }
   setSmall(t?.name??"",alwaysCenter);
 }
 
-Hooks.on("updateToken",doc=>{
-  if(alwaysCenter&&doc.id===selectedId){
-    const t=canvas.tokens.get(doc.id);
-    if(t) canvas.pan({ x: t.center.x, y: t.center.y, scale: canvas.stage.scale.x });
+Hooks.on("updateToken", (doc) => {
+  if (!alwaysCenter || doc.id !== selectedId) return;
+
+  const token = canvas.tokens.get(doc.id);
+  if (!token) return;
+
+  const gridSize = canvas.grid.size;
+  const newPos = { x: token.center.x, y: token.center.y };
+
+  if (!lastFollowedPos) {
+    lastFollowedPos = newPos;
+    return;
+  }
+
+  const dx = Math.abs(newPos.x - lastFollowedPos.x);
+  const dy = Math.abs(newPos.y - lastFollowedPos.y);
+  const movedSquares = Math.max(dx, dy) / gridSize;
+
+  if (movedSquares >= 3) {
+    canvas.animatePan({ x: newPos.x, y: newPos.y, scale: canvas.stage.scale.x });
+    lastFollowedPos = newPos;
   }
 });
 
