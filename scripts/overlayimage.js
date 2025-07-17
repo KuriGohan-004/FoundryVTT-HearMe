@@ -284,15 +284,15 @@ Hooks.on("controlToken", (token, controlled) => {
   if (!canControl(token)) return;
 
   if (alwaysCenter) {
-    // In Follow Mode: toggle target on clicked token
+    // In Follow Mode: toggle targeting only, DO NOT switch selection
     if (controlled) {
       token.setTarget(!token.isTargeted, { releaseOthers: false });
     } else {
       token.setTarget(false, { releaseOthers: false });
     }
-    // Do NOT change selection on map token clicks in follow mode
+    // NO selectToken(token) here
   } else {
-    // Follow mode OFF: default behavior - select token normally
+    // Follow mode OFF: default behavior — select token normally
     if (controlled && token.id !== selectedId) {
       selectToken(token);
     }
@@ -300,6 +300,7 @@ Hooks.on("controlToken", (token, controlled) => {
 
   refresh();
 });
+
 
 
   window.addEventListener("keydown", e => {
