@@ -475,36 +475,37 @@ Hooks.once("ready", () => {
 /***********************************************************************
  * Follow Mode: Smart Target Toggle on Click (like pressing T)
  **********************************************************************/
+Hooks.on("canvasReady", () => {
+  canvas.stage.on("mousedown", event => {
+    if (!isFollowMode()) return;
+    if (event.data.button !== 0) return; // Only intercept left-click
 
-Hooks.once("canvasReady", () => {
-  const tokensLayerElement = canvas.tokens?.layer?.element;
-  if (!tokensLayerElement) return;
+    const interaction = event.interactionData;
+    const mousePosition = interaction?.destination;
+    if (!mousePosition) return;
 
-  tokensLayerElement.addEventListener("click", async (event) => {
-    // Only act if Follow Mode is ON
-    if (!window.playerTokenBar?.isFollowMode()) return;
+    const clickedToken = canvas.tokens.placeables.find(t => {
+      const bounds = t.bounds;
+      return bounds.contains(mousePosition.x, mousePosition.y);
+    });
 
-    const tokenEl = event.target.closest(".token");
-    if (!tokenEl) return;
+    if (clickedToken) {
+      // Prevent default selection and instead target it
+      event.stopPropagation();
+      event.stopImmediatePropagation();
 
-    // Prevent Foundry's default click behavior (selection, sheet open)
-    event.preventDefault();
-    event.stopPropagation();
-
-    // Find the clicked Token object
-    const token = canvas.tokens.placeables.find(t => t.id === tokenEl.id);
-    if (!token) return;
-
-    // Emulate pressing "T": toggle target status of token
-    const user = game.user;
-    const isTargeted = user.targets.has(token.document);
-
-    await user.updateTokenTargets([token.document], !isTargeted);
-
-    // Optional: refresh HUD (helps visual consistency)
-    canvas.tokens.hud?.refresh();
-  }, true); // Capture phase = intercept before Foundry handles
+      if (canControl(clickedToken)) {
+        const wasTargeted = clickedToken.isTargeted;
+        if (!wasTargeted) {
+          game.user.updateTokenTargets([clickedToken.id]);
+        } else {
+          game.user.updateTokenTargets([]);
+        }
+      }
+    }
+  }, true); // Use capture phase to intercept before default handling
 });
+
 
 
 
