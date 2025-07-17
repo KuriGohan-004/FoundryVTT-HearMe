@@ -298,36 +298,57 @@
     }
   });
 
-  Hooks.once("canvasReady", () => {
-    bar().style.opacity = "1";
-    bar().style.pointerEvents = "auto";
-    label();
-    center();
-    positionCenter();
-    refresh();
+  /* Hooks Controls */
+Hooks.once("canvasReady", () => {
+  bar().style.opacity = "1";
+  bar().style.pointerEvents = "auto";
+  label();
+  center();
+  positionCenter();
+  refresh();
 
-    setTimeout(() => {
-      const allToks = displayTokens();
-      if (allToks.length) {
-        const firstToken = allToks[0];
-        selectToken(firstToken);
+  setTimeout(() => {
+    const allToks = displayTokens();
+    if (allToks.length) {
+      const firstToken = allToks[0];
+      selectToken(firstToken);
+    }
+
+    setFollowMode(true);
+
+    setInterval(() => {
+      if (!alwaysCenter) return;
+      const t = canvas.tokens.get(selectedId);
+      if (!t) return;
+      const dist = lastFollowedPos
+        ? Math.hypot(t.center.x - lastFollowedPos.x, t.center.y - lastFollowedPos.y)
+        : 9999;
+      if (dist > canvas.grid.size * 3) {
+        lastFollowedPos = { x: t.center.x, y: t.center.y };
+        panSmoothlyToToken(t);
       }
+    }, 200);
+  }, 1000);
+});
 
-      setFollowMode(true);
-      setInterval(() => {
-        if (!alwaysCenter) return;
-        const t = canvas.tokens.get(selectedId);
-        if (!t) return;
-        const dist = lastFollowedPos
-          ? Math.hypot(t.center.x - lastFollowedPos.x, t.center.y - lastFollowedPos.y)
-          : 9999;
-        if (dist > canvas.grid.size * 3) {
-          lastFollowedPos = { x: t.center.x, y: t.center.y };
-          panSmoothlyToToken(t);
-        }
-      }, 200);
-    }, 1000);
-  });
+// Override left-click behavior to target instead of switch when Follow Mode is on
+Hooks.on("clickToken", (token, event) => {
+  if (!alwaysCenter) return; // Only override in Follow Mode
+
+  // Prevent switching selected token
+  event.stopPropagation();
+  event.preventDefault();
+
+  const userTargets = game.user.targets;
+  const isTargeted = userTargets.has(token);
+
+  if (isTargeted) {
+    game.user.removeTarget(token);
+  } else {
+    game.user.setTarget(token, { releaseOthers: false, groupSelection: true });
+  }
+});
+
 
   window.playerTokenBar = {
     selectToken,
@@ -499,44 +520,6 @@ Hooks.once("ready", () => {
     return false;
   };
 });
-
-
-
-
-Hooks.once("ready", () => {
-  console.log("Combat Turn Skipper | Module ready");
-
-  window.addEventListener("keydown", async (event) => {
-    if (event.code !== "Space") return;
-
-    // Prevent default spacebar behavior
-    event.preventDefault();
-
-    const combat = game.combat;
-    if (!combat || !combat.started) return;
-
-    const user = game.user;
-    const currentCombatant = combat.combatant;
-    if (!currentCombatant) return;
-
-    const currentToken = canvas.tokens.get(currentCombatant.tokenId);
-    if (!currentToken) return;
-
-    const isGM = user.isGM;
-    const isOwner = currentToken.isOwner;
-
-    if (isGM || isOwner) {
-      // Only advance turn if not already advancing
-      if (!combat.combatants.some(c => c.isTurn)) return;
-      console.log("Combat Turn Skipper | Ending current turn...");
-      await combat.nextTurn();
-    }
-  });
-});
-
-
-
-
 
 
 
