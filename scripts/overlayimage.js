@@ -1,10 +1,3 @@
-/***********************************************************************
- * Player Token Bar – rotated fading name aligned to sidebar
- *  • v2 – user-owned only, GM omnibus view, half-sized bar
- *  • Bugfixed: Follow mode lag resolved by debouncing refresh and
- *    only rebuilding UI when necessary
- *  • NEW: Follow mode toggle and camera tracking
- **********************************************************************/
 (() => {
   const BAR_ID = "player-token-bar";
   const LABEL_ID = "player-token-bar-label";
@@ -223,6 +216,13 @@
     return alwaysCenter;
   }
 
+  Hooks.on("updateToken", refresh);
+  Hooks.on("createToken", refresh);
+  Hooks.on("deleteToken", refresh);
+  Hooks.on("updateScene", refresh);
+  Hooks.on("updateActor", refresh);
+  Hooks.on("updateUser", refresh);
+
   Hooks.on("updateToken", (scene, tokenDoc, diff, options, userId) => {
     if (!selectedId) return;
     if (tokenDoc.id !== selectedId) return;
@@ -252,6 +252,7 @@
     if (token.id !== selectedId) {
       selectToken(token);
     }
+    refresh();
   });
 
   window.addEventListener("keydown", e => {
@@ -265,7 +266,7 @@
     }
   });
 
-  window.addEventListener("load", () => {
+  Hooks.once("canvasReady", () => {
     bar().style.opacity = "1";
     bar().style.pointerEvents = "auto";
     label();
@@ -273,15 +274,13 @@
     positionCenter();
     refresh();
 
-    // Auto-select first token after 2 seconds
     setTimeout(() => {
-      const allIds = orderedIds;
-      if (allIds.length) {
-        const token = canvas.tokens.get(allIds[0]);
-        if (token) selectToken(token);
+      const allToks = displayTokens();
+      if (allToks.length) {
+        const firstToken = allToks[0];
+        selectToken(firstToken);
       }
 
-      // Enable follow mode and start interval loop
       setFollowMode(true);
       setInterval(() => {
         if (!alwaysCenter) return;
@@ -290,12 +289,12 @@
         const dist = lastFollowedPos
           ? Math.hypot(t.center.x - lastFollowedPos.x, t.center.y - lastFollowedPos.y)
           : 9999;
-        if (dist > 4) {
+        if (dist > canvas.grid.size * 3) {
           lastFollowedPos = { x: t.center.x, y: t.center.y };
           canvas.pan({ x: t.center.x, y: t.center.y, scale: canvas.stage.scale.x });
         }
       }, 200);
-    }, 2000);
+    }, 1000);
   });
 
   window.playerTokenBar = {
@@ -308,7 +307,6 @@
     setFollowMode,
     isFollowMode
   };
-
 
 
   /* ---------- Improved ENTER behaviour --------------------------- */
@@ -448,34 +446,21 @@ Hooks.on("getSceneControlButtons", (controls) => {
   const tokenControls = controls.find(c => c.name === "token");
   if (!tokenControls) return;
 
-  // Create the toggle tool
+  const isOn = () => window.playerTokenBar?.isFollowMode?.() ?? false;
+
   tokenControls.tools.push({
     name: "toggle-follow-mode",
-    title: `Follow Mode: ${alwaysCenter ? "On" : "Off"}`,
-    icon: alwaysCenter ? "fas fa-crosshairs" : "far fa-circle",
+    title: () => `Follow Mode: ${isOn() ? "On" : "Off"}`,
+    icon: () => isOn() ? "fas fa-crosshairs" : "far fa-circle",
     toggle: true,
-    active: alwaysCenter,
+    active: isOn(),
     onClick: (toggle) => {
-      alwaysCenter = toggle;
+      window.playerTokenBar?.setFollowMode?.(toggle);
       ui.notifications.info(`Follow Mode ${toggle ? "Enabled" : "Disabled"}`);
     }
   });
 });
 
-// Wait 2 seconds after window load, then auto-select the first token in the player bar
-window.addEventListener("load", () => {
-  setTimeout(() => {
-    // Get the token IDs currently in the bar (orderedIds is from your main script)
-    const tokens = window.playerTokenBar && window.playerTokenBar.orderedIds;
-    if (tokens && tokens.length > 0) {
-      const firstTokenId = tokens[0];
-      const token = canvas.tokens.get(firstTokenId);
-      if (token) {
-        window.playerTokenBar.selectToken(token);
-      }
-    }
-  }, 2000);
-});
 
   
   
