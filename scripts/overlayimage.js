@@ -475,33 +475,49 @@ Hooks.once("ready", () => {
 /***********************************************************************
    * Follow Mode: Smart Clicks & Disable Dragging
    **********************************************************************/
-  // Hook into token click events on the canvas tokens layer
-  Hooks.on("canvasReady", () => {
-    // Add a delegated click listener on tokens container
-    const tokensLayer = canvas.tokens?.layer?.element;
-    if (!tokensLayer) return;
-
-    tokensLayer.on("click", ".token", async (event) => {
-      // Only act if Follow Mode is ON
+Hooks.once("canvasReady", () => {
+  // Add click handlers to all existing tokens
+  for (const token of canvas.tokens.placeables) {
+    token.on("click", async (event) => {
       if (!window.playerTokenBar.isFollowMode()) return;
-
-      // Get clicked token instance
-      const clickedToken = canvas.tokens.placeables.find(t => t.id === event.currentTarget.id);
-      if (!clickedToken) return;
+      if (event.data?.button !== 0 || event.data?.originalEvent?.ctrlKey || event.data?.originalEvent?.metaKey || event.data?.originalEvent?.shiftKey) return;
 
       const userTargets = game.user.targets;
-      const isTargeted = userTargets.has(clickedToken.document);
+      const isTargeted = userTargets.has(token.document);
 
       if (isTargeted) {
-        // Clear this token from targets if already targeted
-        await game.user.updateTokenTargets(clickedToken.document, false);
+        await game.user.updateTokenTargets(token.document, false);
       } else {
-        // Clear all previous targets, then target this token
-        await game.user.updateTokenTargets([], false); // Clear all
-        await game.user.updateTokenTargets(clickedToken.document, true); // Target new token
+        await game.user.updateTokenTargets([], false);
+        await game.user.updateTokenTargets(token.document, true);
       }
+
+      event.stopPropagation();
+    });
+  }
+
+  // Add click handler for tokens created after canvasReady
+  Hooks.on("createToken", (scene, tokenDocument) => {
+    const token = canvas.tokens.get(tokenDocument.id);
+    if (!token) return;
+    token.on("click", async (event) => {
+      if (!window.playerTokenBar.isFollowMode()) return;
+      if (event.data?.button !== 0) return;
+
+      const userTargets = game.user.targets;
+      const isTargeted = userTargets.has(token.document);
+
+      if (isTargeted) {
+        await game.user.updateTokenTargets(token.document, false);
+      } else {
+        await game.user.updateTokenTargets([], false);
+        await game.user.updateTokenTargets(token.document, true);
+      }
+
+      event.stopPropagation();
     });
   });
+});
 
 
 
