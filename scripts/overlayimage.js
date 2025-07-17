@@ -289,12 +289,37 @@ Hooks.on("controlToken", (token, controlled) => {
 
   if (!canControl(token)) return;
 
-  if (!alwaysCenter && controlled && token.id !== selectedId) {
-    selectToken(token);
+  if (alwaysCenter) {
+    // Follow Mode ON
+
+    if (controlled) {
+      // Toggle targeting
+      token.setTarget(!token.isTargeted, { releaseOthers: false });
+
+      // If the clicked token is NOT the followed token, reselection workaround
+      if (token.id !== selectedId) {
+        // Delay to let Foundry do its selection, then override it
+        setTimeout(() => {
+          const followedToken = canvas.tokens.get(selectedId);
+          if (followedToken) {
+            ignoreNextControl = true;  // Prevent infinite loop
+            followedToken.control({ releaseOthers: true });
+          }
+        }, 50); // 1 frame delay
+      }
+    } else {
+      token.setTarget(false, { releaseOthers: false });
+    }
+  } else {
+    // Follow Mode OFF: normal selection behavior
+    if (controlled && token.id !== selectedId) {
+      selectToken(token);
+    }
   }
 
   refresh();
 });
+
 
 
 Hooks.on("preControlToken", (token, controlled, event, options) => {
