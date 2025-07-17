@@ -411,24 +411,45 @@ Hooks.on("combatTurnChange", (combat /* Combat */, _prior, _current) => {
 
 
 /***********************************************************************
- * Smart token selection lock when Follow Mode is active
+ * Enhanced Follow Mode behavior on token clicks
  **********************************************************************/
 Hooks.on("controlToken", (token, controlled) => {
   if (!controlled) return; // Ignore deselect events
 
-  // Follow Mode: block control of any token EXCEPT the currently-followed one
-  if (alwaysCenter && token.id !== selectedId) {
-    // Cancel selection of other tokens
-    setTimeout(() => token.release(), 0); // defer to avoid disrupting Foundry internals
+  const isBarToken = ownedIds.includes(token.id);
+
+  if (alwaysCenter) {
+    if (token.id === selectedId) {
+      // Follow mode, clicked current token → allow
+      return;
+    }
+
+    if (isBarToken) {
+      // Token is owned by player → switch to it in follow mode
+      alwaysCenter = false;
+      selectedId = token.id;
+      if (canControl(token)) token.control({ releaseOthers: true });
+      canvas.animatePan(token.center);
+      alwaysCenter = true;
+      setSmall(token.name ?? "", true);
+      refresh();
+    } else {
+      // Token is not owned → target instead of select
+      game.user.updateTokenTargets([token.document.id]);
+    }
+
+    // Cancel normal control
+    setTimeout(() => token.release(), 0);
     return false;
   }
 
-  // Not in Follow Mode: update bar selection if player owns this token
-  if (!alwaysCenter && canControl(token)) {
+  // Follow mode is OFF
+  if (isBarToken) {
     selectedId = token.id;
     refresh();
   }
 });
+
 
 
   
