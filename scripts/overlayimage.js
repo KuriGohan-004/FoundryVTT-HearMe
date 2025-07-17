@@ -4,6 +4,15 @@
   const CENTER_ID = "player-token-bar-center-label";
 
   let alwaysCenter = false;
+  let selectedId = null;
+  let orderedIds = [];
+  let ownedIds = [];
+  let lastFollowedPos = null;
+  let ignoreNextControl = false;
+  let lastClickWasFromBar = false; // <-- NEW FLAG
+
+  let lastTokenIdsHash = "";
+  let lastSelectedId = null;
 
   Hooks.on("getSceneControlButtons", (controls) => {
     const tokenControls = controls.find(c => c.name === "token");
@@ -64,15 +73,6 @@
   const bar = () => el(BAR_ID);
   const label = () => el(LABEL_ID);
   const center = () => el(CENTER_ID);
-
-  let selectedId = null;
-  let orderedIds = [];
-  let ownedIds = [];
-  let lastFollowedPos = null;
-  let ignoreNextControl = false;
-
-  let lastTokenIdsHash = "";
-  let lastSelectedId = null;
 
   const combatRunning = () => !!(game.combat?.started && game.combat.scene?.id === canvas.scene?.id);
   const canControl = t => t.isOwner || t.actor?.isOwner;
@@ -138,16 +138,10 @@
       img.alt = token.name;
       if (token.id === selectedId) img.classList.add("selected-token");
 
-img.onclick = () => {
-  if (alwaysCenter) {
-    // Follow mode ON: portraits should always select token, no targeting
-    selectToken(token);
-  } else {
-    // Follow mode OFF: portraits also just select token normally
-    selectToken(token);
-  }
-};
-
+      img.onclick = () => {
+        lastClickWasFromBar = true; // <-- FLAG SET HERE
+        selectToken(token);
+      };
 
       img.onmouseenter = () => setSmall(token.name, false);
       img.onmouseleave = () => {
@@ -282,37 +276,34 @@ img.onclick = () => {
     }
   });
 
-Hooks.on("controlToken", (token, controlled) => {
-  if (ignoreNextControl) {
-    ignoreNextControl = false;
-    return;
-  }
+  Hooks.on("controlToken", (token, controlled) => {
+    if (ignoreNextControl) {
+      ignoreNextControl = false;
+      return;
+    }
 
-  if (!canControl(token)) return;
+    if (lastClickWasFromBar) {
+      lastClickWasFromBar = false;
+      return;
+    }
 
-  if (alwaysCenter) {
-    // Follow mode ON, clicking tokens on map toggles targeting but does NOT select
-    if (controlled) {
-      // Toggle target state
-      token.setTarget(!token.isTargeted, { releaseOthers: false });
-      // Now release control immediately so token is NOT selected
-      token.control({releaseOthers: false, active: false});
+    if (!canControl(token)) return;
+
+    if (alwaysCenter) {
+      if (controlled) {
+        token.setTarget(!token.isTargeted, { releaseOthers: false });
+        token.control({ releaseOthers: false, active: false });
+      } else {
+        token.setTarget(false, { releaseOthers: false });
+      }
     } else {
-      // If token is uncontrolled, clear target
-      token.setTarget(false, { releaseOthers: false });
+      if (controlled && token.id !== selectedId) {
+        selectToken(token);
+      }
     }
-  } else {
-    // Follow mode OFF normal behavior: selecting token controls it normally
-    if (controlled && token.id !== selectedId) {
-      selectToken(token);
-    }
-  }
 
-  refresh();
-});
-
-
-
+    refresh();
+  });
 
   window.addEventListener("keydown", e => {
     if (document.activeElement?.tagName === "INPUT" || document.activeElement?.tagName === "TEXTAREA") return;
