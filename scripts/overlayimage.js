@@ -411,93 +411,57 @@ Hooks.on("combatTurnChange", (combat /* Combat */, _prior, _current) => {
 
 
 /***********************************************************************
- * Enhanced Follow Mode Behavior + UI Toggle Button
+ * Follow Mode: Smart Clicks & Disable Dragging
  **********************************************************************/
 Hooks.once("ready", () => {
-  // --- Add Follow Mode Toggle Button ---
-  const barEl = document.getElementById("player-token-bar");
-  if (barEl && !document.getElementById("follow-toggle-btn")) {
-    const btn = document.createElement("button");
-    btn.id = "follow-toggle-btn";
-    btn.textContent = "Follow";
-    btn.style.cssText = `
-      margin-left: 10px;
-      padding: 4px 8px;
-      font-size: 12px;
-      font-weight: bold;
-      border-radius: 6px;
-      border: none;
-      cursor: pointer;
-      color: white;
-    `;
-    barEl.appendChild(btn);
-
-    const updateFollowBtnStyle = () => {
-      btn.style.backgroundColor = alwaysCenter ? "green" : "red";
-    };
-
-    btn.onclick = () => {
-      toggleFollow();
-      updateFollowBtnStyle();
-    };
-
-    // Set initial color
-    updateFollowBtnStyle();
-  }
-
-  // --- Enhanced canvas click behavior during Follow Mode ---
-  const CLICK_DELAY = 300;  // ms to distinguish single vs double click
-  const FOLLOW_REENABLE_DELAY = 200;  // delay before follow mode re-enables after switching
-
-  let lastClickTime = 0;
-
+  // Enhanced click control behavior
   Hooks.on("controlToken", (token, controlled) => {
     if (!controlled) return;
 
     const isBarToken = ownedIds.includes(token.id);
 
     if (alwaysCenter) {
-      const now = Date.now();
-      const isDoubleClick = now - lastClickTime < CLICK_DELAY;
-      lastClickTime = now;
-
-      if (token.id === selectedId) return;  // same token, allow
+      if (token.id === selectedId) return; // Same token: allow
 
       if (isBarToken) {
-        // Only switch on double-click to prevent accidental drag
-        if (isDoubleClick) {
-          alwaysCenter = false;
-          selectedId = token.id;
-          if (canControl(token)) token.control({ releaseOthers: true });
-          canvas.animatePan(token.center);
-          refresh();
+        // Owned token → switch to it
+        alwaysCenter = false;  // Disable Follow Mode briefly
+        selectedId = token.id;
+        if (canControl(token)) token.control({ releaseOthers: true });
+        canvas.animatePan(token.center);
+        refresh();
 
-          // Delay re-enabling follow mode
-          setTimeout(() => {
-            alwaysCenter = true;
-            setSmall(token.name ?? "", true);
-          }, FOLLOW_REENABLE_DELAY);
-        }
+        // Re-enable Follow Mode after a short delay
+        setTimeout(() => {
+          alwaysCenter = true;
+          setSmall(token.name ?? "", true);
+        }, 200);
       } else {
         // Not your token → target it
-        const current = game.user.targets;
-        if (!current.has(token)) {
-          token.setTarget(true, { user: game.user, releaseOthers: false });
-        }
+        token.setTarget(true, { user: game.user, releaseOthers: false });
       }
 
-      // Prevent default control behavior for new tokens
+      // Prevent default control behavior
       setTimeout(() => token.release(), 0);
       return false;
     }
 
-    // Follow mode OFF: clicking bar-owned token updates selection
+    // Follow mode OFF: selecting a bar token updates selection
     if (isBarToken) {
       selectedId = token.id;
       refresh();
     }
   });
+
+  // Disable drag interaction in Follow Mode
+  const origCanDragToken = Token.prototype._canDrag;
+  Token.prototype._canDrag = function (event) {
+    // If Follow Mode is active and this is the currently selected token, block drag
+    if (alwaysCenter && this.id === selectedId) return false;
+    return origCanDragToken.call(this, event);
+  };
 });
+
 
 
 
