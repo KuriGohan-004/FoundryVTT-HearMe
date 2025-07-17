@@ -293,10 +293,10 @@ Hooks.on("controlToken", (token, controlled) => {
     // Follow Mode ON
 
     if (controlled) {
-      // Toggle targeting ONLY this token (clearing others)
+      // Target clicked token and clear other targets
       token.setTarget(!token.isTargeted, { releaseOthers: true });
 
-      // If the clicked token is NOT the followed token, reselect the correct one
+      // Re-control the followed token
       if (token.id !== selectedId) {
         setTimeout(() => {
           const followedToken = canvas.tokens.get(selectedId);
@@ -304,17 +304,18 @@ Hooks.on("controlToken", (token, controlled) => {
             ignoreNextControl = true;
             followedToken.control({ releaseOthers: true });
 
-            // ❗ Ensure the followed token is NOT targeted
-            followedToken.setTarget(false, { releaseOthers: false });
+            // Delay clearing of its target so it doesn't interfere
+            setTimeout(() => {
+              followedToken.setTarget(false, { releaseOthers: false });
+            }, 30); // Slight delay
           }
-        }, 50);
+        }, 50); // Let Foundry process the first control first
       }
     } else {
-      // If the token was deselected, ensure it’s also not targeted
       token.setTarget(false, { releaseOthers: false });
     }
   } else {
-    // Follow Mode OFF: normal selection behavior
+    // Follow Mode OFF: normal behavior
     if (controlled && token.id !== selectedId) {
       selectToken(token);
     }
@@ -322,6 +323,7 @@ Hooks.on("controlToken", (token, controlled) => {
 
   refresh();
 });
+
 
 
 
