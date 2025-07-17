@@ -476,48 +476,38 @@ Hooks.once("ready", () => {
    * Follow Mode: Smart Clicks & Disable Dragging
    **********************************************************************/
 Hooks.once("canvasReady", () => {
-  // Add click handlers to all existing tokens
-  for (const token of canvas.tokens.placeables) {
-    token.on("click", async (event) => {
-      if (!window.playerTokenBar.isFollowMode()) return;
-      if (event.data?.button !== 0 || event.data?.originalEvent?.ctrlKey || event.data?.originalEvent?.metaKey || event.data?.originalEvent?.shiftKey) return;
+  // Use delegated event listener on the tokens layer
+  const tokensLayer = canvas.tokens?.layer?.element;
+  if (!tokensLayer) return;
 
-      const userTargets = game.user.targets;
-      const isTargeted = userTargets.has(token.document);
+  tokensLayer.on("click", ".token", async (event) => {
+    if (!window.playerTokenBar.isFollowMode()) return;  // Only act if Follow Mode ON
 
-      if (isTargeted) {
-        await game.user.updateTokenTargets(token.document, false);
-      } else {
-        await game.user.updateTokenTargets([], false);
-        await game.user.updateTokenTargets(token.document, true);
-      }
+    // Prevent default token control/selection behavior
+    event.stopImmediatePropagation();
+    event.preventDefault();
 
-      event.stopPropagation();
-    });
-  }
+    // Find the token id from the clicked element
+    const tokenId = event.currentTarget?.id;
+    if (!tokenId) return;
 
-  // Add click handler for tokens created after canvasReady
-  Hooks.on("createToken", (scene, tokenDocument) => {
-    const token = canvas.tokens.get(tokenDocument.id);
+    const token = canvas.tokens.get(tokenId);
     if (!token) return;
-    token.on("click", async (event) => {
-      if (!window.playerTokenBar.isFollowMode()) return;
-      if (event.data?.button !== 0) return;
 
-      const userTargets = game.user.targets;
-      const isTargeted = userTargets.has(token.document);
+    const userTargets = game.user.targets;
+    const isTargeted = userTargets.has(token.document);
 
-      if (isTargeted) {
-        await game.user.updateTokenTargets(token.document, false);
-      } else {
-        await game.user.updateTokenTargets([], false);
-        await game.user.updateTokenTargets(token.document, true);
-      }
-
-      event.stopPropagation();
-    });
+    if (isTargeted) {
+      // If already targeted, clear ALL targets
+      await game.user.updateTokenTargets([], false);
+    } else {
+      // Otherwise, clear all targets and target this token
+      await game.user.updateTokenTargets([], false);
+      await game.user.updateTokenTargets(token.document, true);
+    }
   });
 });
+
 
 
 
