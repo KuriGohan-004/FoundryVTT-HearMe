@@ -262,7 +262,6 @@
     cycleSelection,
     refresh,
   };
-})();
 
 
   /* ---------- Improved ENTER behaviour --------------------------- */
