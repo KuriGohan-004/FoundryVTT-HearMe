@@ -246,8 +246,6 @@
     window.addEventListener("keydown", onKeyDown);
   });
 
-})();
-
 
 
   /* ---------- Improved ENTER behaviour --------------------------- */
