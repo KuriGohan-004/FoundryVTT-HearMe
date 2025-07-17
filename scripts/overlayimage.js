@@ -473,7 +473,7 @@ Hooks.once("ready", () => {
   
 
 /***********************************************************************
-   * Follow Mode: Smart Clicks & Disable Dragging
+   * Follow Mode: Smart Clicks & Disable Dragging + Target Toggle
    **********************************************************************/
 // Save original _onClickLeft method for restoring later if needed
 const originalOnClickLeft = Token.prototype._onClickLeft;
@@ -484,21 +484,33 @@ Token.prototype._onClickLeft = async function(event) {
     event.stopPropagation();
 
     const token = this;
-    const userTargets = new Set(game.user.targets); // Clone current targets
+    const user = game.user;
 
-    if (userTargets.has(token.document)) {
-      // If token is already targeted, clear all targets
-      await game.user.updateTokenTargets([], false);
+    // Check if token is already targeted
+    const isTargeted = user.targets.has(token.document);
+
+    if (isTargeted) {
+      // Clear all targets if token is already targeted
+      await user.updateTokenTargets([], false);
     } else {
-      // If token is NOT targeted, clear all and add this token as only target
-      await game.user.updateTokenTargets([token.document], false);
+      // Clear all targets, then add this token as the only target
+      // Because updateTokenTargets replaces target set, just pass single-element array
+      await user.updateTokenTargets([token.document], false);
     }
-    return; // Prevent default selection
+
+    // Also update the HUD so it visually updates immediately
+    if (canvas.tokens.hud) {
+      canvas.tokens.hud.refresh();
+    }
+
+    // Return here to prevent the normal selection behavior
+    return;
   } else {
-    // Follow Mode off, run original token click behavior
+    // Normal token selection when Follow Mode off
     return originalOnClickLeft.call(this, event);
   }
 };
+
 
 
 
