@@ -6,10 +6,9 @@
   const BAR_ID    = "player-token-bar";
   const LABEL_ID  = "player-token-bar-label";
   const CENTER_ID = "player-token-bar-center-label";
-  const MOVE_THRESHOLD = 3; // How many moves before re-centering
-  const PAN_DURATION = 500; // Duration of camera pan in ms
+  const MOVE_THRESHOLD = 3;
+  const PAN_DURATION = 500;
 
-  /* ---------- Styles (50% width, transparent) ---------- */
   const CSS = `
     #${BAR_ID} {
       position: fixed; bottom: 0; left: 25%; width: 50%; height: 84px;
@@ -17,24 +16,20 @@
       gap: 10px; overflow: hidden; background: none; border: none;
       z-index: 20; pointer-events: auto; transition: opacity .25s ease;
     }
-
     #${BAR_ID} img {
       width: 64px; height: 64px; object-fit: cover; border-radius: 8px;
       border: 2px solid #fff; flex: 0 0 auto; cursor: pointer;
       transition: transform .15s ease;
     }
-
     #${BAR_ID} img:hover               { transform: scale(1.20); z-index: 1; }
     #${BAR_ID} img.selected-token,
     #${BAR_ID} img.selected-token:hover { transform: scale(1.25); z-index: 2; }
-
     #${LABEL_ID} {
       position: fixed; bottom: 90px; left: 25%; width: 50%;
       text-align: center; font-size: 16px; font-weight: bold; color: #fff;
       text-shadow: 0 0 4px #000; pointer-events: none; z-index: 21;
       height: 24px; line-height: 24px; user-select: none;
     }
-
     @keyframes ptbPulse { 0%, 100% { opacity: 1; } 50% { opacity: .5; } }
     #${CENTER_ID} {
       position: fixed; font-size: 48px; font-weight: bold; font-style: italic;
@@ -159,8 +154,9 @@
   function selectToken(t) {
     selectedId = t.id;
     if (canControl(t)) {
-      const options = alwaysCenter ? { releaseOthers: true } : {};
-      t.control(options);
+      canvas.tokens.releaseAll();
+      t.control({ releaseOthers: true });
+      game.user.updateTokenTargets([t]);
     } else {
       t.setTarget(true, { user: game.user, releaseOthers: true });
     }
@@ -215,7 +211,11 @@
     if (["KeyW", "KeyA", "KeyS", "KeyD", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(ev.code)) {
       if (canvas.tokens.controlled.length === 0 && selectedId) {
         const t = canvas.tokens.get(selectedId);
-        if (t && canControl(t)) t.control({ releaseOthers: true });
+        if (t && canControl(t)) {
+          canvas.tokens.releaseAll();
+          t.control({ releaseOthers: true });
+          game.user.updateTokenTargets([t]);
+        }
       }
       return;
     }
@@ -239,7 +239,11 @@
     if (all.length && !selectedId) {
       selectedId = all.find(t => canControl(t))?.id ?? all[0].id;
       const t = canvas.tokens.get(selectedId);
-      if (t && canControl(t)) t.control({ releaseOthers: true });
+      if (t && canControl(t)) {
+        canvas.tokens.releaseAll();
+        t.control({ releaseOthers: true });
+        game.user.updateTokenTargets([t]);
+      }
     }
   });
 
@@ -249,7 +253,11 @@
     if (all.length && !selectedId) {
       selectedId = all.find(t => canControl(t))?.id ?? all[0].id;
       const t = canvas.tokens.get(selectedId);
-      if (t && canControl(t)) t.control({ releaseOthers: true });
+      if (t && canControl(t)) {
+        canvas.tokens.releaseAll();
+        t.control({ releaseOthers: true });
+        game.user.updateTokenTargets([t]);
+      }
     }
   });
 
@@ -258,6 +266,8 @@
   Hooks.on("deleteToken", refresh);
   Hooks.on("updateActor", refresh);
   Hooks.on("deleteCombat", refresh);
+
+
 
 
 
