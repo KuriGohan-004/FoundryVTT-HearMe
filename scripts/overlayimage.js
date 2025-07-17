@@ -479,30 +479,27 @@ Hooks.once("ready", () => {
 const originalOnClickLeft = Token.prototype._onClickLeft;
 
 Token.prototype._onClickLeft = async function(event) {
-  // Check if Follow Mode is ON
   if (window.playerTokenBar?.isFollowMode()) {
     event.preventDefault();
     event.stopPropagation();
 
     const token = this;
-    const userTargets = game.user.targets;
-    const isTargeted = userTargets.has(token.document);
+    const userTargets = new Set(game.user.targets); // Clone current targets
 
-    if (isTargeted) {
-      // Clear all targets
+    if (userTargets.has(token.document)) {
+      // If token is already targeted, clear all targets
       await game.user.updateTokenTargets([], false);
     } else {
-      // Clear all targets, then target clicked token
-      await game.user.updateTokenTargets([], false);
-      await game.user.updateTokenTargets(token.document, true);
+      // If token is NOT targeted, clear all and add this token as only target
+      await game.user.updateTokenTargets([token.document], false);
     }
-    // Return here so original selection logic does NOT run
-    return;
+    return; // Prevent default selection
   } else {
     // Follow Mode off, run original token click behavior
     return originalOnClickLeft.call(this, event);
   }
 };
+
 
 
 
