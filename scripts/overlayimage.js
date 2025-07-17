@@ -414,9 +414,30 @@ Hooks.once("ready", () => {
     // Otherwise, allow normal drag
     return origCanDragToken.call(this, event);
   };
-});
+});  
 
 /***********************************************************************
+ * Follow Mode: Toggle Button (Defaults ON)
+ **********************************************************************/
+Hooks.on("getSceneControlButtons", (controls) => {
+  const tokenControls = controls.find(c => c.name === "token");
+  if (!tokenControls) return;
+
+  // Create the toggle tool
+  tokenControls.tools.push({
+    name: "toggle-follow-mode",
+    title: `Follow Mode: ${alwaysCenter ? "On" : "Off"}`,
+    icon: alwaysCenter ? "fas fa-crosshairs" : "far fa-circle",
+    toggle: true,
+    active: alwaysCenter,
+    onClick: (toggle) => {
+      alwaysCenter = toggle;
+      ui.notifications.info(`Follow Mode ${toggle ? "Enabled" : "Disabled"}`);
+    }
+  });
+});
+
+  /***********************************************************************
  * Follow Mode: Smart Clicks & Disable Dragging
  **********************************************************************/
 Hooks.once("ready", () => {
@@ -473,29 +494,5 @@ Hooks.once("ready", () => {
     return origCanDragToken.call(this, event);
   };
 });
-  
-
-/***********************************************************************
- * Follow Mode: Toggle Button (Defaults ON)
- **********************************************************************/
-Hooks.on("getSceneControlButtons", (controls) => {
-  const tokenControls = controls.find(c => c.name === "token");
-  if (!tokenControls) return;
-
-  // Create the toggle tool
-  tokenControls.tools.push({
-    name: "toggle-follow-mode",
-    title: `Follow Mode: ${alwaysCenter ? "On" : "Off"}`,
-    icon: alwaysCenter ? "fas fa-crosshairs" : "far fa-circle",
-    toggle: true,
-    active: alwaysCenter,
-    onClick: (toggle) => {
-      alwaysCenter = toggle;
-      ui.notifications.info(`Follow Mode ${toggle ? "Enabled" : "Disabled"}`);
-    }
-  });
-});
-
-  
   
 })();
