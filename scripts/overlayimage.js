@@ -1,13 +1,8 @@
-/***********************************************************************
- * Player Token Bar  – rotated fading name aligned to sidebar
- *  • v2 – user‑owned only, GM omnibus view, half‑sized bar
- **********************************************************************/
 (() => {
   const BAR_ID = "player-token-bar";
   const LABEL_ID = "player-token-bar-label";
   const CENTER_ID = "player-token-bar-center-label";
 
-  /* ---------- Styles (50% width, transparent) ---------- */
   const CSS = `
     #${BAR_ID}{ position:fixed; bottom:0; left:25%; width:50%; height:84px;
       padding:6px 10px; display:flex; align-items:center; justify-content:center;
@@ -157,7 +152,7 @@
     selectedId = t.id;
     if (canControl(t)) t.control({ releaseOthers: true });
     if (alwaysCenter) lastFollowedPos = { x: t.center.x, y: t.center.y };
-    canvas.animatePan({ x: t.center.x, y: t.center.y, scale: canvas.stage.scale.x });
+    canvas.animatePan({ x: t.center.x, y: t.center.y, scale: canvas.stage.scale.x, duration: 250 });
     showCenter(t.name);
     refresh();
   }
@@ -191,14 +186,13 @@
     const movedSquares = Math.max(dx, dy) / gridSize;
 
     if (movedSquares >= 3) {
-      canvas.animatePan({ x: newPos.x, y: newPos.y, scale: canvas.stage.scale.x });
+      canvas.animatePan({ x: newPos.x, y: newPos.y, scale: canvas.stage.scale.x, duration: 250 });
       lastFollowedPos = newPos;
     }
   });
 
   Hooks.on("controlToken", (token, controlled) => {
     if (!token || !controlled) return;
-
     const alreadySelected = token.id === selectedId;
 
     if (alwaysCenter && !alreadySelected) {
@@ -266,7 +260,6 @@
   Hooks.on("updateActor", refresh);
   Hooks.on("deleteCombat", refresh);
 
-  
   /***********************************************************************
    * Follow Mode: Smart Clicks & Disable Dragging
    **********************************************************************/
@@ -284,16 +277,18 @@
         if (isGM) {
           token.setTarget(true, { user: game.user, releaseOthers: true });
         } else if (isOwner) {
-          alwaysCenter = false;
           selectedId = token.id;
-          if (canControl(token)) token.control({ releaseOthers: true });
-          canvas.animatePan(token.center);
-          refresh();
 
-          setTimeout(() => {
-            alwaysCenter = true;
-            setSmall(token.name ?? "", true);
-          }, 200);
+          const dx = Math.abs(token.center.x - (lastFollowedPos?.x ?? 0));
+          const dy = Math.abs(token.center.y - (lastFollowedPos?.y ?? 0));
+          const moved = dx > 10 || dy > 10;
+
+          if (canControl(token)) token.control({ releaseOthers: true });
+          if (moved) canvas.animatePan({ x: token.center.x, y: token.center.y, scale: canvas.stage.scale.x, duration: 250 });
+
+          lastFollowedPos = { x: token.center.x, y: token.center.y };
+          setSmall(token.name ?? "", true);
+          refresh();
         } else {
           game.user.targets.clear();
           token.setTarget(true, { user: game.user, releaseOthers: false });
@@ -312,6 +307,7 @@
       return origCanDragToken.call(this, event);
     };
   });
+
 
   
   /* ---------- Improved ENTER behaviour --------------------------- */
