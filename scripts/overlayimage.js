@@ -475,50 +475,34 @@ Hooks.once("ready", () => {
 /***********************************************************************
    * Follow Mode: Smart Clicks & Disable Dragging
    **********************************************************************/
-  Hooks.once("ready", () => {
-    Hooks.on("controlToken", (token, controlled) => {
-      if (!controlled) return;
+  // Hook into token click events on the canvas tokens layer
+  Hooks.on("canvasReady", () => {
+    // Add a delegated click listener on tokens container
+    const tokensLayer = canvas.tokens?.layer?.element;
+    if (!tokensLayer) return;
 
-      const isBarToken = ownedIds.includes(token.id);
-      const isGM = game.user.isGM;
-      const isOwner = token.isOwner;
+    tokensLayer.on("click", ".token", async (event) => {
+      // Only act if Follow Mode is ON
+      if (!window.playerTokenBar.isFollowMode()) return;
 
-      if (alwaysCenter) {
-        if (token.id === selectedId) return;
+      // Get clicked token instance
+      const clickedToken = canvas.tokens.placeables.find(t => t.id === event.currentTarget.id);
+      if (!clickedToken) return;
 
-        if (isGM) {
-          token.setTarget(true, { user: game.user, releaseOthers: true });
-        } else if (isOwner) {
-          selectedId = token.id;
+      const userTargets = game.user.targets;
+      const isTargeted = userTargets.has(clickedToken.document);
 
-          const dx = Math.abs(token.center.x - (lastFollowedPos?.x ?? 0));
-          const dy = Math.abs(token.center.y - (lastFollowedPos?.y ?? 0));
-          const moved = dx > 10 || dy > 10;
-
-          if (canControl(token)) token.control({ releaseOthers: true });
-          if (moved) canvas.animatePan({ x: token.center.x, y: token.center.y, scale: canvas.stage.scale.x, duration: 250 });
-
-          lastFollowedPos = { x: token.center.x, y: token.center.y };
-          setSmall(token.name ?? "", true);
-          refresh();
-        } else {
-          game.user.targets.clear();
-          token.setTarget(true, { user: game.user, releaseOthers: false });
-        }
-      }
-
-      if (!alwaysCenter && isBarToken) {
-        selectedId = token.id;
-        refresh();
+      if (isTargeted) {
+        // Clear this token from targets if already targeted
+        await game.user.updateTokenTargets(clickedToken.document, false);
+      } else {
+        // Clear all previous targets, then target this token
+        await game.user.updateTokenTargets([], false); // Clear all
+        await game.user.updateTokenTargets(clickedToken.document, true); // Target new token
       }
     });
-
-    const origCanDragToken = Token.prototype._canDrag;
-    Token.prototype._canDrag = function (event) {
-      if (alwaysCenter && this.id === selectedId) return false;
-      return origCanDragToken.call(this, event);
-    };
   });
+
 
 
   
