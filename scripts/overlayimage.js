@@ -446,20 +446,19 @@ Hooks.on("getSceneControlButtons", (controls) => {
   const tokenControls = controls.find(c => c.name === "token");
   if (!tokenControls) return;
 
-  const isOn = () => window.playerTokenBar?.isFollowMode?.() ?? false;
-
   tokenControls.tools.push({
     name: "toggle-follow-mode",
-    title: () => `Follow Mode: ${isOn() ? "On" : "Off"}`,
-    icon: () => isOn() ? "fas fa-crosshairs" : "far fa-circle",
+    title: () => `Follow Mode: ${window.playerTokenBar?.isFollowMode() ? "On" : "Off"}`,
+    icon: () => window.playerTokenBar?.isFollowMode() ? "fas fa-crosshairs" : "far fa-circle",
     toggle: true,
-    active: isOn(),
+    active: window.playerTokenBar?.isFollowMode() ?? false,
     onClick: (toggle) => {
-      window.playerTokenBar?.setFollowMode?.(toggle);
+      window.playerTokenBar?.setFollowMode(toggle);
       ui.notifications.info(`Follow Mode ${toggle ? "Enabled" : "Disabled"}`);
     }
   });
 });
+
 
 
   
