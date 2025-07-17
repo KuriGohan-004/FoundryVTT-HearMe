@@ -391,7 +391,7 @@ Hooks.on("getSceneControlButtons", (controls) => {
 });
 
 
- /***********************************************************************
+/***********************************************************************
  * Follow Mode: Smart Clicks & Disable Dragging
  **********************************************************************/
 Hooks.once("ready", () => {
@@ -447,6 +447,7 @@ Hooks.once("ready", () => {
     return origCanDragToken.call(this, event);
   };
 });
+
 
   
 })();
