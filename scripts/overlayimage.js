@@ -278,20 +278,22 @@
 
 
   
-   Hooks.once("canvasReady", () => {
+  Hooks.once("canvasReady", () => {
     const origHandleClickLeft = canvas.tokens._onClickLeft.bind(canvas.tokens);
 
     canvas.tokens._onClickLeft = async function (event) {
       if (alwaysCenter && !lastClickWasFromBar) {
-        const interactionData = event.interactionData ?? event.data?.interactionData;
-        if (!interactionData) return;
-
-        const { x, y } = interactionData;
-        const token = canvas.tokens.placeables.find(t => t.containsPoint({ x, y }));
-        if (token && token.visible) {
-          token.setTarget(!token.isTargeted, { releaseOthers: false });
-          return; // Prevent default behavior
-        }
+        // Simulate a "T" key press to trigger built-in targeting
+        const keyEvent = new KeyboardEvent("keydown", {
+          key: "t",
+          code: "KeyT",
+          keyCode: 84,
+          which: 84,
+          bubbles: true,
+          cancelable: true
+        });
+        window.dispatchEvent(keyEvent);
+        return; // Prevent default click behavior
       }
 
       return origHandleClickLeft(event);
@@ -313,7 +315,7 @@
     if (!canControl(token)) return;
 
     if (alwaysCenter) {
-      // Do nothing; targeting handled by _onClickLeft override
+      // Do nothing; targeting handled by simulated T key
       return;
     }
 
