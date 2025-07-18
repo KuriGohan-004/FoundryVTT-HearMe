@@ -528,31 +528,6 @@ Hooks.once("ready", () => {
   };
 });
 
-Hooks.once('init', () => {
-  console.log('DisableClicksModule | Initializing');
-  window.alwaysCenter = false;
-});
-
-Hooks.on('canvasReady', () => {
-  // Remove any previous listeners first to avoid duplicates if canvas reloads
-  if (window._disableClicksHandler) {
-    canvas.stage.off('mousedown', window._disableClicksHandler);
-  }
-
-  // Define handler
-  window._disableClicksHandler = (event) => {
-    if (window.alwaysCenter) {
-      event.stopPropagation();
-      event.stopImmediatePropagation();
-      event.preventDefault();
-      return false;
-    }
-  };
-
-  // Attach handler to PIXI stage mouse down event
-  canvas.stage.on('mousedown', window._disableClicksHandler);
-});
-
 
 
   
