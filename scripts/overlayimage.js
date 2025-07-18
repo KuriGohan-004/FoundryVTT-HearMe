@@ -277,72 +277,69 @@
   });
 
 Hooks.on("controlToken", (token, controlled) => {
-  if (ignoreNextControl) {
-    ignoreNextControl = false;
-    return;
-  }
+    if (ignoreNextControl) {
+      ignoreNextControl = false;
+      return;
+    }
 
-  if (lastClickWasFromBar) {
-    lastClickWasFromBar = false;
-    return;
-  }
+    if (lastClickWasFromBar) {
+      lastClickWasFromBar = false;
+      return;
+    }
 
-  if (!canControl(token)) return;
+    if (!canControl(token)) return;
 
-  if (alwaysCenter) {
-    if (controlled) {
-      // Save clicked token ID
-      const clickedTokenId = token.id;
+    if (alwaysCenter) {
+      // Prevent switching the selected token in Follow Mode
+      if (controlled) {
+        // Delay to let control settle
+        const clickedTokenId = token.id;
+        setTimeout(() => {
+          const followedToken = canvas.tokens.get(selectedId);
+          const clickedToken = canvas.tokens.get(clickedTokenId);
 
-      // Delay to allow Foundry to finish selecting the clicked token
-      setTimeout(() => {
-        const followedToken = canvas.tokens.get(selectedId);
-        const clickedToken = canvas.tokens.get(clickedTokenId);
+          if (!followedToken || !clickedToken || followedToken.id === clickedToken.id) return;
 
-        if (followedToken && clickedToken && followedToken.id !== clickedToken.id) {
+          // Revert control to followed token
           ignoreNextControl = true;
-
-          // Re-control the followed token
           followedToken.control({ releaseOthers: true });
 
-          // Re-target the originally clicked token (and only it)
+          // Target the clicked token
           setTimeout(() => {
             clickedToken.setTarget(true, { releaseOthers: true });
-          }, 20); // Delay to let control settle
-        }
-      }, 30);
+          }, 20);
+        }, 30);
+      } else {
+        token.setTarget(false, { releaseOthers: false });
+      }
     } else {
-      token.setTarget(false, { releaseOthers: false });
+      // Normal behavior outside Follow Mode
+      if (controlled && token.id !== selectedId) {
+        selectToken(token);
+      }
     }
-  } else {
-    if (controlled && token.id !== selectedId) {
-      selectToken(token);
+
+    refresh();
+  });
+
+  Hooks.on("preControlToken", (token, controlled, event, options) => {
+    if (!canControl(token)) return true;
+
+    if (alwaysCenter && !lastClickWasFromBar) {
+      // Prevent selection switching in Follow Mode
+      if (controlled) {
+        // Toggle targeting manually
+        token.setTarget(!token.isTargeted, { releaseOthers: false });
+      } else {
+        token.setTarget(false, { releaseOthers: false });
+      }
+
+      // Skip the default control behavior
+      return false;
     }
-  }
 
-  refresh();
-});
-
-
-
-
-
-Hooks.on("preControlToken", (token, controlled, event, options) => {
-  if (!canControl(token)) return true; // Allow others to work normally
-
-  if (alwaysCenter && !lastClickWasFromBar) {
-    // Follow Mode ON + map click: prevent control
-    // Just toggle target manually
-    if (controlled) {
-      token.setTarget(!token.isTargeted, { releaseOthers: false });
-    } else {
-      token.setTarget(false, { releaseOthers: false });
-    }
-    return false; // ❌ BLOCK the control change
-  }
-
-  return true; // Allow normal behavior
-});
+    return true;
+  });
 
   
   window.addEventListener("keydown", e => {
@@ -554,70 +551,6 @@ Hooks.once("ready", () => {
     game.user.updateTokenTargets(tokenIds);
 
     return false;
-  };
-});
-
-
-/***********************************************************************
- * Follow Mode: Smart Clicks & Disable Dragging
- **********************************************************************/
-Hooks.once("ready", () => {
-  Hooks.on("controlToken", (token, controlled) => {
-    if (!controlled) return;
-
-    const isBarToken = ownedIds.includes(token.id);
-    const isGM = game.user.isGM;
-    const isOwner = token.isOwner;
-
-    if (alwaysCenter) {
-      if (token.id === selectedId) return;
-
-      if (isGM) {
-        if (!token.isTargeted) {
-          token.setTarget(true, { user: game.user, releaseOthers: true });
-        }
-      } else if (isOwner) {
-        selectedId = token.id;
-
-        const dx = Math.abs(token.center.x - (lastFollowedPos?.x ?? 0));
-        const dy = Math.abs(token.center.y - (lastFollowedPos?.y ?? 0));
-        const moved = dx > 10 || dy > 10;
-
-        if (canControl(token)) {
-          token.control({ releaseOthers: true });
-        }
-
-        if (moved) {
-          canvas.animatePan({
-            x: token.center.x,
-            y: token.center.y,
-            scale: canvas.stage.scale.x,
-            duration: 250
-          });
-        }
-
-        lastFollowedPos = { x: token.center.x, y: token.center.y };
-        setSmall(token.name ?? "", true);
-        refresh();
-      } else {
-        if (!token.isTargeted) {
-          game.user.targets.clear();
-          token.setTarget(true, { user: game.user, releaseOthers: false });
-        }
-      }
-    }
-
-    if (!alwaysCenter && isBarToken) {
-      selectedId = token.id;
-      refresh();
-    }
-  });
-
-  // Disable dragging while follow mode is active on the selected token
-  const origCanDragToken = Token.prototype._canDrag;
-  Token.prototype._canDrag = function (event) {
-    if (alwaysCenter && this.id === selectedId) return false;
-    return origCanDragToken.call(this, event);
   };
 });
   
