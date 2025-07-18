@@ -278,19 +278,19 @@
 
 
   
-    Hooks.on("ready", () => {
+   Hooks.once("canvasReady", () => {
     const origHandleClickLeft = canvas.tokens._onClickLeft.bind(canvas.tokens);
 
     canvas.tokens._onClickLeft = async function (event) {
       if (alwaysCenter && !lastClickWasFromBar) {
-        const interactionData = event.data?.interactionData;
+        const interactionData = event.interactionData ?? event.data?.interactionData;
         if (!interactionData) return;
 
-        const token = canvas.tokens.placeables.find(t => t.containsPoint(interactionData.originalEvent.data.global));
-        if (token && token.object && token.visible) {
-          const isTargeted = token.isTargeted;
-          token.setTarget(!isTargeted, { releaseOthers: false });
-          return; // Block default left click behavior
+        const { x, y } = interactionData;
+        const token = canvas.tokens.placeables.find(t => t.containsPoint({ x, y }));
+        if (token && token.visible) {
+          token.setTarget(!token.isTargeted, { releaseOthers: false });
+          return; // Prevent default behavior
         }
       }
 
