@@ -525,34 +525,5 @@ Hooks.once("ready", () => {
   };
 });
   
-
-/***********************************************************************
- * Follow Mode: Smart Target Toggle on Click (like pressing T)
- **********************************************************************/
-Hooks.once("ready", () => {
-  // Patch Token layer click handling
-  const origHandleClickLeft = Token.prototype._onClickLeft;
-
-  Token.prototype._onClickLeft = function (event) {
-    if (!isFollowMode()) {
-      // If follow mode is off, do default behavior
-      return origHandleClickLeft.call(this, event);
-    }
-
-    // Prevent default click behavior (selection)
-    event.stopPropagation();
-
-    // Toggle target state like pressing 'T'
-    const alreadyTargeted = this.isTargeted;
-    const tokenIds = alreadyTargeted
-      ? game.user.targets.filter(t => t.id !== this.id).map(t => t.id)
-      : [...game.user.targets.map(t => t.id), this.id];
-
-    game.user.updateTokenTargets(tokenIds);
-
-    return false;
-  };
-});
-  
   
 })();
