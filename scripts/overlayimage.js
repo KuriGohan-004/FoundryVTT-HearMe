@@ -283,17 +283,17 @@
 
     canvas.tokens._onClickLeft = async function (event) {
       if (alwaysCenter && !lastClickWasFromBar) {
-        // Simulate a "T" key press to trigger built-in targeting
-        const keyEvent = new KeyboardEvent("keydown", {
-          key: "t",
-          code: "KeyT",
-          keyCode: 84,
-          which: 84,
-          bubbles: true,
-          cancelable: true
-        });
-        window.dispatchEvent(keyEvent);
-        return; // Prevent default click behavior
+        const interactionData = event.data?.interactionData ?? event.interactionData;
+        const { x, y } = interactionData || {}; // Fallback
+        if (x == null || y == null) return;
+
+        const tokens = canvas.tokens.placeables;
+        const targetToken = tokens.find(t => t.visible && t.controlled === false && t.containsPoint({ x, y }));
+
+        if (targetToken) {
+          targetToken.setTarget(!targetToken.isTargeted, { releaseOthers: false });
+          return; // Block normal selection
+        }
       }
 
       return origHandleClickLeft(event);
@@ -315,8 +315,7 @@
     if (!canControl(token)) return;
 
     if (alwaysCenter) {
-      // Do nothing; targeting handled by simulated T key
-      return;
+      return; // Do nothing in Follow Mode; handled manually
     }
 
     if (controlled && token.id !== selectedId) {
