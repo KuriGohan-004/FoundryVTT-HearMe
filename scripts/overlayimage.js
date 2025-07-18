@@ -20,18 +20,18 @@
 
     tokenControls.tools.push({
       name: "toggle-follow-mode",
-      title: Follow Mode: ${alwaysCenter ? "On" : "Off"},
+      title: `Follow Mode: ${alwaysCenter ? "On" : "Off"}`,
       icon: alwaysCenter ? "fas fa-crosshairs" : "far fa-circle",
       toggle: true,
       active: alwaysCenter,
       onClick: (toggle) => {
         alwaysCenter = toggle;
-        ui.notifications.info(Follow Mode ${toggle ? "Enabled" : "Disabled"});
+        ui.notifications.info(`Follow Mode ${toggle ? "Enabled" : "Disabled"}`);
       }
     });
   });
 
-  const CSS = 
+  const CSS = `
     #${BAR_ID}{ position:fixed; bottom:0; left:25%; width:50%; height:84px;
       padding:6px 10px; display:flex; align-items:center; justify-content:center;
       gap:10px; overflow:hidden; background:none; border:none;
@@ -57,7 +57,7 @@
       transform-origin:bottom left;
       white-space:nowrap; overflow:visible; left:0;
       padding-left: 75%; padding-bottom: 15%;
-    };
+    }`;
 
   document.head.appendChild(Object.assign(document.createElement("style"), { textContent: CSS }));
 
@@ -77,15 +77,15 @@
   const combatRunning = () => !!(game.combat?.started && game.combat.scene?.id === canvas.scene?.id);
   const canControl = t => t.isOwner || t.actor?.isOwner;
   const imgSrc = t => t.document.texture?.src || t.actor?.prototypeToken?.texture?.src || t.actor?.img || "icons/svg/mystery-man.svg";
-  const setSmall = (txt, b = false) => { label().textContent = txt ? (b ? [[ ${txt} ]] : txt) : ""; };
+  const setSmall = (txt, b = false) => { label().textContent = txt ? (b ? `[[ ${txt} ]]` : txt) : ""; };
 
   function positionCenter() {
     const sb = document.getElementById("sidebar");
     if (!sb) return;
     const c = center();
     const r = sb.getBoundingClientRect();
-    c.style.left = ${r.left - 4}px;
-    c.style.top = ${r.top + r.height}px;
+    c.style.left = `${r.left - 4}px`;
+    c.style.top = `${r.top + r.height}px`;
   }
 
   window.addEventListener("resize", positionCenter);
@@ -277,72 +277,69 @@
   });
 
 Hooks.on("controlToken", (token, controlled) => {
-  if (ignoreNextControl) {
-    ignoreNextControl = false;
-    return;
-  }
+    if (ignoreNextControl) {
+      ignoreNextControl = false;
+      return;
+    }
 
-  if (lastClickWasFromBar) {
-    lastClickWasFromBar = false;
-    return;
-  }
+    if (lastClickWasFromBar) {
+      lastClickWasFromBar = false;
+      return;
+    }
 
-  if (!canControl(token)) return;
+    if (!canControl(token)) return;
 
-  if (alwaysCenter) {
-    if (controlled) {
-      // Save clicked token ID
-      const clickedTokenId = token.id;
+    if (alwaysCenter) {
+      // Prevent switching the selected token in Follow Mode
+      if (controlled) {
+        // Delay to let control settle
+        const clickedTokenId = token.id;
+        setTimeout(() => {
+          const followedToken = canvas.tokens.get(selectedId);
+          const clickedToken = canvas.tokens.get(clickedTokenId);
 
-      // Delay to allow Foundry to finish selecting the clicked token
-      setTimeout(() => {
-        const followedToken = canvas.tokens.get(selectedId);
-        const clickedToken = canvas.tokens.get(clickedTokenId);
+          if (!followedToken || !clickedToken || followedToken.id === clickedToken.id) return;
 
-        if (followedToken && clickedToken && followedToken.id !== clickedToken.id) {
+          // Revert control to followed token
           ignoreNextControl = true;
-
-          // Re-control the followed token
           followedToken.control({ releaseOthers: true });
 
-          // Re-target the originally clicked token (and only it)
+          // Target the clicked token
           setTimeout(() => {
             clickedToken.setTarget(true, { releaseOthers: true });
-          }, 20); // Delay to let control settle
-        }
-      }, 30);
+          }, 20);
+        }, 30);
+      } else {
+        token.setTarget(false, { releaseOthers: false });
+      }
     } else {
-      token.setTarget(false, { releaseOthers: false });
+      // Normal behavior outside Follow Mode
+      if (controlled && token.id !== selectedId) {
+        selectToken(token);
+      }
     }
-  } else {
-    if (controlled && token.id !== selectedId) {
-      selectToken(token);
+
+    refresh();
+  });
+
+  Hooks.on("preControlToken", (token, controlled, event, options) => {
+    if (!canControl(token)) return true;
+
+    if (alwaysCenter && !lastClickWasFromBar) {
+      // Prevent selection switching in Follow Mode
+      if (controlled) {
+        // Toggle targeting manually
+        token.setTarget(!token.isTargeted, { releaseOthers: false });
+      } else {
+        token.setTarget(false, { releaseOthers: false });
+      }
+
+      // Skip the default control behavior
+      return false;
     }
-  }
 
-  refresh();
-});
-
-
-
-
-
-Hooks.on("preControlToken", (token, controlled, event, options) => {
-  if (!canControl(token)) return true; // Allow others to work normally
-
-  if (alwaysCenter && !lastClickWasFromBar) {
-    // Follow Mode ON + map click: prevent control
-    // Just toggle target manually
-    if (controlled) {
-      token.setTarget(!token.isTargeted, { releaseOthers: false });
-    } else {
-      token.setTarget(false, { releaseOthers: false });
-    }
-    return false; // ❌ BLOCK the control change
-  }
-
-  return true; // Allow normal behavior
-});
+    return true;
+  });
 
   
   window.addEventListener("keydown", e => {
@@ -527,8 +524,35 @@ Hooks.once("ready", () => {
     return origCanDragToken.call(this, event);
   };
 });
+  
 
+/***********************************************************************
+ * Follow Mode: Smart Target Toggle on Click (like pressing T)
+ **********************************************************************/
+Hooks.once("ready", () => {
+  // Patch Token layer click handling
+  const origHandleClickLeft = Token.prototype._onClickLeft;
 
+  Token.prototype._onClickLeft = function (event) {
+    if (!isFollowMode()) {
+      // If follow mode is off, do default behavior
+      return origHandleClickLeft.call(this, event);
+    }
 
+    // Prevent default click behavior (selection)
+    event.stopPropagation();
+
+    // Toggle target state like pressing 'T'
+    const alreadyTargeted = this.isTargeted;
+    const tokenIds = alreadyTargeted
+      ? game.user.targets.filter(t => t.id !== this.id).map(t => t.id)
+      : [...game.user.targets.map(t => t.id), this.id];
+
+    game.user.updateTokenTargets(tokenIds);
+
+    return false;
+  };
+});
+  
   
 })();
