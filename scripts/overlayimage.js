@@ -20,18 +20,18 @@
 
     tokenControls.tools.push({
       name: "toggle-follow-mode",
-      title: `Follow Mode: ${alwaysCenter ? "On" : "Off"}`,
+      title: Follow Mode: ${alwaysCenter ? "On" : "Off"},
       icon: alwaysCenter ? "fas fa-crosshairs" : "far fa-circle",
       toggle: true,
       active: alwaysCenter,
       onClick: (toggle) => {
         alwaysCenter = toggle;
-        ui.notifications.info(`Follow Mode ${toggle ? "Enabled" : "Disabled"}`);
+        ui.notifications.info(Follow Mode ${toggle ? "Enabled" : "Disabled"});
       }
     });
   });
 
-  const CSS = `
+  const CSS = 
     #${BAR_ID}{ position:fixed; bottom:0; left:25%; width:50%; height:84px;
       padding:6px 10px; display:flex; align-items:center; justify-content:center;
       gap:10px; overflow:hidden; background:none; border:none;
@@ -57,7 +57,7 @@
       transform-origin:bottom left;
       white-space:nowrap; overflow:visible; left:0;
       padding-left: 75%; padding-bottom: 15%;
-    }`;
+    };
 
   document.head.appendChild(Object.assign(document.createElement("style"), { textContent: CSS }));
 
@@ -77,15 +77,15 @@
   const combatRunning = () => !!(game.combat?.started && game.combat.scene?.id === canvas.scene?.id);
   const canControl = t => t.isOwner || t.actor?.isOwner;
   const imgSrc = t => t.document.texture?.src || t.actor?.prototypeToken?.texture?.src || t.actor?.img || "icons/svg/mystery-man.svg";
-  const setSmall = (txt, b = false) => { label().textContent = txt ? (b ? `[[ ${txt} ]]` : txt) : ""; };
+  const setSmall = (txt, b = false) => { label().textContent = txt ? (b ? [[ ${txt} ]] : txt) : ""; };
 
   function positionCenter() {
     const sb = document.getElementById("sidebar");
     if (!sb) return;
     const c = center();
     const r = sb.getBoundingClientRect();
-    c.style.left = `${r.left - 4}px`;
-    c.style.top = `${r.top + r.height}px`;
+    c.style.left = ${r.left - 4}px;
+    c.style.top = ${r.top + r.height}px;
   }
 
   window.addEventListener("resize", positionCenter);
@@ -276,53 +276,74 @@
     }
   });
 
+Hooks.on("controlToken", (token, controlled) => {
+  if (ignoreNextControl) {
+    ignoreNextControl = false;
+    return;
+  }
 
-  
-    Hooks.once("canvasReady", () => {
-    canvas.stage.hitArea.eventMode = "static";
-    canvas.stage.removeAllListeners("pointerdown");
+  if (lastClickWasFromBar) {
+    lastClickWasFromBar = false;
+    return;
+  }
 
-    canvas.stage.on("pointerdown", event => {
-      if (!alwaysCenter || lastClickWasFromBar) return;
+  if (!canControl(token)) return;
 
-      const global = event.data.global;
-      const tokens = canvas.tokens.placeables;
+  if (alwaysCenter) {
+    if (controlled) {
+      // Save clicked token ID
+      const clickedTokenId = token.id;
 
-      // Manually hit-test tokens from top to bottom
-      const clickedToken = tokens.findLast(t => t.visible && t.controlled === false && t.hitArea?.contains?.(global.x - t.x, global.y - t.y));
+      // Delay to allow Foundry to finish selecting the clicked token
+      setTimeout(() => {
+        const followedToken = canvas.tokens.get(selectedId);
+        const clickedToken = canvas.tokens.get(clickedTokenId);
 
-      if (clickedToken) {
-        clickedToken.setTarget(!clickedToken.isTargeted, { releaseOthers: false });
-      }
+        if (followedToken && clickedToken && followedToken.id !== clickedToken.id) {
+          ignoreNextControl = true;
 
-      event.stopPropagation();
-    });
-  });
+          // Re-control the followed token
+          followedToken.control({ releaseOthers: true });
 
-  // --- MODIFIED controlToken hook: noop in Follow Mode ---
-  Hooks.on("controlToken", (token, controlled) => {
-    if (ignoreNextControl) {
-      ignoreNextControl = false;
-      return;
+          // Re-target the originally clicked token (and only it)
+          setTimeout(() => {
+            clickedToken.setTarget(true, { releaseOthers: true });
+          }, 20); // Delay to let control settle
+        }
+      }, 30);
+    } else {
+      token.setTarget(false, { releaseOthers: false });
     }
-
-    if (lastClickWasFromBar) {
-      lastClickWasFromBar = false;
-      return;
-    }
-
-    if (!canControl(token)) return;
-
-    if (alwaysCenter) {
-      return; // Do nothing in Follow Mode; handled manually
-    }
-
+  } else {
     if (controlled && token.id !== selectedId) {
       selectToken(token);
     }
+  }
 
-    refresh();
-  });
+  refresh();
+});
+
+
+
+
+
+Hooks.on("preControlToken", (token, controlled, event, options) => {
+  if (!canControl(token)) return true; // Allow others to work normally
+
+  if (alwaysCenter && !lastClickWasFromBar) {
+    // Follow Mode ON + map click: prevent control
+    // Just toggle target manually
+    if (controlled) {
+      token.setTarget(!token.isTargeted, { releaseOthers: false });
+    } else {
+      token.setTarget(false, { releaseOthers: false });
+    }
+    return false; // ❌ BLOCK the control change
+  }
+
+  return true; // Allow normal behavior
+});
+
   
   window.addEventListener("keydown", e => {
     if (document.activeElement?.tagName === "INPUT" || document.activeElement?.tagName === "TEXTAREA") return;
@@ -506,6 +527,38 @@ Hooks.once("ready", () => {
     return origCanDragToken.call(this, event);
   };
 });
+
+/***********************************************************************
+ * Disable Clicks
+ **********************************************************************/
+Hooks.once('init', () => {
+  console.log('DisableClicksModule | Initializing');
   
+  // Create a global toggle for alwaysCenter mode
+  window.alwaysCenter = false;
+});
+
+Hooks.on('ready', () => {
+  // Disable mouse clicks if alwaysCenter is enabled
+  // We capture mousedown events on the canvas and block them
+  
+  // Add event listener to the canvas HTML element
+  const canvasElement = canvas.app.view; // PIXI canvas element
+  
+  canvasElement.addEventListener('mousedown', event => {
+    if (window.alwaysCenter) {
+      event.stopImmediatePropagation();
+      event.preventDefault();
+      // Optionally, give visual feedback or log
+      // console.log('Mouse click disabled due to alwaysCenter mode');
+      return false;
+    }
+  }, true); // useCapture = true to capture early
+  
+  // Optionally, you can add a way to toggle alwaysCenter mode from console:
+  // window.alwaysCenter = true; or false
+});
+
+
   
 })();
