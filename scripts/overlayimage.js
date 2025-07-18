@@ -278,26 +278,25 @@
 
 
   
-  Hooks.once("canvasReady", () => {
-    const origHandleClickLeft = canvas.tokens._onClickLeft.bind(canvas.tokens);
+    Hooks.once("canvasReady", () => {
+    canvas.stage.hitArea.eventMode = "static";
+    canvas.stage.removeAllListeners("pointerdown");
 
-    canvas.tokens._onClickLeft = async function (event) {
-      if (alwaysCenter && !lastClickWasFromBar) {
-        const interactionData = event.data?.interactionData ?? event.interactionData;
-        const { x, y } = interactionData || {}; // Fallback
-        if (x == null || y == null) return;
+    canvas.stage.on("pointerdown", event => {
+      if (!alwaysCenter || lastClickWasFromBar) return;
 
-        const tokens = canvas.tokens.placeables;
-        const targetToken = tokens.find(t => t.visible && t.controlled === false && t.containsPoint({ x, y }));
+      const global = event.data.global;
+      const tokens = canvas.tokens.placeables;
 
-        if (targetToken) {
-          targetToken.setTarget(!targetToken.isTargeted, { releaseOthers: false });
-          return; // Block normal selection
-        }
+      // Manually hit-test tokens from top to bottom
+      const clickedToken = tokens.findLast(t => t.visible && t.controlled === false && t.hitArea?.contains?.(global.x - t.x, global.y - t.y));
+
+      if (clickedToken) {
+        clickedToken.setTarget(!clickedToken.isTargeted, { releaseOthers: false });
       }
 
-      return origHandleClickLeft(event);
-    };
+      event.stopPropagation();
+    });
   });
 
   // --- MODIFIED controlToken hook: noop in Follow Mode ---
