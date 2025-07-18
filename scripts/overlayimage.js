@@ -276,6 +276,29 @@
     }
   });
 
+
+  
+    Hooks.on("ready", () => {
+    const origHandleClickLeft = canvas.tokens._onClickLeft.bind(canvas.tokens);
+
+    canvas.tokens._onClickLeft = async function (event) {
+      if (alwaysCenter && !lastClickWasFromBar) {
+        const interactionData = event.data?.interactionData;
+        if (!interactionData) return;
+
+        const token = canvas.tokens.placeables.find(t => t.containsPoint(interactionData.originalEvent.data.global));
+        if (token && token.object && token.visible) {
+          const isTargeted = token.isTargeted;
+          token.setTarget(!isTargeted, { releaseOthers: false });
+          return; // Block default left click behavior
+        }
+      }
+
+      return origHandleClickLeft(event);
+    };
+  });
+
+  // --- MODIFIED controlToken hook: noop in Follow Mode ---
   Hooks.on("controlToken", (token, controlled) => {
     if (ignoreNextControl) {
       ignoreNextControl = false;
@@ -290,7 +313,7 @@
     if (!canControl(token)) return;
 
     if (alwaysCenter) {
-      // Do nothing; handled by preControlToken
+      // Do nothing; targeting handled by _onClickLeft override
       return;
     }
 
@@ -300,23 +323,6 @@
 
     refresh();
   });
-
-  Hooks.on("preControlToken", (token, controlled, event, options) => {
-    if (!canControl(token)) return true;
-
-    if (alwaysCenter && !lastClickWasFromBar) {
-      // In Follow Mode, prevent default control entirely and manually toggle targeting
-      if (event instanceof MouseEvent && event.button === 0) {
-        // Simulate "T" key targeting
-        const isTargeted = token.isTargeted;
-        token.setTarget(!isTargeted, { releaseOthers: false });
-        return false; // Block default behavior
-      }
-    }
-
-    return true;
-  });
-
   
   window.addEventListener("keydown", e => {
     if (document.activeElement?.tagName === "INPUT" || document.activeElement?.tagName === "TEXTAREA") return;
