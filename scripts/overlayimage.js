@@ -528,36 +528,31 @@ Hooks.once("ready", () => {
   };
 });
 
-/***********************************************************************
- * Disable Clicks
- **********************************************************************/
 Hooks.once('init', () => {
   console.log('DisableClicksModule | Initializing');
-  
-  // Create a global toggle for alwaysCenter mode
   window.alwaysCenter = false;
 });
 
-Hooks.on('ready', () => {
-  // Disable mouse clicks if alwaysCenter is enabled
-  // We capture mousedown events on the canvas and block them
-  
-  // Add event listener to the canvas HTML element
-  const canvasElement = canvas.app.view; // PIXI canvas element
-  
-  canvasElement.addEventListener('mousedown', event => {
+Hooks.on('canvasReady', () => {
+  // Remove any previous listeners first to avoid duplicates if canvas reloads
+  if (window._disableClicksHandler) {
+    canvas.stage.off('mousedown', window._disableClicksHandler);
+  }
+
+  // Define handler
+  window._disableClicksHandler = (event) => {
     if (window.alwaysCenter) {
+      event.stopPropagation();
       event.stopImmediatePropagation();
       event.preventDefault();
-      // Optionally, give visual feedback or log
-      // console.log('Mouse click disabled due to alwaysCenter mode');
       return false;
     }
-  }, true); // useCapture = true to capture early
-  
-  // Optionally, you can add a way to toggle alwaysCenter mode from console:
-  // window.alwaysCenter = true; or false
+  };
+
+  // Attach handler to PIXI stage mouse down event
+  canvas.stage.on('mousedown', window._disableClicksHandler);
 });
+
 
 
   
