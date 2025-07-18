@@ -276,7 +276,7 @@
     }
   });
 
-Hooks.on("controlToken", (token, controlled) => {
+  Hooks.on("controlToken", (token, controlled) => {
     if (ignoreNextControl) {
       ignoreNextControl = false;
       return;
@@ -290,33 +290,12 @@ Hooks.on("controlToken", (token, controlled) => {
     if (!canControl(token)) return;
 
     if (alwaysCenter) {
-      // Prevent switching the selected token in Follow Mode
-      if (controlled) {
-        // Delay to let control settle
-        const clickedTokenId = token.id;
-        setTimeout(() => {
-          const followedToken = canvas.tokens.get(selectedId);
-          const clickedToken = canvas.tokens.get(clickedTokenId);
+      // Do nothing; handled by preControlToken
+      return;
+    }
 
-          if (!followedToken || !clickedToken || followedToken.id === clickedToken.id) return;
-
-          // Revert control to followed token
-          ignoreNextControl = true;
-          followedToken.control({ releaseOthers: true });
-
-          // Target the clicked token
-          setTimeout(() => {
-            clickedToken.setTarget(true, { releaseOthers: true });
-          }, 20);
-        }, 30);
-      } else {
-        token.setTarget(false, { releaseOthers: false });
-      }
-    } else {
-      // Normal behavior outside Follow Mode
-      if (controlled && token.id !== selectedId) {
-        selectToken(token);
-      }
+    if (controlled && token.id !== selectedId) {
+      selectToken(token);
     }
 
     refresh();
@@ -326,16 +305,13 @@ Hooks.on("controlToken", (token, controlled) => {
     if (!canControl(token)) return true;
 
     if (alwaysCenter && !lastClickWasFromBar) {
-      // Prevent selection switching in Follow Mode
-      if (controlled) {
-        // Toggle targeting manually
-        token.setTarget(!token.isTargeted, { releaseOthers: false });
-      } else {
-        token.setTarget(false, { releaseOthers: false });
+      // In Follow Mode, prevent default control entirely and manually toggle targeting
+      if (event instanceof MouseEvent && event.button === 0) {
+        // Simulate "T" key targeting
+        const isTargeted = token.isTargeted;
+        token.setTarget(!isTargeted, { releaseOthers: false });
+        return false; // Block default behavior
       }
-
-      // Skip the default control behavior
-      return false;
     }
 
     return true;
