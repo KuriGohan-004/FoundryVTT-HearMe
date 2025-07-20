@@ -259,40 +259,6 @@ Hooks.once('ready', async () => {
     });
   });
 
-
-  // Addendum: Toggle actor sheet with Tab, and auto-close on token switch
-let lastOpenSheet = null;
-
-window.addEventListener('keydown', (evt) => {
-  if (evt.key === 'Tab') {
-    evt.preventDefault();
-    const token = followState.selectedToken;
-    if (!token || !token.actor) return;
-
-    const existingSheet = token.actor.sheet;
-
-    if (existingSheet.rendered) {
-      existingSheet.close();
-      lastOpenSheet = null;
-    } else {
-      existingSheet.render(true);
-      lastOpenSheet = existingSheet;
-    }
-  }
-}, true);
-
-// Hook into selectToken to close all sheets when token changes in follow mode
-const originalSelectToken = selectToken;
-selectToken = function(token) {
-  if (followState.enabled && followState.selectedToken !== token) {
-    // Close all rendered actor sheets
-    Object.values(ui.windows).forEach(win => {
-      if (win instanceof ActorSheet) win.close();
-    });
-  }
-  originalSelectToken(token);
-};
-
   // Addendum: Auto-select active token on turn start during combat if in follow mode
 Hooks.on("updateCombat", (combat, changes, options, userId) => {
   if (!followState.enabled) return;
@@ -309,5 +275,23 @@ Hooks.on("updateCombat", (combat, changes, options, userId) => {
     selectToken(targetToken);
   }
 });
+
+// Addendum: Close all open sheets when selected token changes
+function closeAllActorSheets() {
+  for (const app of Object.values(ui.windows)) {
+    if (app instanceof ActorSheet) app.close();
+  }
+}
+
+// Wrap original selectToken function to close sheets when selection changes
+const originalSelectToken = selectToken;
+selectToken = function (token) {
+  if (followState.selectedToken !== token) {
+    closeAllActorSheets();
+  }
+  originalSelectToken(token);
+};
+
+
   
 })();
