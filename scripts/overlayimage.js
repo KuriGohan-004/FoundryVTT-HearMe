@@ -99,9 +99,14 @@ Hooks.once('ready', async () => {
   function toggleFollowMode() {
     followState.enabled = !followState.enabled;
     document.getElementById('follow-mode-toggle').textContent = `Follow Mode: ${followState.enabled ? 'On' : 'Off'}`;
-    if (followState.enabled && !followState.selectedToken) {
-      const tokens = getRelevantTokens();
-      if (tokens.length > 0) selectToken(tokens[0]);
+    if (followState.enabled) {
+      if (!followState.selectedToken) {
+        const tokens = getRelevantTokens();
+        if (tokens.length > 0) selectToken(tokens[0]);
+      } else {
+        canvas.animatePan({ x: followState.selectedToken.x, y: followState.selectedToken.y });
+        followState.lastCenter = { x: followState.selectedToken.x, y: followState.selectedToken.y };
+      }
     }
   }
 
@@ -136,25 +141,38 @@ Hooks.once('ready', async () => {
     if (evt.button === 0) {
       evt.preventDefault();
       evt.stopPropagation();
-      // Use Foundry's API directly to toggle target
-      const wasTargeted = token.isTargeted;
-      token.setTarget(!wasTargeted, { user: game.user, releaseOthers: true });
+      // Workaround for targeting using internal event
+      game.user.updateTokenTargets([token.id]);
     }
   }, true);
 
   window.addEventListener('keydown', (evt) => {
     if (!followState.enabled) return;
-    const movementKeys = ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "w", "a", "s", "d"];
-    if (!movementKeys.includes(evt.key.toLowerCase())) return;
+    const key = evt.key.toLowerCase();
+    const movementKeys = ["arrowup", "arrowdown", "arrowleft", "arrowright", "w", "a", "s", "d"];
 
-    const controlled = canvas.tokens.controlled;
-    if (!controlled.includes(followState.selectedToken)) {
-      selectToken(followState.selectedToken);
+    // Remove Q and E bindings
+    if (key === 'q' || key === 'e') {
+      evt.preventDefault();
+      evt.stopPropagation();
+    }
+
+    if (movementKeys.includes(key)) {
+      const controlled = canvas.tokens.controlled;
+      if (!controlled.includes(followState.selectedToken)) {
+        if (!followState.selectedToken) {
+          const tokens = getRelevantTokens();
+          if (tokens.length > 0) selectToken(tokens[0]);
+        } else {
+          selectToken(followState.selectedToken);
+        }
+      }
     }
   });
 
   updatePortraitBar();
 });
+
 
 
 
