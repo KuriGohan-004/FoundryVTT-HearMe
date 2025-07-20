@@ -7,8 +7,8 @@ Hooks.once('ready', async () => {
   const bar = document.createElement('div');
   bar.id = 'token-portrait-bar';
   bar.innerHTML = `
-    <div id="token-portraits"></div>
     <button id="follow-mode-toggle">Follow Mode: On</button>
+    <div id="token-portraits"></div>
   `;
   document.body.appendChild(bar);
 
@@ -30,6 +30,7 @@ Hooks.once('ready', async () => {
     #token-portraits {
       display: flex;
       gap: 6px;
+      margin-top: 5px;
     }
     .token-portrait {
       width: 40px;
@@ -135,7 +136,15 @@ Hooks.once('ready', async () => {
     if (evt.button === 0) {
       evt.preventDefault();
       evt.stopPropagation();
-      token.setTarget(!token.isTargeted, { user: game.user, releaseOthers: true });
+
+      // Workaround: simulate T key press targeting
+      const keyboardEvent = new KeyboardEvent("keydown", {
+        bubbles: true,
+        cancelable: true,
+        key: "t",
+        code: "KeyT"
+      });
+      document.dispatchEvent(keyboardEvent);
     }
   }, true);
 
@@ -152,6 +161,7 @@ Hooks.once('ready', async () => {
 
   updatePortraitBar();
 });
+
 
 
 
