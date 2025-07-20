@@ -89,7 +89,7 @@ Hooks.once('ready', async () => {
 
   function selectToken(token) {
     followState.selectedToken = token;
-    token.control();
+    token.control({ releaseOthers: true });
     canvas.animatePan({ x: token.x, y: token.y });
     followState.lastCenter = { x: token.x, y: token.y };
     updatePortraitBar();
@@ -126,20 +126,34 @@ Hooks.once('ready', async () => {
     }
   });
 
-  document.addEventListener('click', evt => {
+  document.addEventListener('mousedown', evt => {
     if (!followState.enabled) return;
-    const el = evt.target.closest(".token");
-    if (!el) return;
-    const token = canvas.tokens.placeables.find(t => t.object && t.object.id === el.id);
+    const tokenObject = evt.target.closest(".token");
+    if (!tokenObject) return;
+    const token = canvas.tokens.placeables.find(t => t.object && t.object.id === tokenObject.id);
     if (!token) return;
-    const isTargeted = game.user.targets.has(token);
-    game.user.updateTokenTargets(isTargeted ? [] : [token.id]);
-    evt.preventDefault();
-    evt.stopPropagation();
+    if (evt.button === 0) {
+      evt.preventDefault();
+      evt.stopPropagation();
+      const newTargets = game.user.targets.has(token) ? new Set([...game.user.targets].filter(t => t.id !== token.id)) : new Set([token]);
+      game.user.updateTokenTargets([...newTargets]);
+    }
   }, true);
+
+  window.addEventListener('keydown', (evt) => {
+    if (!followState.enabled) return;
+    const movementKeys = ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "w", "a", "s", "d"];
+    if (!movementKeys.includes(evt.key.toLowerCase())) return;
+
+    const controlled = canvas.tokens.controlled;
+    if (!controlled.includes(followState.selectedToken)) {
+      selectToken(followState.selectedToken);
+    }
+  });
 
   updatePortraitBar();
 });
+
 
 
 
