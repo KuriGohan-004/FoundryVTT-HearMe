@@ -1,399 +1,136 @@
 (() => {
-  const BAR_ID = "player-token-bar";
-  const LABEL_ID = "player-token-bar-label";
-  const CENTER_ID = "player-token-bar-center-label";
+Hooks.once('ready', async () => {
+  const isGM = game.user.isGM;
+  const followState = { enabled: true, selectedToken: null, lastCenter: { x: 0, y: 0 } };
 
-  let alwaysCenter = false;
-  let selectedId = null;
-  let orderedIds = [];
-  let ownedIds = [];
-  let lastFollowedPos = null;
-  let ignoreNextControl = false;
-  let lastClickWasFromBar = false; // <-- NEW FLAG
+  const bar = document.createElement('div');
+  bar.id = 'token-portrait-bar';
+  bar.innerHTML = `
+    <div id="token-portraits"></div>
+    <button id="follow-mode-toggle">Follow Mode: On</button>
+  `;
+  document.body.appendChild(bar);
 
-  let lastTokenIdsHash = "";
-  let lastSelectedId = null;
+  const style = document.createElement('style');
+  style.innerHTML = `
+    #token-portrait-bar {
+      position: absolute;
+      top: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 1000;
+      background: rgba(0,0,0,0.7);
+      padding: 5px;
+      border-radius: 8px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    #token-portraits {
+      display: flex;
+      gap: 6px;
+    }
+    .token-portrait {
+      width: 40px;
+      height: 40px;
+      border: 2px solid transparent;
+      border-radius: 50%;
+      overflow: hidden;
+      cursor: pointer;
+    }
+    .token-portrait img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    .selected-token {
+      transform: scale(1.25);
+      border-color: yellow;
+    }
+  `;
+  document.head.appendChild(style);
 
-  Hooks.on("getSceneControlButtons", (controls) => {
-    const tokenControls = controls.find(c => c.name === "token");
-    if (!tokenControls) return;
-
-    tokenControls.tools.push({
-      name: "toggle-follow-mode",
-      title: `Follow Mode: ${alwaysCenter ? "On" : "Off"}`,
-      icon: alwaysCenter ? "fas fa-crosshairs" : "far fa-circle",
-      toggle: true,
-      active: alwaysCenter,
-      onClick: (toggle) => {
-        alwaysCenter = toggle;
-        ui.notifications.info(`Follow Mode ${toggle ? "Enabled" : "Disabled"}`);
+  function getRelevantTokens() {
+    const tokens = canvas.tokens.placeables;
+    return tokens.filter(t => {
+      if (isGM) {
+        return t.actor?.hasPlayerOwner && !t.actor?.isOwner;
+      } else {
+        return t.actor?.isOwner;
       }
     });
-  });
-
-  const CSS = `
-    #${BAR_ID}{ position:fixed; bottom:0; left:25%; width:50%; height:84px;
-      padding:6px 10px; display:flex; align-items:center; justify-content:center;
-      gap:10px; overflow:hidden; background:none; border:none;
-      z-index:20; pointer-events:auto; transition:opacity .25s ease; }
-    #${BAR_ID} img{
-      width:64px; height:64px; object-fit:cover; border-radius:8px;
-      border:2px solid #fff; flex:0 0 auto; cursor:pointer;
-      transition:transform .15s ease;
-    }
-    #${BAR_ID} img:hover               {transform:scale(1.20); z-index:1;}
-    #${BAR_ID} img.selected-token,
-    #${BAR_ID} img.selected-token:hover{transform:scale(1.25); z-index:2;}
-    #${LABEL_ID}{ position:fixed; bottom:90px; left:25%; width:50%;
-      text-align:center; font-size:16px; font-weight:bold; color:#fff;
-      text-shadow:0 0 4px #000; pointer-events:none; z-index:21;
-      height:24px; line-height:24px; user-select:none; }
-    @keyframes ptbPulse{0%,100%{opacity:1;}50%{opacity:.5;}}
-    #${CENTER_ID}{
-      position:fixed; font-size:48px; font-weight:bold; font-style:italic;
-      color:#fff; text-shadow:0 0 8px #000; pointer-events:none; z-index:40;
-      user-select:none; animation:ptbPulse 4s infinite;
-      transform:rotate(-90deg) translateY(100%);
-      transform-origin:bottom left;
-      white-space:nowrap; overflow:visible; left:0;
-      padding-left: 75%; padding-bottom: 15%;
-    }`;
-
-  document.head.appendChild(Object.assign(document.createElement("style"), { textContent: CSS }));
-
-  const el = (id, tag = "div") => {
-    let existing = document.getElementById(id);
-    if (existing) return existing;
-    const created = document.createElement(tag);
-    created.id = id;
-    document.body.appendChild(created);
-    return created;
-  };
-
-  const bar = () => el(BAR_ID);
-  const label = () => el(LABEL_ID);
-  const center = () => el(CENTER_ID);
-
-  const combatRunning = () => !!(game.combat?.started && game.combat.scene?.id === canvas.scene?.id);
-  const canControl = t => t.isOwner || t.actor?.isOwner;
-  const imgSrc = t => t.document.texture?.src || t.actor?.prototypeToken?.texture?.src || t.actor?.img || "icons/svg/mystery-man.svg";
-  const setSmall = (txt, b = false) => { label().textContent = txt ? (b ? `[[ ${txt} ]]` : txt) : ""; };
-
-  function positionCenter() {
-    const sb = document.getElementById("sidebar");
-    if (!sb) return;
-    const c = center();
-    const r = sb.getBoundingClientRect();
-    c.style.left = `${r.left - 4}px`;
-    c.style.top = `${r.top + r.height}px`;
   }
 
-  window.addEventListener("resize", positionCenter);
-  const showCenter = txt => { center().textContent = txt; positionCenter(); };
+  function updatePortraitBar() {
+    const tokens = getRelevantTokens();
+    const container = bar.querySelector('#token-portraits');
+    container.innerHTML = '';
 
-  function displayTokens() {
-    if (game.user.isGM) {
-      const unlinked = canvas.tokens.placeables.filter(t => !t.document.actorLink);
-      const linkedTokens = canvas.tokens.placeables.filter(t => {
-        if (!t.document.actorLink) return false;
-        const owners = game.users.players.filter(u => t.actor?.testUserPermission(u, CONST.DOCUMENT_OWNERSHIP_LEVELS.OWNER));
-        return owners.length === 0 || owners.every(u => !u.active);
-      });
-      return [...new Set([...unlinked, ...linkedTokens])];
-    }
-    return canvas.tokens.placeables.filter(t => canControl(t));
+    tokens.forEach((t, index) => {
+      const div = document.createElement('div');
+      div.className = 'token-portrait';
+      if (t === followState.selectedToken) div.classList.add('selected-token');
+      const img = document.createElement('img');
+      img.src = t.document.texture.src;
+      div.appendChild(img);
+      div.onclick = () => selectToken(t);
+      container.appendChild(div);
+    });
   }
 
-  function hashTokenIds(tokens) {
-    return tokens.map(t => t.id).sort().join(",");
+  function selectToken(token) {
+    followState.selectedToken = token;
+    token.control();
+    canvas.animatePan({ x: token.x, y: token.y });
+    updatePortraitBar();
   }
 
-  function panSmoothlyToToken(token) {
-    canvas.animatePan({ x: token.center.x, y: token.center.y, scale: canvas.stage.scale.x, duration: 500 });
+  function toggleFollowMode() {
+    followState.enabled = !followState.enabled;
+    document.getElementById('follow-mode-toggle').textContent = `Follow Mode: ${followState.enabled ? 'On' : 'Off'}`;
   }
 
-  function rebuildTokenBarUI(allToks) {
-    const b = bar();
-    b.replaceChildren();
+  document.getElementById('follow-mode-toggle').onclick = toggleFollowMode;
 
-    orderedIds = allToks.map(t => t.id);
-    ownedIds = allToks.filter(canControl).map(t => t.id);
-    window.playerTokenBar.orderedIds = orderedIds;
+  Hooks.on('updateToken', (doc, changes, options, userId) => {
+    if (!followState.enabled || !followState.selectedToken) return;
+    if (doc.id !== followState.selectedToken.id) return;
 
-    const n = orderedIds.length;
-    const selIdx = orderedIds.indexOf(selectedId);
-    const leftCount = (n >= 3) ? 1 : 0;
-    const rightCount = (n - 1) - leftCount;
-    const wrap = idx => (idx + n) % n;
-
-    const leftTokens = [];
-    const rightTokens = [];
-
-    for (let i = 1; i <= leftCount; i++) leftTokens.push(canvas.tokens.get(orderedIds[wrap(selIdx - i)]));
-    for (let i = 1; i <= rightCount; i++) rightTokens.push(canvas.tokens.get(orderedIds[wrap(selIdx + i)]));
-
-    function makeImg(token) {
-      const img = document.createElement("img");
-      img.src = imgSrc(token);
-      img.alt = token.name;
-      if (token.id === selectedId) img.classList.add("selected-token");
-
-      img.onclick = () => {
-        lastClickWasFromBar = true; // <-- FLAG SET HERE
-        selectToken(token);
-      };
-
-      img.onmouseenter = () => setSmall(token.name, false);
-      img.onmouseleave = () => {
-        const cur = canvas.tokens.get(selectedId);
-        setSmall(cur?.name ?? "", false);
-      };
-      return img;
-    }
-
-    const leftWrap = Object.assign(document.createElement("div"), { style: "display:flex; gap:10px; flex-direction:row-reverse;" });
-    const rightWrap = Object.assign(document.createElement("div"), { style: "display:flex; gap:10px;" });
-
-    leftTokens.forEach(tok => leftWrap.appendChild(makeImg(tok)));
-    const centreImg = makeImg(canvas.tokens.get(selectedId));
-    rightTokens.forEach(tok => rightWrap.appendChild(makeImg(tok)));
-
-    b.appendChild(leftWrap);
-    b.appendChild(centreImg);
-    b.appendChild(rightWrap);
-
-    const curTok = canvas.tokens.get(selectedId);
-    const nm = curTok?.name ?? "";
-    setSmall(nm, false);
-    showCenter(nm);
-  }
-
-  let refreshScheduled = false;
-  function refresh() {
-    if (refreshScheduled) return;
-    refreshScheduled = true;
-    setTimeout(() => {
-      refreshScheduled = false;
-
-      const allToks = displayTokens();
-      if (!allToks.length) {
-        setSmall("");
-        return;
-      }
-
-      if (!selectedId || !allToks.some(t => t.id === selectedId)) {
-        selectedId = allToks[0].id;
-        const t = canvas.tokens.get(selectedId);
-        if (t && canControl(t)) {
-          ignoreNextControl = true;
-          t.control({ releaseOthers: true });
-          lastFollowedPos = { x: t.center.x, y: t.center.y };
-        }
-      }
-
-      const currentIdsHash = hashTokenIds(allToks);
-      if (currentIdsHash !== lastTokenIdsHash || selectedId !== lastSelectedId) {
-        rebuildTokenBarUI(allToks);
-        lastTokenIdsHash = currentIdsHash;
-        lastSelectedId = selectedId;
-      } else {
-        const curTok = canvas.tokens.get(selectedId);
-        const nm = curTok?.name ?? "";
-        setSmall(nm, false);
-        showCenter(nm);
-      }
-    }, 50);
-  }
-
-  function selectToken(t) {
-    if (!t) return;
-
-    for (const app of Object.values(ui.windows)) {
-      if (app?.object instanceof Actor) {
-        app.close();
-      }
-    }
-
-    selectedId = t.id;
-    if (canControl(t)) {
-      ignoreNextControl = true;
-      t.control({ releaseOthers: true });
-    }
-    lastFollowedPos = { x: t.center.x, y: t.center.y };
-    panSmoothlyToToken(t);
-
-    showCenter(t.name);
-    refresh();
-  }
-
-  function cycleSelection(offset) {
-    if (!orderedIds.length) return;
-    let i = orderedIds.indexOf(selectedId);
-    if (i < 0) i = 0;
-    i = (i + offset + orderedIds.length) % orderedIds.length;
-    const t = canvas.tokens.get(orderedIds[i]);
-    if (t) selectToken(t);
-  }
-
-  function setFollowMode(on) {
-    alwaysCenter = on;
-    if (on) {
-      const t = canvas.tokens.get(selectedId);
-      if (t) {
-        lastFollowedPos = { x: t.center.x, y: t.center.y };
-        panSmoothlyToToken(t);
-      }
-    }
-  }
-
-  function isFollowMode() {
-    return alwaysCenter;
-  }
-
-  Hooks.on("updateToken", refresh);
-  Hooks.on("createToken", refresh);
-  Hooks.on("deleteToken", refresh);
-  Hooks.on("updateScene", refresh);
-  Hooks.on("updateActor", refresh);
-  Hooks.on("updateUser", refresh);
-
-  Hooks.on("updateToken", (scene, tokenDoc, diff, options, userId) => {
-    if (!selectedId) return;
-    if (tokenDoc.id !== selectedId) return;
-
-    const t = canvas.tokens.get(tokenDoc.id);
-    if (!t) return;
-
-    if (!alwaysCenter) return;
-
-    const dist = lastFollowedPos
-      ? Math.hypot(t.center.x - lastFollowedPos.x, t.center.y - lastFollowedPos.y)
-      : 9999;
-
-    if (dist > canvas.grid.size * 3) {
-      lastFollowedPos = { x: t.center.x, y: t.center.y };
-      panSmoothlyToToken(t);
+    const dx = Math.abs(doc.x - followState.lastCenter.x);
+    const dy = Math.abs(doc.y - followState.lastCenter.y);
+    const gridSize = canvas.grid.size;
+    if (dx > 3 * gridSize || dy > 3 * gridSize) {
+      canvas.animatePan({ x: doc.x, y: doc.y });
+      followState.lastCenter = { x: doc.x, y: doc.y };
     }
   });
 
-Hooks.on("controlToken", (token, controlled) => {
-    if (ignoreNextControl) {
-      ignoreNextControl = false;
-      return;
+  canvas.stage.addEventListener('mousedown', evt => {
+    if (!followState.enabled) return;
+    const target = canvas.tokens.hitTest(evt);
+    if (target && target.document && followState.selectedToken) {
+      game.user.updateTokenTargets([target.id], { releaseOthers: !game.user.targets.has(target) });
     }
+    evt.stopPropagation();
+  }, true);
 
-    if (lastClickWasFromBar) {
-      lastClickWasFromBar = false;
-      return;
-    }
-
-    if (!canControl(token)) return;
-
-    if (alwaysCenter) {
-      // Prevent switching the selected token in Follow Mode
-      if (controlled) {
-        // Delay to let control settle
-        const clickedTokenId = token.id;
-        setTimeout(() => {
-          const followedToken = canvas.tokens.get(selectedId);
-          const clickedToken = canvas.tokens.get(clickedTokenId);
-
-          if (!followedToken || !clickedToken || followedToken.id === clickedToken.id) return;
-
-          // Revert control to followed token
-          ignoreNextControl = true;
-          followedToken.control({ releaseOthers: true });
-
-          // Target the clicked token
-          setTimeout(() => {
-            clickedToken.setTarget(true, { releaseOthers: true });
-          }, 20);
-        }, 30);
-      } else {
-        token.setTarget(false, { releaseOthers: false });
+  document.addEventListener('keydown', evt => {
+    if (['KeyQ', 'KeyE'].includes(evt.code)) {
+      const tokens = getRelevantTokens();
+      if (!tokens.length) return;
+      const currentIndex = tokens.indexOf(followState.selectedToken);
+      let newIndex = 0;
+      if (evt.code === 'KeyQ') {
+        newIndex = (currentIndex - 1 + tokens.length) % tokens.length;
+      } else if (evt.code === 'KeyE') {
+        newIndex = (currentIndex + 1) % tokens.length;
       }
-    } else {
-      // Normal behavior outside Follow Mode
-      if (controlled && token.id !== selectedId) {
-        selectToken(token);
-      }
-    }
-
-    refresh();
-  });
-
-  Hooks.on("preControlToken", (token, controlled, event, options) => {
-    if (!canControl(token)) return true;
-
-    if (alwaysCenter && !lastClickWasFromBar) {
-      // Prevent selection switching in Follow Mode
-      if (controlled) {
-        // Toggle targeting manually
-        token.setTarget(!token.isTargeted, { releaseOthers: false });
-      } else {
-        token.setTarget(false, { releaseOthers: false });
-      }
-
-      // Skip the default control behavior
-      return false;
-    }
-
-    return true;
-  });
-
-  
-  window.addEventListener("keydown", e => {
-    if (document.activeElement?.tagName === "INPUT" || document.activeElement?.tagName === "TEXTAREA") return;
-    if (e.key === "q" || e.key === "Q") {
-      e.preventDefault();
-      cycleSelection(-1);
-    } else if (e.key === "e" || e.key === "E") {
-      e.preventDefault();
-      cycleSelection(1);
+      selectToken(tokens[newIndex]);
     }
   });
 
-  Hooks.once("canvasReady", () => {
-    bar().style.opacity = "1";
-    bar().style.pointerEvents = "auto";
-    label();
-    center();
-    positionCenter();
-    refresh();
-
-    setTimeout(() => {
-      const allToks = displayTokens();
-      if (allToks.length) {
-        const firstToken = allToks[0];
-        selectToken(firstToken);
-      }
-
-      setFollowMode(true);
-      setInterval(() => {
-        if (!alwaysCenter) return;
-        const t = canvas.tokens.get(selectedId);
-        if (!t) return;
-        const dist = lastFollowedPos
-          ? Math.hypot(t.center.x - lastFollowedPos.x, t.center.y - lastFollowedPos.y)
-          : 9999;
-        if (dist > canvas.grid.size * 3) {
-          lastFollowedPos = { x: t.center.x, y: t.center.y };
-          panSmoothlyToToken(t);
-        }
-      }, 200);
-    }, 1000);
-  });
-
-  window.playerTokenBar = {
-    selectToken,
-    cycleSelection,
-    refresh,
-    orderedIds,
-    selectedId,
-    lastFollowedPos,
-    setFollowMode,
-    isFollowMode
-  };
+  updatePortraitBar();
+});
 
 
   /* ---------- Improved ENTER behaviour --------------------------- */
@@ -460,99 +197,5 @@ Hooks.on("controlToken", (token, controlled) => {
       tok?.control({ releaseOthers: false });
     });
   });
-
-/* ---------- Q key: toggle sheet for the active token -------------- */
-window.addEventListener("keydown", ev => {
-  if (ev.code !== "Tab") return;             /* only react to Tab        */
-
-  /* Ignore Q when typing in an input / textarea / content‑editable */
-  if (
-    ev.target instanceof HTMLInputElement ||
-    ev.target instanceof HTMLTextAreaElement ||
-    ev.target?.isContentEditable
-  ) return;
-
-  ev.preventDefault();
-
-  const tok = canvas.tokens.get(selectedId);
-  if (!tok || !tok.actor) return;
-
-  const sheet = tok.actor.sheet;
-  if (!sheet) return;
-
-  /* If sheet is open and not minimised → close it, else → open it  */
-  if (sheet.rendered && !sheet._minimized) {
-    sheet.close();
-  } else {
-    sheet.render(true);
-  }
-});
-
-  
-/* ---------------------------------------------------------------
- *  Auto‑select the NEW active combatant
- * ------------------------------------------------------------- */
-Hooks.on("combatTurnChange", (combat /* Combat */, _prior, _current) => {
-  /* Only react to the scene that’s currently on‑screen            */
-  if (combat.scene?.id !== canvas.scene?.id) return;
-
-  /* Active combatant *after* the turn has advanced                */
-  const cb  = combat.combatant;
-  if (!cb) return;
-
-  const tok = canvas.tokens.get(cb.tokenId);
-  if (!tok) return;
-
-  /* GMs may always auto‑select; players only if they own control   */
-  if (game.user.isGM || canControl(tok)) selectToken(tok);
-});
-
-/***********************************************************************
- * Disable token dragging when only one token is selected
- **********************************************************************/
-Hooks.once("ready", () => {
-  const origCanDragToken = Token.prototype._canDrag;
-
-  Token.prototype._canDrag = function (event) {
-    // If exactly one token is selected (controlled), disable drag
-    const controlled = canvas.tokens.controlled;
-    if (controlled.length === 1 && controlled[0].id === this.id) {
-      return false;
-    }
-
-    // Otherwise, allow normal drag
-    return origCanDragToken.call(this, event);
-  };
-});
-  
-
-/***********************************************************************
- * Follow Mode: Smart Target Toggle on Click (like pressing T)
- **********************************************************************/
-Hooks.once("ready", () => {
-  // Patch Token layer click handling
-  const origHandleClickLeft = Token.prototype._onClickLeft;
-
-  Token.prototype._onClickLeft = function (event) {
-    if (!isFollowMode()) {
-      // If follow mode is off, do default behavior
-      return origHandleClickLeft.call(this, event);
-    }
-
-    // Prevent default click behavior (selection)
-    event.stopPropagation();
-
-    // Toggle target state like pressing 'T'
-    const alreadyTargeted = this.isTargeted;
-    const tokenIds = alreadyTargeted
-      ? game.user.targets.filter(t => t.id !== this.id).map(t => t.id)
-      : [...game.user.targets.map(t => t.id), this.id];
-
-    game.user.updateTokenTargets(tokenIds);
-
-    return false;
-  };
-});
-  
   
 })();
