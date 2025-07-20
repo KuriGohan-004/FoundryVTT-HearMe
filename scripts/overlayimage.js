@@ -242,43 +242,25 @@ Hooks.once('ready', async () => {
     });
   });
   
-  /* ---------- After a chat message is created -------------------- */
-  Hooks.on("createChatMessage", () => {
-    /* Let Foundry finish its own focus work first */
-    requestAnimationFrame(() => {
-      /* 1) Blur the chat input ------------------------------------- */
-      const chatInput =
-        document.querySelector("#chat-message") ||
-        document.querySelector("textarea[name='message']");
-      chatInput?.blur();
 
-      /* 2) Re‑focus the previously selected token ------------------ */
-      const tok =
-        canvas.tokens.controlled[0] || canvas.tokens.get(selectedId);
-      tok?.control({ releaseOthers: false });
-    });
-  });
-
-// Helper: Close all open Actor (character) sheets
-function closeAllActorSheets() {
+  // Close all character-type sheets
+async function closeCharacterSheets() {
   for (const app of Object.values(ui.windows)) {
-    // Use the proper class from Foundry 13
-    if (app instanceof foundry.applications.sheets.ActorSheetV2) {
-      app.close();
+    if (app.rendered && app.document?.entity?.type === "character") {
+      await app.close();
     }
   }
 }
 
-// Wrap the existing selectToken to auto-close sheets on change
-const originalSelectToken = selectToken;
-selectToken = function (token) {
-  // If switching to a different token, close sheets
+// Wrap selectToken to automatically close sheets before changing selection
+const _originalSelectToken = selectToken;
+selectToken = async function(token) {
   if (followState.selectedToken !== token) {
-    closeAllActorSheets();
+    await closeCharacterSheets();
   }
-  // Proceed with original selection logic
-  return originalSelectToken(token);
+  return _originalSelectToken(token);
 };
+
 
 
 
