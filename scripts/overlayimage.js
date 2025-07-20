@@ -2,7 +2,12 @@
 // scripts/token-bar.js
 Hooks.once('ready', async () => {
   const isGM = game.user.isGM;
-  const followState = { enabled: true, selectedToken: null, lastCenter: { x: 0, y: 0 } };
+  const followState = {
+    enabled: true,
+    selectedToken: null,
+    lastCenter: { x: 0, y: 0 },
+    lastMoveTime: 0
+  };
 
   const bar = document.createElement('div');
   bar.id = 'token-portrait-bar';
@@ -119,9 +124,13 @@ Hooks.once('ready', async () => {
     const dx = Math.abs(doc.x - followState.lastCenter.x);
     const dy = Math.abs(doc.y - followState.lastCenter.y);
     const gridSize = canvas.grid.size;
+    const moved = dx > 0 || dy > 0;
+
     if (dx > 3 * gridSize || dy > 3 * gridSize) {
       canvas.animatePan({ x: doc.x, y: doc.y });
       followState.lastCenter = { x: doc.x, y: doc.y };
+    } else if (moved) {
+      followState.lastMoveTime = Date.now();
     }
   });
 
@@ -132,6 +141,15 @@ Hooks.once('ready', async () => {
     }
   });
 
+  setInterval(() => {
+    if (!followState.enabled || !followState.selectedToken) return;
+    if (Date.now() - followState.lastMoveTime > 1000 && followState.lastMoveTime !== 0) {
+      canvas.animatePan({ x: followState.selectedToken.x, y: followState.selectedToken.y });
+      followState.lastCenter = { x: followState.selectedToken.x, y: followState.selectedToken.y };
+      followState.lastMoveTime = 0;
+    }
+  }, 500);
+
   document.addEventListener('mousedown', evt => {
     if (!followState.enabled) return;
     const tokenObject = evt.target.closest(".token");
@@ -141,9 +159,7 @@ Hooks.once('ready', async () => {
     if (evt.button === 0) {
       evt.preventDefault();
       evt.stopPropagation();
-      // Simulate pressing 'T' to target
-      const event = new KeyboardEvent('keydown', { key: 't', bubbles: true, cancelable: true });
-      window.dispatchEvent(event);
+      game.user.updateTokenTargets([token.id]);
     }
   }, true);
 
@@ -166,25 +182,15 @@ Hooks.once('ready', async () => {
     }
 
     if (key === 'q' || key === 'e') {
-      evt.preventDefault();
-      evt.stopPropagation();
       const index = tokens.indexOf(followState.selectedToken);
       if (index === -1) return;
       const nextIndex = key === 'q' ? (index - 1 + tokens.length) % tokens.length : (index + 1) % tokens.length;
       selectToken(tokens[nextIndex]);
     }
-  });
+  }, true);
 
   updatePortraitBar();
 });
-
-
-
-
-
-
-
-
 
 
 
