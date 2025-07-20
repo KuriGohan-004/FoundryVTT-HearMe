@@ -135,8 +135,7 @@ Hooks.once('ready', async () => {
     if (evt.button === 0) {
       evt.preventDefault();
       evt.stopPropagation();
-      const newTargets = game.user.targets.has(token) ? new Set([...game.user.targets].filter(t => t.id !== token.id)) : new Set([token]);
-      game.user.updateTokenTargets([...newTargets]);
+      token.setTarget(!token.isTargeted, { user: game.user, releaseOthers: true });
     }
   }, true);
 
@@ -153,6 +152,7 @@ Hooks.once('ready', async () => {
 
   updatePortraitBar();
 });
+
 
 
 
