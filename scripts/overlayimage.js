@@ -141,8 +141,9 @@ Hooks.once('ready', async () => {
     if (evt.button === 0) {
       evt.preventDefault();
       evt.stopPropagation();
-      // Workaround for targeting using internal event
-      game.user.updateTokenTargets([token.id]);
+      // Simulate pressing 'T' to target
+      const event = new KeyboardEvent('keydown', { key: 't', bubbles: true, cancelable: true });
+      window.dispatchEvent(event);
     }
   }, true);
 
@@ -151,27 +152,32 @@ Hooks.once('ready', async () => {
     const key = evt.key.toLowerCase();
     const movementKeys = ["arrowup", "arrowdown", "arrowleft", "arrowright", "w", "a", "s", "d"];
 
-    // Remove Q and E bindings
-    if (key === 'q' || key === 'e') {
-      evt.preventDefault();
-      evt.stopPropagation();
+    const tokens = getRelevantTokens();
+    if (!followState.selectedToken && (movementKeys.includes(key) || key === 'q' || key === 'e')) {
+      if (tokens.length > 0) selectToken(tokens[0]);
+      return;
     }
 
     if (movementKeys.includes(key)) {
       const controlled = canvas.tokens.controlled;
       if (!controlled.includes(followState.selectedToken)) {
-        if (!followState.selectedToken) {
-          const tokens = getRelevantTokens();
-          if (tokens.length > 0) selectToken(tokens[0]);
-        } else {
-          selectToken(followState.selectedToken);
-        }
+        if (followState.selectedToken) selectToken(followState.selectedToken);
       }
+    }
+
+    if (key === 'q' || key === 'e') {
+      evt.preventDefault();
+      evt.stopPropagation();
+      const index = tokens.indexOf(followState.selectedToken);
+      if (index === -1) return;
+      const nextIndex = key === 'q' ? (index - 1 + tokens.length) % tokens.length : (index + 1) % tokens.length;
+      selectToken(tokens[nextIndex]);
     }
   });
 
   updatePortraitBar();
 });
+
 
 
 
