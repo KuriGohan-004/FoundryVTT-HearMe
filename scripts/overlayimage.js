@@ -92,6 +92,7 @@ Hooks.once('ready', async () => {
     followState.selectedToken = token;
     token.control();
     canvas.animatePan({ x: token.x, y: token.y });
+    followState.lastCenter = { x: token.x, y: token.y };
     updatePortraitBar();
   }
 
@@ -115,13 +116,18 @@ Hooks.once('ready', async () => {
     }
   });
 
-  canvas.stage.addEventListener('mousedown', evt => {
+  canvas.stage.on('mousedown', evt => {
     if (!followState.enabled) return;
-    const target = canvas.tokens.hitTest(evt);
-    if (target && target.document && followState.selectedToken) {
-      game.user.updateTokenTargets([target.id], { releaseOthers: !game.user.targets.has(target) });
+    const interaction = canvas.tokens.interactionManager._target;
+    if (interaction && interaction.document && followState.selectedToken) {
+      const alreadyTargeted = game.user.targets.has(interaction);
+      if (alreadyTargeted) {
+        game.user.updateTokenTargets(game.user.targets.filter(t => t !== interaction).map(t => t.id));
+      } else {
+        game.user.updateTokenTargets([interaction.id], { releaseOthers: false });
+      }
+      evt.stopPropagation();
     }
-    evt.stopPropagation();
   }, true);
 
   document.addEventListener('keydown', evt => {
@@ -141,6 +147,7 @@ Hooks.once('ready', async () => {
 
   updatePortraitBar();
 });
+
 
 
 
