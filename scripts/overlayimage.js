@@ -293,6 +293,21 @@ selectToken = function(token) {
   originalSelectToken(token);
 };
 
+  // Addendum: Auto-select active token on turn start during combat if in follow mode
+Hooks.on("updateCombat", (combat, changes, options, userId) => {
+  if (!followState.enabled) return;
+  if (!changes.turn) return;
 
+  const activeCombatant = combat.combatant;
+  if (!activeCombatant || !activeCombatant.tokenId) return;
+
+  const targetToken = canvas.tokens.get(activeCombatant.tokenId);
+  if (!targetToken) return;
+
+  const tokens = getRelevantTokens();
+  if (tokens.includes(targetToken)) {
+    selectToken(targetToken);
+  }
+});
   
 })();
