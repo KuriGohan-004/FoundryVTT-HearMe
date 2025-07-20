@@ -136,15 +136,9 @@ Hooks.once('ready', async () => {
     if (evt.button === 0) {
       evt.preventDefault();
       evt.stopPropagation();
-
-      // Workaround: simulate T key press targeting
-      const keyboardEvent = new KeyboardEvent("keydown", {
-        bubbles: true,
-        cancelable: true,
-        key: "t",
-        code: "KeyT"
-      });
-      document.dispatchEvent(keyboardEvent);
+      // Use Foundry's API directly to toggle target
+      const wasTargeted = token.isTargeted;
+      token.setTarget(!wasTargeted, { user: game.user, releaseOthers: true });
     }
   }, true);
 
@@ -161,6 +155,7 @@ Hooks.once('ready', async () => {
 
   updatePortraitBar();
 });
+
 
 
 
