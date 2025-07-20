@@ -258,5 +258,41 @@ Hooks.once('ready', async () => {
       tok?.control({ releaseOthers: false });
     });
   });
+
+
+  // Addendum: Toggle actor sheet with Tab, and auto-close on token switch
+let lastOpenSheet = null;
+
+window.addEventListener('keydown', (evt) => {
+  if (evt.key === 'Tab') {
+    evt.preventDefault();
+    const token = followState.selectedToken;
+    if (!token || !token.actor) return;
+
+    const existingSheet = token.actor.sheet;
+
+    if (existingSheet.rendered) {
+      existingSheet.close();
+      lastOpenSheet = null;
+    } else {
+      existingSheet.render(true);
+      lastOpenSheet = existingSheet;
+    }
+  }
+}, true);
+
+// Hook into selectToken to close all sheets when token changes in follow mode
+const originalSelectToken = selectToken;
+selectToken = function(token) {
+  if (followState.enabled && followState.selectedToken !== token) {
+    // Close all rendered actor sheets
+    Object.values(ui.windows).forEach(win => {
+      if (win instanceof ActorSheet) win.close();
+    });
+  }
+  originalSelectToken(token);
+};
+
+
   
 })();
