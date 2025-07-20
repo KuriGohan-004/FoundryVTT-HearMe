@@ -259,38 +259,27 @@ Hooks.once('ready', async () => {
     });
   });
 
-  // Addendum: Auto-select active token on turn start during combat if in follow mode
-Hooks.on("updateCombat", (combat, changes, options, userId) => {
-  if (!followState.enabled) return;
-  if (!changes.turn) return;
-
-  const activeCombatant = combat.combatant;
-  if (!activeCombatant || !activeCombatant.tokenId) return;
-
-  const targetToken = canvas.tokens.get(activeCombatant.tokenId);
-  if (!targetToken) return;
-
-  const tokens = getRelevantTokens();
-  if (tokens.includes(targetToken)) {
-    selectToken(targetToken);
-  }
-});
-
-// Addendum: Close all open sheets when selected token changes
+// Helper: Close all open Actor (character) sheets
 function closeAllActorSheets() {
   for (const app of Object.values(ui.windows)) {
-    if (app instanceof ActorSheet) app.close();
+    // Use the proper class from Foundry 13
+    if (app instanceof foundry.applications.sheets.ActorSheetV2) {
+      app.close();
+    }
   }
 }
 
-// Wrap original selectToken function to close sheets when selection changes
+// Wrap the existing selectToken to auto-close sheets on change
 const originalSelectToken = selectToken;
 selectToken = function (token) {
+  // If switching to a different token, close sheets
   if (followState.selectedToken !== token) {
     closeAllActorSheets();
   }
-  originalSelectToken(token);
+  // Proceed with original selection logic
+  return originalSelectToken(token);
 };
+
 
 
   
