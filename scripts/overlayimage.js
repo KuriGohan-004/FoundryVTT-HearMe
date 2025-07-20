@@ -38,6 +38,7 @@ Hooks.once('ready', async () => {
       border-radius: 50%;
       overflow: hidden;
       cursor: pointer;
+      transition: transform 0.2s;
     }
     .token-portrait img {
       width: 100%;
@@ -45,7 +46,7 @@ Hooks.once('ready', async () => {
       object-fit: cover;
     }
     .selected-token {
-      transform: scale(1.25);
+      transform: scale(1.5);
       border-color: yellow;
     }
   `;
@@ -55,7 +56,6 @@ Hooks.once('ready', async () => {
     const tokens = canvas.tokens.placeables;
 
     if (isGM) {
-      // Show tokens owned by offline players
       const offlineUsers = game.users.filter(u => !u.active && !u.isGM);
       const offlineUserIds = offlineUsers.map(u => u.id);
 
@@ -66,7 +66,6 @@ Hooks.once('ready', async () => {
         );
       });
     } else {
-      // Show tokens the current player owns
       return tokens.filter(t => t.actor?.isOwner);
     }
   }
@@ -76,7 +75,7 @@ Hooks.once('ready', async () => {
     const container = bar.querySelector('#token-portraits');
     container.innerHTML = '';
 
-    tokens.forEach((t, index) => {
+    tokens.forEach((t) => {
       const div = document.createElement('div');
       div.className = 'token-portrait';
       if (t === followState.selectedToken) div.classList.add('selected-token');
@@ -99,6 +98,10 @@ Hooks.once('ready', async () => {
   function toggleFollowMode() {
     followState.enabled = !followState.enabled;
     document.getElementById('follow-mode-toggle').textContent = `Follow Mode: ${followState.enabled ? 'On' : 'Off'}`;
+    if (followState.enabled && !followState.selectedToken) {
+      const tokens = getRelevantTokens();
+      if (tokens.length > 0) selectToken(tokens[0]);
+    }
   }
 
   document.getElementById('follow-mode-toggle').onclick = toggleFollowMode;
@@ -116,37 +119,28 @@ Hooks.once('ready', async () => {
     }
   });
 
-  canvas.stage.on('mousedown', evt => {
-    if (!followState.enabled) return;
-    const interaction = canvas.tokens.interactionManager._target;
-    if (interaction && interaction.document && followState.selectedToken) {
-      const alreadyTargeted = game.user.targets.has(interaction);
-      if (alreadyTargeted) {
-        game.user.updateTokenTargets(game.user.targets.filter(t => t !== interaction).map(t => t.id));
-      } else {
-        game.user.updateTokenTargets([interaction.id], { releaseOthers: false });
-      }
-      evt.stopPropagation();
-    }
-  }, true);
-
-  document.addEventListener('keydown', evt => {
-    if (['KeyQ', 'KeyE'].includes(evt.code)) {
+  Hooks.on('canvasReady', () => {
+    if (!followState.selectedToken) {
       const tokens = getRelevantTokens();
-      if (!tokens.length) return;
-      const currentIndex = tokens.indexOf(followState.selectedToken);
-      let newIndex = 0;
-      if (evt.code === 'KeyQ') {
-        newIndex = (currentIndex - 1 + tokens.length) % tokens.length;
-      } else if (evt.code === 'KeyE') {
-        newIndex = (currentIndex + 1) % tokens.length;
-      }
-      selectToken(tokens[newIndex]);
+      if (tokens.length > 0) selectToken(tokens[0]);
     }
   });
 
+  document.addEventListener('click', evt => {
+    if (!followState.enabled) return;
+    const el = evt.target.closest(".token");
+    if (!el) return;
+    const token = canvas.tokens.placeables.find(t => t.object && t.object.id === el.id);
+    if (!token) return;
+    const isTargeted = game.user.targets.has(token);
+    game.user.updateTokenTargets(isTargeted ? [] : [token.id]);
+    evt.preventDefault();
+    evt.stopPropagation();
+  }, true);
+
   updatePortraitBar();
 });
+
 
 
 
