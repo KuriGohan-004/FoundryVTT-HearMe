@@ -1,4 +1,5 @@
 (() => {
+// scripts/token-bar.js
 Hooks.once('ready', async () => {
   const isGM = game.user.isGM;
   const followState = { enabled: true, selectedToken: null, lastCenter: { x: 0, y: 0 } };
@@ -52,13 +53,22 @@ Hooks.once('ready', async () => {
 
   function getRelevantTokens() {
     const tokens = canvas.tokens.placeables;
-    return tokens.filter(t => {
-      if (isGM) {
-        return t.actor?.hasPlayerOwner && !t.actor?.isOwner;
-      } else {
-        return t.actor?.isOwner;
-      }
-    });
+
+    if (isGM) {
+      // Show tokens owned by offline players
+      const offlineUsers = game.users.filter(u => !u.active && !u.isGM);
+      const offlineUserIds = offlineUsers.map(u => u.id);
+
+      return tokens.filter(t => {
+        const owners = t.actor?.ownership || {};
+        return Object.entries(owners).some(([userId, level]) =>
+          offlineUserIds.includes(userId) && level >= CONST.DOCUMENT_OWNERSHIP_LEVELS.OBSERVER
+        );
+      });
+    } else {
+      // Show tokens the current player owns
+      return tokens.filter(t => t.actor?.isOwner);
+    }
   }
 
   function updatePortraitBar() {
@@ -131,6 +141,7 @@ Hooks.once('ready', async () => {
 
   updatePortraitBar();
 });
+
 
 
   /* ---------- Improved ENTER behaviour --------------------------- */
