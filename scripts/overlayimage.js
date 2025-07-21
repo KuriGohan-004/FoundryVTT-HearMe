@@ -261,6 +261,42 @@ selectToken = async function(token) {
   return _originalSelectToken(token);
 };
 
+Hooks.on("createCombat", (combat) => {
+  handleCombatantChange(combat.combatant);
+});
+
+Hooks.on("updateCombat", (combat, changes) => {
+  if ("turn" in changes) {
+    handleCombatantChange(combat.combatant);
+  }
+});
+
+async function handleCombatantChange(combatant) {
+  if (!combatant || !combatant.tokenId) return;
+  const token = canvas.tokens.get(combatant.tokenId);
+  if (!token || !token.actor?.isOwner) return;
+
+  // Optional: If you're using a follow system with followState
+  if (window.followState?.enabled) {
+    // Close old sheet if needed
+    if (followState.selectedToken && followState.selectedToken !== token) {
+      const oldSheet = followState.selectedToken.actor?.sheet;
+      if (oldSheet?.rendered) await oldSheet.close();
+    }
+
+    followState.selectedToken = token;
+    token.control({ releaseOthers: true });
+    canvas.animatePan({ x: token.x, y: token.y });
+    followState.lastCenter = { x: token.x, y: token.y };
+    
+    // Update your portrait bar if needed
+    if (typeof updatePortraitBar === 'function') updatePortraitBar();
+  } else {
+    // Basic fallback for users not using follow mode
+    token.control({ releaseOthers: true });
+    canvas.animatePan({ x: token.x, y: token.y });
+  }
+}
 
 
 
