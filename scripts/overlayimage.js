@@ -261,42 +261,33 @@ selectToken = async function(token) {
   return _originalSelectToken(token);
 };
 
+
+  
+// When combat starts, focus on the first combatant
 Hooks.on("createCombat", (combat) => {
-  handleCombatantChange(combat.combatant);
+  const combatant = combat.combatant;
+  if (!combatant) return;
+  focusTokenForCombatant(combatant);
 });
 
-Hooks.on("updateCombat", (combat, changes) => {
-  if ("turn" in changes) {
-    handleCombatantChange(combat.combatant);
-  }
+// When the turn changes, focus on the newly active combatant
+Hooks.on("updateCombat", (combat, update) => {
+  if (!("turn" in update)) return;
+  const combatant = combat.combatant;
+  if (!combatant) return;
+  focusTokenForCombatant(combatant);
 });
 
-async function handleCombatantChange(combatant) {
-  if (!combatant || !combatant.tokenId) return;
+/** Focuses and selects the token for a given combatant, if visible to the user */
+function focusTokenForCombatant(combatant) {
   const token = canvas.tokens.get(combatant.tokenId);
-  if (!token || !token.actor?.isOwner) return;
+  if (!(token && token.actor?.isOwner)) return;
 
-  // Optional: If you're using a follow system with followState
-  if (window.followState?.enabled) {
-    // Close old sheet if needed
-    if (followState.selectedToken && followState.selectedToken !== token) {
-      const oldSheet = followState.selectedToken.actor?.sheet;
-      if (oldSheet?.rendered) await oldSheet.close();
-    }
-
-    followState.selectedToken = token;
-    token.control({ releaseOthers: true });
-    canvas.animatePan({ x: token.x, y: token.y });
-    followState.lastCenter = { x: token.x, y: token.y };
-    
-    // Update your portrait bar if needed
-    if (typeof updatePortraitBar === 'function') updatePortraitBar();
-  } else {
-    // Basic fallback for users not using follow mode
-    token.control({ releaseOthers: true });
-    canvas.animatePan({ x: token.x, y: token.y });
-  }
+  // Select and pan to the token
+  token.control({ releaseOthers: true });
+  canvas.animatePan({ x: token.x, y: token.y });
 }
+
 
 
 
