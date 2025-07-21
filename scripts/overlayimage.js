@@ -287,19 +287,13 @@ selectToken = async function(token) {
         {
            const combatant = combat.combatant;
            focusCombatant(combatant);
+           selectToken(tokens[combatant]);
             Hooks.on("updateCombat", (combat, update, options, userId) => {
                   const combatant = combat.getCombatant(current.tokenId ? current : prior)?.combatant ?? combat.combatant;
                   focusCombatant(combatant);
+                    selectToken(tokens[combatant]);
             });
         });
-  
- function focusCombatant(combatant) {
-  if (!combatant?.tokenId) return;
-  const token = canvas.tokens.get(combatant.tokenId);
-  if (!token) return;
-  token.control({ releaseOthers: true });
-  canvas.animatePan({ x: token.x, y: token.y });
- }
 
   
 })();
