@@ -264,28 +264,42 @@ selectToken = async function(token) {
 
   
 // Trigger when combat begins
-Hooks.on("combatStart", (combat, update) => {
-  const combatant = combat.combatant;
-  focusCombatant(combatant);
-});
+//Hooks.on("ready", (combat, update) => {
+//  const combatant = combat.combatant;
+//  focusCombatant(combatant);
+// });
 
 // Trigger at every turn change
-Hooks.on("combatTurnChange", (combat, prior, current) => {
-  const combatant = combat.getCombatant(current.tokenId ? current : prior)?.combatant ?? combat.combatant;
-  focusCombatant(combatant);
-});
+// Hooks.on("combatTurnChange", (combat, prior, current) => {
+//  const combatant = combat.getCombatant(current.tokenId ? current : prior)?.combatant ?? combat.combatant;
+//  focusCombatant(combatant);
+// });
 
-function focusCombatant(combatant) {
+// function focusCombatant(combatant) {
+//  if (!combatant?.tokenId) return;
+//  const token = canvas.tokens.get(combatant.tokenId);
+//  if (!token) return;
+//  token.control({ releaseOthers: true });
+//  canvas.animatePan({ x: token.x, y: token.y });
+// }
+
+        Hooks.on("ready",()=> 
+        {
+           const combatant = combat.combatant;
+           focusCombatant(combatant);
+            Hooks.on("updateCombat", (combat, update, options, userId) => {
+                  const combatant = combat.getCombatant(current.tokenId ? current : prior)?.combatant ?? combat.combatant;
+                  focusCombatant(combatant);
+            });
+        });
+  
+ function focusCombatant(combatant) {
   if (!combatant?.tokenId) return;
   const token = canvas.tokens.get(combatant.tokenId);
   if (!token) return;
   token.control({ releaseOthers: true });
   canvas.animatePan({ x: token.x, y: token.y });
-}
-
-
-
-
+ }
 
   
 })();
