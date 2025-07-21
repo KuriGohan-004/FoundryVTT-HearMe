@@ -263,30 +263,26 @@ selectToken = async function(token) {
 
 
   
-// When combat starts, focus on the first combatant
-Hooks.on("createCombat", (combat) => {
+// Trigger when combat begins
+Hooks.on("combatStart", (combat, update) => {
   const combatant = combat.combatant;
-  if (!combatant) return;
-  focusTokenForCombatant(combatant);
+  focusCombatant(combatant);
 });
 
-// When the turn changes, focus on the newly active combatant
-Hooks.on("updateCombat", (combat, update) => {
-  if (!("turn" in update)) return;
-  const combatant = combat.combatant;
-  if (!combatant) return;
-  focusTokenForCombatant(combatant);
+// Trigger at every turn change
+Hooks.on("combatTurnChange", (combat, prior, current) => {
+  const combatant = combat.getCombatant(current.tokenId ? current : prior)?.combatant ?? combat.combatant;
+  focusCombatant(combatant);
 });
 
-/** Focuses and selects the token for a given combatant, if visible to the user */
-function focusTokenForCombatant(combatant) {
+function focusCombatant(combatant) {
+  if (!combatant?.tokenId) return;
   const token = canvas.tokens.get(combatant.tokenId);
-  if (!(token && token.actor?.isOwner)) return;
-
-  // Select and pan to the token
+  if (!token) return;
   token.control({ releaseOthers: true });
   canvas.animatePan({ x: token.x, y: token.y });
 }
+
 
 
 
