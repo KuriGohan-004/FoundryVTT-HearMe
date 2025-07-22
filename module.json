@@ -4,8 +4,8 @@
   "description": "Make a noise when someone sends a chat message.",
   "version": "1.0.0",
   "compatibility": {
-    "minimum": "12",
-    "verified": "12"
+    "minimum": "13",
+    "verified": "13"
   },
   "authors": [
     {
