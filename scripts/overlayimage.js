@@ -265,24 +265,17 @@ selectToken = async function(token) {
  * disable-left-click.js
  * Disables left-click token selection using v13 public API.
  */
+  Hooks.on('controlToken', (token, controlled) => {
+    if (!controlled || !followState.enabled) return;
 
-Hooks.once("canvasReady", () => {
-  // Intercept left clicks on tokens to prevent selection
-  const originalManager = canvas.mouseInteractionManager;
+    const tokens = getRelevantTokens();
+    const matchedToken = tokens.find(t => t.id === token.id);
+    if (!matchedToken) return;
 
-  canvas.mouseInteractionManager = new class extends originalManager.constructor {
-    // Handle left-click on a token
-    _handleLeftClick(event, target) {
-      if (target?.object instanceof Token) {
-        console.log("Left-click select blocked (v13).");
-        return; // prevent selection entirely
-      }
-      return super._handleLeftClick(event, target);
-    }
-  }(canvas); // pass the existing canvas instance
-  
-  console.log("✔️ Left-click selection disabled on tokens (v13).");
-});
+    followState.selectedToken = matchedToken;
+    updatePortraitBar();
+  });
+
 
 
   
