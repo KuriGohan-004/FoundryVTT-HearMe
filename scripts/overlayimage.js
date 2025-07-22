@@ -261,37 +261,29 @@ selectToken = async function(token) {
   return _originalSelectToken(token);
 };
 
-// Disable Left Click
-  Hooks.once("canvasReady", () => {
-  // Override the left-click handler on the token layer
-  const disableLeftClick = (event) => {
-    // Prevent selection on left click
-    if (event.data.button === 0) {
-      event.stopPropagation();
-      event.preventDefault();
-      console.log("Left-click select disabled.");
-      return null;
+/**
+ * disable-left-click.js
+ * Disables left-click token selection using v13 public API.
+ */
+
+Hooks.once("canvasReady", () => {
+  // Intercept left clicks on tokens to prevent selection
+  const originalManager = canvas.mouseInteractionManager;
+
+  canvas.mouseInteractionManager = new class extends originalManager.constructor {
+    // Handle left-click on a token
+    _handleLeftClick(event, target) {
+      if (target?.object instanceof Token) {
+        console.log("Left-click select blocked (v13).");
+        return; // prevent selection entirely
+      }
+      return super._handleLeftClick(event, target);
     }
-  };
-
-  // Add listener to all interactive objects that support selection
-  const patchTokenInteraction = (token) => {
-    token.hitArea.cursor = "default"; // Remove pointer cursor
-    token.off("pointerdown", token._onClickLeft);
-    token.on("pointerdown", disableLeftClick);
-  };
-
-  // Patch existing tokens
-  for (const token of canvas.tokens.placeables) {
-    patchTokenInteraction(token);
-  }
-
-  // Also patch newly added tokens
-  Hooks.on("createToken", async (doc) => {
-    const token = canvas.tokens.get(doc.id);
-    if (token) patchTokenInteraction(token);
-  });
+  }(canvas); // pass the existing canvas instance
+  
+  console.log("✔️ Left-click selection disabled on tokens (v13).");
 });
+
 
   
 })();
