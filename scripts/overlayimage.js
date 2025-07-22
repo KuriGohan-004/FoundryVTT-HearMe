@@ -265,16 +265,46 @@ selectToken = async function(token) {
  * disable-left-click.js
  * Disables left-click token selection using v13 public API.
  */
-  Hooks.on('controlToken', (token, controlled) => {
-    if (!controlled || !followState.enabled) return;
+Hooks.on("ready", () => {
+  // Disable interactivity for all tokens
+  for (const token of canvas.tokens.placeables) {
+    disableTokenInteraction(token);
+  }
 
-    const tokens = getRelevantTokens();
-    const matchedToken = tokens.find(t => t.id === token.id);
-    if (!matchedToken) return;
-
-    followState.selectedToken = matchedToken;
-    updatePortraitBar();
+  // Also disable it for tokens added later
+  Hooks.on("createToken", async tokenDoc => {
+    const token = canvas.tokens.get(tokenDoc.id);
+    if (token) disableTokenInteraction(token);
   });
+});
+
+/**
+ * Disables interaction for a specific token
+ * @param {Token} token
+ */
+function disableTokenInteraction(token) {
+  token.interactive = false; // Blocks pointer events
+  token.hitArea = null;      // Makes it non-clickable
+
+  // Prevent selection via mouse
+  token._originalOnClickLeft = token._originalOnClickLeft || token._onClickLeft;
+  token._onClickLeft = function () {
+    ui.notifications.debug("Token selection disabled.");
+  };
+
+  // Optional: also prevent dragging or right-clicking
+  token._originalOnDragStart = token._onDragStart;
+  token._onDragStart = function () {};
+
+  token._originalOnClickRight = token._onClickRight;
+  token._onClickRight = function () {};
+}
+
+// Optional: remove hover highlight entirely
+Hooks.on("highlightObjects", (active) => {
+  if (active) return false; // cancel highlight
+});
+
 
 
 
