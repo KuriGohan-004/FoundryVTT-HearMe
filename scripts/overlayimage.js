@@ -261,39 +261,37 @@ selectToken = async function(token) {
   return _originalSelectToken(token);
 };
 
+// Disable Left Click
+  Hooks.once("canvasReady", () => {
+  // Override the left-click handler on the token layer
+  const disableLeftClick = (event) => {
+    // Prevent selection on left click
+    if (event.data.button === 0) {
+      event.stopPropagation();
+      event.preventDefault();
+      console.log("Left-click select disabled.");
+      return null;
+    }
+  };
 
-  
-// Trigger when combat begins
-//Hooks.on("ready", (combat, update) => {
-//  const combatant = combat.combatant;
-//  focusCombatant(combatant);
-// });
+  // Add listener to all interactive objects that support selection
+  const patchTokenInteraction = (token) => {
+    token.hitArea.cursor = "default"; // Remove pointer cursor
+    token.off("pointerdown", token._onClickLeft);
+    token.on("pointerdown", disableLeftClick);
+  };
 
-// Trigger at every turn change
-// Hooks.on("combatTurnChange", (combat, prior, current) => {
-//  const combatant = combat.getCombatant(current.tokenId ? current : prior)?.combatant ?? combat.combatant;
-//  focusCombatant(combatant);
-// });
+  // Patch existing tokens
+  for (const token of canvas.tokens.placeables) {
+    patchTokenInteraction(token);
+  }
 
-// function focusCombatant(combatant) {
-//  if (!combatant?.tokenId) return;
-//  const token = canvas.tokens.get(combatant.tokenId);
-//  if (!token) return;
-//  token.control({ releaseOthers: true });
-//  canvas.animatePan({ x: token.x, y: token.y });
-// }
-
-        Hooks.on("ready",()=> 
-        {
-           const combatant = combat.combatant;
-           focusCombatant(combatant);
-           selectToken(tokens[combatant]);
-            Hooks.on("updateCombat", (combat, update, options, userId) => {
-                  const combatant = combat.getCombatant(current.tokenId ? current : prior)?.combatant ?? combat.combatant;
-                  focusCombatant(combatant);
-                    selectToken(tokens[combatant]);
-            });
-        });
+  // Also patch newly added tokens
+  Hooks.on("createToken", async (doc) => {
+    const token = canvas.tokens.get(doc.id);
+    if (token) patchTokenInteraction(token);
+  });
+});
 
   
 })();
