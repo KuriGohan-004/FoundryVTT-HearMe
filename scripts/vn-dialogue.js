@@ -154,7 +154,7 @@ Hooks.once("init", () => {
       imgElem.id = "vn-chat-image";
       Object.assign(imgElem.style, {
         position: "fixed",
-        objectFit: "cover",
+        objectFit: "contain",
         zIndex: 98,               // beneath banner (99)
         pointerEvents: "none",
         transition: "opacity 0.5s ease",
