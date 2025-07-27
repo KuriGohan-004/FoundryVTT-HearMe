@@ -9,11 +9,25 @@ Hooks.once('ready', async () => {
     lastMoveTime: 0
   };
 
+  // --- SOUND SETUP ---
+  Howler.autoSuspend = false;
+  const hoverSound = new Howl({
+    src: ["sounds/notify.mp3"], // Use a valid Foundry path
+    volume: 1.0
+  });
+  document.addEventListener("click", () => {
+    hoverSound.play();
+    hoverSound.stop();
+  }, { once: true });
+
+  // --- BAR CREATION ---
   const bar = document.createElement('div');
   bar.id = 'token-portrait-bar';
   bar.innerHTML = `
     <button id="follow-mode-toggle">Follow Mode: On</button>
     <div id="token-portraits"></div>
+    <div id="selected-token-name"></div>
+    <div id="hovered-token-name"></div>
   `;
   document.body.appendChild(bar);
 
@@ -55,6 +69,12 @@ Hooks.once('ready', async () => {
       transform: scale(1.5);
       border-color: yellow;
     }
+    #selected-token-name, #hovered-token-name {
+      color: white;
+      font-size: 14px;
+      margin-top: 4px;
+      text-align: center;
+    }
   `;
   document.head.appendChild(style);
 
@@ -85,12 +105,31 @@ Hooks.once('ready', async () => {
       const div = document.createElement('div');
       div.className = 'token-portrait';
       if (t === followState.selectedToken) div.classList.add('selected-token');
+
       const img = document.createElement('img');
       img.src = t.document.texture.src;
+
       div.appendChild(img);
-      div.onclick = () => selectToken(t);
+
+      div.onclick = () => {
+        selectToken(t);
+        hoverSound.play();
+      };
+
+      div.onmouseenter = () => {
+        bar.querySelector('#hovered-token-name').textContent = t.name;
+        hoverSound.play();
+      };
+      div.onmouseleave = () => {
+        bar.querySelector('#hovered-token-name').textContent = '';
+      };
+
       container.appendChild(div);
     });
+
+    // Show selected token name
+    bar.querySelector('#selected-token-name').textContent =
+      followState.selectedToken ? followState.selectedToken.name : '';
   }
 
   function selectToken(token) {
@@ -103,14 +142,21 @@ Hooks.once('ready', async () => {
 
   function toggleFollowMode() {
     followState.enabled = !followState.enabled;
-    document.getElementById('follow-mode-toggle').textContent = `Follow Mode: ${followState.enabled ? 'On' : 'Off'}`;
+    document.getElementById('follow-mode-toggle').textContent =
+      `Follow Mode: ${followState.enabled ? 'On' : 'Off'}`;
     if (followState.enabled) {
       if (!followState.selectedToken) {
         const tokens = getRelevantTokens();
         if (tokens.length > 0) selectToken(tokens[0]);
       } else {
-        canvas.animatePan({ x: followState.selectedToken.x, y: followState.selectedToken.y });
-        followState.lastCenter = { x: followState.selectedToken.x, y: followState.selectedToken.y };
+        canvas.animatePan({
+          x: followState.selectedToken.x,
+          y: followState.selectedToken.y
+        });
+        followState.lastCenter = {
+          x: followState.selectedToken.x,
+          y: followState.selectedToken.y
+        };
       }
     }
   }
@@ -134,6 +180,14 @@ Hooks.once('ready', async () => {
     }
   });
 
+  Hooks.on('controlToken', (token, controlled) => {
+    // If the user controls a token they own, update selection in the portrait bar
+    if (controlled && token.actor?.isOwner) {
+      selectToken(token);
+      hoverSound.play();
+    }
+  });
+
   Hooks.on('canvasReady', () => {
     if (!followState.selectedToken) {
       const tokens = getRelevantTokens();
@@ -144,8 +198,14 @@ Hooks.once('ready', async () => {
   setInterval(() => {
     if (!followState.enabled || !followState.selectedToken) return;
     if (Date.now() - followState.lastMoveTime > 1000 && followState.lastMoveTime !== 0) {
-      canvas.animatePan({ x: followState.selectedToken.x, y: followState.selectedToken.y });
-      followState.lastCenter = { x: followState.selectedToken.x, y: followState.selectedToken.y };
+      canvas.animatePan({
+        x: followState.selectedToken.x,
+        y: followState.selectedToken.y
+      });
+      followState.lastCenter = {
+        x: followState.selectedToken.x,
+        y: followState.selectedToken.y
+      };
       followState.lastMoveTime = 0;
     }
   }, 500);
@@ -184,8 +244,11 @@ Hooks.once('ready', async () => {
     if (key === 'q' || key === 'e') {
       const index = tokens.indexOf(followState.selectedToken);
       if (index === -1) return;
-      const nextIndex = key === 'q' ? (index - 1 + tokens.length) % tokens.length : (index + 1) % tokens.length;
+      const nextIndex = key === 'q'
+        ? (index - 1 + tokens.length) % tokens.length
+        : (index + 1) % tokens.length;
       selectToken(tokens[nextIndex]);
+      hoverSound.play();
     }
   }, true);
 
@@ -194,34 +257,43 @@ Hooks.once('ready', async () => {
 
 
 
+
+
   /* ---------- Improved ENTER behaviour --------------------------- */
   /**
-   *  • If Enter is pressed while a text‑editable element is focused → do nothing
-   *  • Otherwise → open Chat tab and focus its input
-   *  • After a chat message is submitted → blur the input and
-   *    re‑select the previously‑controlled token (so WASD etc. work)
-   */
+Hooks.once("ready", () => {
+  console.log("Enter Chat Focus | Loaded");
 
-  const isEditable = el =>
-    el instanceof HTMLInputElement ||
-    el instanceof HTMLTextAreaElement ||
-    el?.isContentEditable;
+  // Pressing Enter -> Focus chat input if nothing else is focused
+  window.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" && !event.shiftKey) {
+      const active = document.activeElement;
+      const isInput = active && (
+        active.tagName === "INPUT" ||
+        active.tagName === "TEXTAREA" ||
+        active.isContentEditable
+      );
+      const isButton = active && active.tagName === "BUTTON";
 
-  /* -- Keydown handler ------------------------------------------- */
-  window.addEventListener("keydown", ev => {
-    if (ev.code !== "Enter") return;
-
-    /* Case 1 – typing somewhere: leave Foundry’s default alone */
-    if (isEditable(ev.target)) return;
-
-    /* Case 2 – no textbox focused: open Chat, focus input */
-    ev.preventDefault();
-    ui.sidebar?.activateTab("chat");
-    (
-      document.querySelector("#chat-message") ||
-      document.querySelector("textarea[name='message']")
-    )?.focus();
+      if (!isInput && !isButton) {
+        event.preventDefault();
+        const chatInput = document.querySelector("#chat-message");
+        if (chatInput) {
+          chatInput.focus();
+        }
+      }
+    }
   });
+
+  // When user sends a message -> blur input
+  Hooks.on("chatMessage", () => {
+    const chatInput = document.querySelector("#chat-message");
+    if (chatInput) {
+      chatInput.blur();
+    }
+  });
+});
+
 
   /* -- After chat submit: blur & re‑focus canvas ----------------- */
   Hooks.once("renderChatLog", (app, html) => {
