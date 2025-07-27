@@ -12,7 +12,6 @@ Hooks.once('ready', async () => {
   const bar = document.createElement('div');
   bar.id = 'token-portrait-bar';
   bar.innerHTML = `
-    <button id="follow-mode-toggle">Follow Mode: On</button>
     <div id="token-portraits"></div>
     <div id="selected-character-name" style="color: white; margin-top: 5px; font-size: 14px;"></div>
     <div id="hover-character-name" style="color: gray; font-size: 12px;"></div>
@@ -101,7 +100,6 @@ Hooks.once('ready', async () => {
       container.appendChild(div);
     });
 
-    // Update selected character name display
     const selectedNameDiv = document.getElementById('selected-character-name');
     selectedNameDiv.textContent = followState.selectedToken ? followState.selectedToken.name : '';
   }
@@ -113,22 +111,6 @@ Hooks.once('ready', async () => {
     followState.lastCenter = { x: token.x, y: token.y };
     updatePortraitBar();
   }
-
-  function toggleFollowMode() {
-    followState.enabled = !followState.enabled;
-    document.getElementById('follow-mode-toggle').textContent = `Follow Mode: ${followState.enabled ? 'On' : 'Off'}`;
-    if (followState.enabled) {
-      if (!followState.selectedToken) {
-        const tokens = getRelevantTokens();
-        if (tokens.length > 0) selectToken(tokens[0]);
-      } else {
-        canvas.animatePan({ x: followState.selectedToken.x, y: followState.selectedToken.y });
-        followState.lastCenter = { x: followState.selectedToken.x, y: followState.selectedToken.y };
-      }
-    }
-  }
-
-  document.getElementById('follow-mode-toggle').onclick = toggleFollowMode;
 
   Hooks.on('updateToken', (doc, changes, options, userId) => {
     if (!followState.enabled || !followState.selectedToken) return;
@@ -211,6 +193,7 @@ Hooks.once('ready', async () => {
 
   updatePortraitBar();
 });
+
 
 
 
