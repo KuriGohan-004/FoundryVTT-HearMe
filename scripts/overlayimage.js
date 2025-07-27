@@ -9,25 +9,13 @@ Hooks.once('ready', async () => {
     lastMoveTime: 0
   };
 
-  // --- SOUND SETUP ---
-  Howler.autoSuspend = false;
-  const hoverSound = new Howl({
-    src: ["sounds/notify.mp3"], // Use a valid Foundry path
-    volume: 1.0
-  });
-  document.addEventListener("click", () => {
-    hoverSound.play();
-    hoverSound.stop();
-  }, { once: true });
-
-  // --- BAR CREATION ---
   const bar = document.createElement('div');
   bar.id = 'token-portrait-bar';
   bar.innerHTML = `
     <button id="follow-mode-toggle">Follow Mode: On</button>
     <div id="token-portraits"></div>
-    <div id="selected-token-name"></div>
-    <div id="hovered-token-name"></div>
+    <div id="selected-character-name" style="color: white; margin-top: 5px; font-size: 14px;"></div>
+    <div id="hover-character-name" style="color: gray; font-size: 12px;"></div>
   `;
   document.body.appendChild(bar);
 
@@ -69,12 +57,6 @@ Hooks.once('ready', async () => {
       transform: scale(1.5);
       border-color: yellow;
     }
-    #selected-token-name, #hovered-token-name {
-      color: white;
-      font-size: 14px;
-      margin-top: 4px;
-      text-align: center;
-    }
   `;
   document.head.appendChild(style);
 
@@ -105,31 +87,23 @@ Hooks.once('ready', async () => {
       const div = document.createElement('div');
       div.className = 'token-portrait';
       if (t === followState.selectedToken) div.classList.add('selected-token');
-
       const img = document.createElement('img');
       img.src = t.document.texture.src;
-
       div.appendChild(img);
-
-      div.onclick = () => {
-        selectToken(t);
-        hoverSound.play();
-      };
-
+      div.onclick = () => selectToken(t);
       div.onmouseenter = () => {
-        bar.querySelector('#hovered-token-name').textContent = t.name;
-        hoverSound.play();
+        document.getElementById('hover-character-name').textContent = t.name;
+        AudioHelper.play({src: "sounds/notify.mp3", volume: 1.0, autoplay: true, loop: false}, true);
       };
       div.onmouseleave = () => {
-        bar.querySelector('#hovered-token-name').textContent = '';
+        document.getElementById('hover-character-name').textContent = '';
       };
-
       container.appendChild(div);
     });
 
-    // Show selected token name
-    bar.querySelector('#selected-token-name').textContent =
-      followState.selectedToken ? followState.selectedToken.name : '';
+    // Update selected character name display
+    const selectedNameDiv = document.getElementById('selected-character-name');
+    selectedNameDiv.textContent = followState.selectedToken ? followState.selectedToken.name : '';
   }
 
   function selectToken(token) {
@@ -142,21 +116,14 @@ Hooks.once('ready', async () => {
 
   function toggleFollowMode() {
     followState.enabled = !followState.enabled;
-    document.getElementById('follow-mode-toggle').textContent =
-      `Follow Mode: ${followState.enabled ? 'On' : 'Off'}`;
+    document.getElementById('follow-mode-toggle').textContent = `Follow Mode: ${followState.enabled ? 'On' : 'Off'}`;
     if (followState.enabled) {
       if (!followState.selectedToken) {
         const tokens = getRelevantTokens();
         if (tokens.length > 0) selectToken(tokens[0]);
       } else {
-        canvas.animatePan({
-          x: followState.selectedToken.x,
-          y: followState.selectedToken.y
-        });
-        followState.lastCenter = {
-          x: followState.selectedToken.x,
-          y: followState.selectedToken.y
-        };
+        canvas.animatePan({ x: followState.selectedToken.x, y: followState.selectedToken.y });
+        followState.lastCenter = { x: followState.selectedToken.x, y: followState.selectedToken.y };
       }
     }
   }
@@ -181,10 +148,9 @@ Hooks.once('ready', async () => {
   });
 
   Hooks.on('controlToken', (token, controlled) => {
-    // If the user controls a token they own, update selection in the portrait bar
     if (controlled && token.actor?.isOwner) {
-      selectToken(token);
-      hoverSound.play();
+      followState.selectedToken = token;
+      updatePortraitBar();
     }
   });
 
@@ -198,14 +164,8 @@ Hooks.once('ready', async () => {
   setInterval(() => {
     if (!followState.enabled || !followState.selectedToken) return;
     if (Date.now() - followState.lastMoveTime > 1000 && followState.lastMoveTime !== 0) {
-      canvas.animatePan({
-        x: followState.selectedToken.x,
-        y: followState.selectedToken.y
-      });
-      followState.lastCenter = {
-        x: followState.selectedToken.x,
-        y: followState.selectedToken.y
-      };
+      canvas.animatePan({ x: followState.selectedToken.x, y: followState.selectedToken.y });
+      followState.lastCenter = { x: followState.selectedToken.x, y: followState.selectedToken.y };
       followState.lastMoveTime = 0;
     }
   }, 500);
@@ -244,11 +204,8 @@ Hooks.once('ready', async () => {
     if (key === 'q' || key === 'e') {
       const index = tokens.indexOf(followState.selectedToken);
       if (index === -1) return;
-      const nextIndex = key === 'q'
-        ? (index - 1 + tokens.length) % tokens.length
-        : (index + 1) % tokens.length;
+      const nextIndex = key === 'q' ? (index - 1 + tokens.length) % tokens.length : (index + 1) % tokens.length;
       selectToken(tokens[nextIndex]);
-      hoverSound.play();
     }
   }, true);
 
