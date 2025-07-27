@@ -216,6 +216,8 @@ Hooks.once('ready', async () => {
 
 
 
+
+
   /* ---------- Improved ENTER behaviour --------------------------- */
 Hooks.once("ready", () => {
   console.log("Enter Chat Focus | Loaded");
