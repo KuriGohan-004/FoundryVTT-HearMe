@@ -234,10 +234,10 @@ Hooks.once("init", () => {
     const offsetYPct = gSetting("bannerOffsetYPercent");
 
     Object.assign(banner.style, {
-      width:  `${(widthPct / 100) * vw}px`,
-      minHeight: `${(heightPct / 100) * vh}px`,
-      left:   `${(offsetXPct / 100) * vw}px`,
-      bottom: `${(offsetYPct / 100) * vh}px`
+  width:  `${(widthPct / 100) * vw}px`,
+  height: `${(heightPct / 100) * vh}px`,
+  left:   `${(offsetXPct / 100) * vw}px`,
+  bottom: `${(offsetYPct / 100) * vh}px`
     });
   }
 
