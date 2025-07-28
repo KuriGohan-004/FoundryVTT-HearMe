@@ -9,20 +9,12 @@
       lastMoveTime: 0
     };
 
-    // Hide macro bar and player list
-    const hideUI = () => {
-      document.getElementById("macrobar")?.classList.add("hidden");
-      document.getElementById("players")?.classList.add("hidden");
-    };
-    hideUI();
-
     const bar = document.createElement('div');
     bar.id = 'token-portrait-bar';
     bar.innerHTML = `
+      <div id="selected-character-name" style="color: white; margin-bottom: 5px; font-size: 14px;"></div>
       <button id="follow-mode-toggle">Follow Mode: On</button>
       <div id="token-portraits"></div>
-      <div id="selected-character-name" style="color: white; margin-top: 5px; font-size: 14px;"></div>
-      <div id="hover-character-name" style="color: gray; font-size: 12px;"></div>
     `;
     document.body.appendChild(bar);
 
@@ -95,15 +87,9 @@
         if (t === followState.selectedToken) div.classList.add('selected-token');
         const img = document.createElement('img');
         img.src = t.document.texture.src;
+        img.title = t.name;
         div.appendChild(img);
         div.onclick = () => selectToken(t);
-        div.onmouseenter = () => {
-          document.getElementById('hover-character-name').textContent = t.name;
-          AudioHelper.play({src: "sounds/notify.mp3", volume: 1.0, autoplay: true, loop: false}, true);
-        };
-        div.onmouseleave = () => {
-          document.getElementById('hover-character-name').textContent = '';
-        };
         container.appendChild(div);
       });
 
