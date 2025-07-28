@@ -12,9 +12,9 @@
     const bar = document.createElement('div');
     bar.id = 'token-portrait-bar';
     bar.innerHTML = `
-      <div id="selected-character-name" style="color: white; margin-bottom: 5px; font-size: 14px;"></div>
       <button id="follow-mode-toggle">Follow Mode: On</button>
       <div id="token-portraits"></div>
+      <div id="selected-character-name" style="color: white; margin-top: 5px; font-size: 14px;"></div>
     `;
     document.body.appendChild(bar);
 
@@ -22,8 +22,9 @@
     style.innerHTML = `
       #token-portrait-bar {
         position: absolute;
-        bottom: 10px;
-        left: 10px;
+        top: 10px;
+        left: 50%;
+        transform: translateX(-50%);
         z-index: 1000;
         background: rgba(0,0,0,0.7);
         padding: 5px;
@@ -35,7 +36,7 @@
       #token-portraits {
         display: flex;
         gap: 6px;
-        margin-top: 5px;
+        margin-bottom: 5px;
       }
       .token-portrait {
         width: 40px;
@@ -45,15 +46,35 @@
         overflow: hidden;
         cursor: pointer;
         transition: transform 0.2s;
+        background-color: transparent;
+        display: flex;
+        align-items: center;
+        justify-content: center;
       }
       .token-portrait img {
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
+        max-width: 100%;
+        max-height: 100%;
+        object-fit: contain;
       }
       .selected-token {
-        transform: scale(1.5);
+        transform: scale(2.0);
         border-color: yellow;
+      }
+      .token-portrait img[title] {
+        pointer-events: none;
+      }
+      .token-portrait img[title]::after {
+        content: attr(title);
+        position: absolute;
+        background: #000;
+        color: #fff;
+        padding: 2px 4px;
+        border-radius: 4px;
+        font-size: 12px;
+        white-space: nowrap;
+      }
+      .token-portrait img {
+        pointer-events: auto;
       }
     `;
     document.head.appendChild(style);
@@ -87,7 +108,7 @@
         if (t === followState.selectedToken) div.classList.add('selected-token');
         const img = document.createElement('img');
         img.src = t.document.texture.src;
-        img.title = t.name;
+        img.setAttribute('title', t.name);
         div.appendChild(img);
         div.onclick = () => selectToken(t);
         container.appendChild(div);
