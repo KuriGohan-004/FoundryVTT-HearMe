@@ -24,11 +24,11 @@ Hooks.once("init", () => {
 
   game.settings.register("hearme-chat-notification", "skipKey", {
     name: "Skip Key (client)",
-    hint: "Key for a player to skip/advance dialogue (default TAB).",
+    hint: "Key for a player to skip/advance dialogue (default Q).",
     scope: "client",
     config: true,
     type: String,
-    default: "tab"
+    default: "q"
   });
 
   /* GM‑controlled portrait settings */
@@ -47,7 +47,7 @@ Hooks.once("init", () => {
     scope: "world",
     config: true,
     type: Number,
-    range: { min: 5, max: 75, step: 1 },
+    range: { min: 5, max: 23, step: 1 },
     default: 13
   });
 
@@ -57,7 +57,7 @@ Hooks.once("init", () => {
     scope: "world",
     config: true,
     type: Number,
-    range: { min: 0, max: 100, step: 1 },
+    range: { min: 0, max: 50, step: 1 },
     default: 0
   });
 
@@ -67,8 +67,49 @@ Hooks.once("init", () => {
     scope: "world",
     config: true,
     type: Number,
-    range: { min: 0, max: 100, step: 1 },
+    range: { min: 0, max: 50, step: 1 },
     default: 0
+  });
+
+  /* GM-controlled banner settings */
+  game.settings.register("hearme-chat-notification", "bannerWidthPercent", {
+    name: "Banner Width (% of screen width)",
+    hint: "Width of the VN text box.",
+    scope: "world",
+    config: true,
+    type: Number,
+    range: { min: 10, max: 100, step: 1 },
+    default: 60
+  });
+
+  game.settings.register("hearme-chat-notification", "bannerHeightPercent", {
+    name: "Banner Height (% of screen height)",
+    hint: "Height of the VN text box.",
+    scope: "world",
+    config: true,
+    type: Number,
+    range: { min: 5, max: 60, step: 1 },
+    default: 25
+  });
+
+  game.settings.register("hearme-chat-notification", "bannerOffsetYPercent", {
+    name: "Banner Offset Y (% from bottom)",
+    hint: "How far up from the bottom the banner appears (0 = flush bottom).",
+    scope: "world",
+    config: true,
+    type: Number,
+    range: { min: 0, max: 90, step: 1 },
+    default: 5
+  });
+
+  game.settings.register("hearme-chat-notification", "bannerOffsetXPercent", {
+    name: "Banner Offset X (% from left)",
+    hint: "How far in from the left the banner starts (0 = flush left).",
+    scope: "world",
+    config: true,
+    type: Number,
+    range: { min: 0, max: 90, step: 1 },
+    default: 20
   });
 });
 
@@ -76,13 +117,11 @@ Hooks.once("init", () => {
  *  MAIN MODULE LOGIC (IIFE)
  * ===================================================================*/
 (() => {
-  /* --------------------------- CONSTANTS ------------------------- */
   const AUTO_SKIP_MIN_SECONDS = 3;
-  const AUTO_SKIP_BASE_DELAY  = 5000;  // ms
-  const AUTO_SKIP_CHAR_DELAY  = 50;    // ms per character
-  const TYPE_SPEED_MS         = 20;    // ms per character during typing
+  const AUTO_SKIP_BASE_DELAY  = 5000;
+  const AUTO_SKIP_CHAR_DELAY  = 50;
+  const TYPE_SPEED_MS         = 20;
 
-  /* --------------------------- STATE ----------------------------- */
   let banner   = document.getElementById("vn-chat-banner");
   let imgElem  = document.getElementById("vn-chat-image");
   let arrow    = document.getElementById("vn-chat-arrow");
@@ -95,7 +134,6 @@ Hooks.once("init", () => {
   let currentSpeaker = null;
   const queue        = [];
 
-  /* --------------------------- HELPERS --------------------------- */
   const gSetting = (key) => game.settings.get("hearme-chat-notification", key);
 
   function playChatSound() {
@@ -109,17 +147,12 @@ Hooks.once("init", () => {
     return str.replace(/<(?!\/?(br|b|strong|i|em|u)\b)[^>]*>/gi, "");
   }
 
-  /* --------------------------- DOM SETUP ------------------------- */
   function ensureDom() {
-    /* Banner ----------------------------------------------------- */
     if (!banner) {
       banner = document.createElement("div");
       banner.id = "vn-chat-banner";
       Object.assign(banner.style, {
         position: "fixed",
-        bottom: "calc(5% + 48px)",
-        left: "20%",
-        width: "60%",
         background: "rgba(0,0,0,0.75)",
         color: "white",
         fontFamily: "Arial, sans-serif",
@@ -131,8 +164,6 @@ Hooks.once("init", () => {
         userSelect: "none",
         backdropFilter: "blur(4px)",
         boxShadow: "0 -2px 10px rgba(0,0,0,0.7)",
-        minHeight: "25vh",
-        maxHeight: "50vh",
         overflowY: "auto",
         transition: "opacity 0.25s ease",
         opacity: "0",
@@ -146,16 +177,17 @@ Hooks.once("init", () => {
       document.body.appendChild(banner);
       arrow    = document.getElementById("vn-chat-arrow");
       timerBar = document.getElementById("vn-chat-timer");
+      applyBannerSettings();
     }
 
-    /* Portrait --------------------------------------------------- */
     if (!imgElem) {
       imgElem = document.createElement("img");
       imgElem.id = "vn-chat-image";
       Object.assign(imgElem.style, {
         position: "fixed",
         objectFit: "contain",
-        zIndex: 98,               // beneath banner (99)
+        objectPosition: "center center",
+        zIndex: 98,
         pointerEvents: "none",
         transition: "opacity 0.5s ease",
         opacity: "0"
@@ -166,7 +198,6 @@ Hooks.once("init", () => {
     applyPortraitSettings();
   }
 
-  /* --------------- PORTRAIT SIZE & POSITION (GM SETTINGS) -------- */
   function applyPortraitSettings() {
     if (!imgElem) return;
 
@@ -176,11 +207,10 @@ Hooks.once("init", () => {
     const offsetXPct = gSetting("portraitOffsetXPercent");
     const offsetYPct = gSetting("portraitOffsetYPercent");
 
-    // Convert percentages to pixels based on current viewport
     const vw = window.innerWidth;
     const vh = window.innerHeight;
 
-    const sizePx = (sizePct / 100) * vw; // square based on width percent
+    const sizePx = (sizePct / 100) * vw;
     const leftPx = (offsetXPct / 100) * vw;
     const bottomPx = (offsetYPct / 100) * vh;
 
@@ -192,30 +222,52 @@ Hooks.once("init", () => {
     });
   }
 
-  /* Listen for setting changes (all clients) & window resize */
+  function applyBannerSettings() {
+    if (!banner) return;
+
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+
+    const widthPct  = gSetting("bannerWidthPercent");
+    const heightPct = gSetting("bannerHeightPercent");
+    const offsetXPct = gSetting("bannerOffsetXPercent");
+    const offsetYPct = gSetting("bannerOffsetYPercent");
+
+    Object.assign(banner.style, {
+      width:  `${(widthPct / 100) * vw}px`,
+      minHeight: `${(heightPct / 100) * vh}px`,
+      left:   `${(offsetXPct / 100) * vw}px`,
+      bottom: `${(offsetYPct / 100) * vh}px`
+    });
+  }
+
   Hooks.on("updateSetting", (namespace, key) => {
     if (namespace !== "hearme-chat-notification") return;
-    if (["portraitEnabled", "portraitSizePercent", "portraitOffsetXPercent", "portraitOffsetYPercent"].includes(key)) {
-      applyPortraitSettings();
-    }
-  });
-  window.addEventListener("resize", applyPortraitSettings);
+    const portraitKeys = ["portraitEnabled", "portraitSizePercent", "portraitOffsetXPercent", "portraitOffsetYPercent"];
+    const bannerKeys = ["bannerWidthPercent", "bannerHeightPercent", "bannerOffsetXPercent", "bannerOffsetYPercent"];
 
-  /* ----------------------- PORTRAIT FADE‑IN ----------------------- */
+    if (portraitKeys.includes(key)) applyPortraitSettings();
+    if (bannerKeys.includes(key)) applyBannerSettings();
+  });
+
+  window.addEventListener("resize", () => {
+    applyPortraitSettings();
+    applyBannerSettings();
+  });
+
   function showPortraitForSpeaker(name, imgSrc) {
     if (!gSetting("portraitEnabled")) return;
-    if (name === currentSpeaker) return; // same speaker, keep portrait
+    if (name === currentSpeaker) return;
 
     imgElem.style.opacity = "0";
     if (imgSrc) imgElem.src = imgSrc;
     imgElem.onload = () => {
-      applyPortraitSettings(); // sizes correctly with actual image
+      applyPortraitSettings();
       imgElem.style.opacity = "1";
     };
     currentSpeaker = name;
   }
 
-  /* --------------------------- TYPEWRITER ------------------------ */
   function typeHtml(element, html, callback) {
     typing = true;
     const parts = sanitizeHtml(html).split(/(<[^>]+>)/).filter(Boolean);
@@ -232,7 +284,6 @@ Hooks.once("init", () => {
     })();
   }
 
-  /* ------------------------ AUTO‑SKIP TIMER ---------------------- */
   function resetTimer() {
     clearTimeout(autoSkipTimer);
     autoSkipTimer = null;
@@ -269,7 +320,6 @@ Hooks.once("init", () => {
     autoSkipTimer = setTimeout(skipMessage, autoSkipRemain);
   });
 
-  /* -------------------------- DISPLAY MSG ------------------------ */
   function updateArrow() { arrow.style.display = queue.length ? "block" : "none"; }
 
   function displayMessage({ name, msg, image, userId }) {
@@ -303,7 +353,6 @@ Hooks.once("init", () => {
     }
   }
 
-  /* ----------------------------- INPUT --------------------------- */
   document.addEventListener("keydown", (ev) => {
     if (document.activeElement?.closest(".chat-message") || document.activeElement?.tagName === "TEXTAREA") return;
     if (document.querySelector(".app.window-app.sheet:not(.minimized)")) return;
@@ -311,7 +360,6 @@ Hooks.once("init", () => {
     if (ev.key.toLowerCase() === key || ev.key === "Tab") { ev.preventDefault(); skipMessage(); }
   });
 
-  /* ---------------------------- CHAT ----------------------------- */
   Hooks.on("createChatMessage", (message) => {
     if (!message.visible || message.isRoll) return;
     if (!message.speaker?.actor) return;
@@ -333,6 +381,5 @@ Hooks.once("init", () => {
     else displayMessage(entry);
   });
 
-  /* --------------------------- INIT ------------------------------ */
   ensureDom();
 })();
