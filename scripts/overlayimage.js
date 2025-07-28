@@ -9,6 +9,13 @@
       lastMoveTime: 0
     };
 
+    // Hide macro bar and player list
+    const hideUI = () => {
+      document.getElementById("macrobar")?.classList.add("hidden");
+      document.getElementById("players")?.classList.add("hidden");
+    };
+    hideUI();
+
     const bar = document.createElement('div');
     bar.id = 'token-portrait-bar';
     bar.innerHTML = `
@@ -23,9 +30,8 @@
     style.innerHTML = `
       #token-portrait-bar {
         position: absolute;
-        top: 10px;
-        left: 50%;
-        transform: translateX(-50%);
+        bottom: 10px;
+        left: 10px;
         z-index: 1000;
         background: rgba(0,0,0,0.7);
         padding: 5px;
@@ -101,7 +107,6 @@
         container.appendChild(div);
       });
 
-      // Update selected character name display
       const selectedNameDiv = document.getElementById('selected-character-name');
       selectedNameDiv.textContent = followState.selectedToken ? followState.selectedToken.name : '';
     }
@@ -184,12 +189,9 @@
     }, true);
 
     window.addEventListener('keydown', (evt) => {
-      // Block switching if a text input or content editable has focus
       const active = document.activeElement;
       if (active && (active.tagName === "INPUT" || active.tagName === "TEXTAREA" || active.isContentEditable)) return;
 
-      // Block switching if any Application window (character sheet etc) is focused
-      // Check if any open app has focused element
       const appWindows = Object.values(ui.windows);
       for (const app of appWindows) {
         if (app?.element?.find(':focus').length > 0) return;
@@ -224,7 +226,6 @@
 
     updatePortraitBar();
   });
-
 
 
 
