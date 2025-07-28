@@ -47,7 +47,7 @@ Hooks.once("init", () => {
     scope: "world",
     config: true,
     type: Number,
-    range: { min: 5, max: 75, step: 1 },
+    range: { min: 5, max: 23, step: 1 },
     default: 13
   });
 
@@ -57,7 +57,7 @@ Hooks.once("init", () => {
     scope: "world",
     config: true,
     type: Number,
-    range: { min: 0, max: 75, step: 1 },
+    range: { min: 0, max: 50, step: 1 },
     default: 0
   });
 
@@ -67,7 +67,7 @@ Hooks.once("init", () => {
     scope: "world",
     config: true,
     type: Number,
-    range: { min: 0, max: 75, step: 1 },
+    range: { min: 0, max: 50, step: 1 },
     default: 0
   });
 });
@@ -138,11 +138,11 @@ Hooks.once("init", () => {
         opacity: "0",
         pointerEvents: "none"
       });
-      banner.innerHTML = 
+      banner.innerHTML = `
         <div id="vn-chat-name" style="font-weight:bold;font-size:1.2em;margin-bottom:4px;"></div>
         <div id="vn-chat-msg"  style="font-size:2.2em;"></div>
         <div id="vn-chat-arrow" style="position:absolute;bottom:8px;right:16px;font-size:1.5em;opacity:0.5;display:none;">&#8595;</div>
-        <div id="vn-chat-timer" style="position:absolute;bottom:0;left:0;height:5px;width:100%;background:white;transform-origin:left;transform:scaleX(1);transition:transform linear;opacity:1;"></div>;
+        <div id="vn-chat-timer" style="position:absolute;bottom:0;left:0;height:5px;width:100%;background:white;transform-origin:left;transform:scaleX(1);transition:transform linear;opacity:1;"></div>`;
       document.body.appendChild(banner);
       arrow    = document.getElementById("vn-chat-arrow");
       timerBar = document.getElementById("vn-chat-timer");
@@ -185,10 +185,10 @@ Hooks.once("init", () => {
     const bottomPx = (offsetYPct / 100) * vh;
 
     Object.assign(imgElem.style, {
-      width:  ${sizePx}px,
-      height: ${sizePx}px,
-      left:   ${leftPx}px,
-      bottom: ${bottomPx}px
+      width:  `${sizePx}px`,
+      height: `${sizePx}px`,
+      left:   `${leftPx}px`,
+      bottom: `${bottomPx}px`
     });
   }
 
@@ -246,7 +246,7 @@ Hooks.once("init", () => {
     autoSkipStart  = Date.now();
     autoSkipRemain = duration;
 
-    timerBar.style.transition = transform ${duration}ms linear;
+    timerBar.style.transition = `transform ${duration}ms linear`;
     timerBar.style.transform  = "scaleX(0)";
     autoSkipTimer = setTimeout(skipMessage, duration);
   }
@@ -258,13 +258,13 @@ Hooks.once("init", () => {
     autoSkipTimer = null;
     const ratio = autoSkipRemain / (AUTO_SKIP_BASE_DELAY + AUTO_SKIP_MIN_SECONDS*1000);
     timerBar.style.transition = "none";
-    timerBar.style.transform  = scaleX(${ratio});
+    timerBar.style.transform  = `scaleX(${ratio})`;
   });
 
   window.addEventListener("focus", () => {
     if (autoSkipTimer || !autoSkipRemain) return;
     autoSkipStart = Date.now();
-    timerBar.style.transition = transform ${autoSkipRemain}ms linear;
+    timerBar.style.transition = `transform ${autoSkipRemain}ms linear`;
     timerBar.style.transform  = "scaleX(0)";
     autoSkipTimer = setTimeout(skipMessage, autoSkipRemain);
   });
