@@ -101,16 +101,6 @@ Hooks.once("init", () => {
     range: { min: 0, max: 90, step: 1 },
     default: 5
   });
-
-  game.settings.register("hearme-chat-notification", "bannerOffsetXPercent", {
-    name: "Banner Offset X (% from left)",
-    hint: "How far in from the left the banner starts (0 = flush left).",
-    scope: "world",
-    config: true,
-    type: Number,
-    range: { min: 0, max: 90, step: 1 },
-    default: 20
-  });
 });
 
 /* =====================================================================
@@ -161,13 +151,15 @@ Hooks.once("init", () => {
         display: "none",
         flexDirection: "column",
         alignItems: "flex-start",
+        justifyContent: "flex-start",
         userSelect: "none",
         backdropFilter: "blur(4px)",
         boxShadow: "0 -2px 10px rgba(0,0,0,0.7)",
         overflowY: "auto",
         transition: "opacity 0.25s ease",
         opacity: "0",
-        pointerEvents: "none"
+        pointerEvents: "none",
+        boxSizing: "border-box"
       });
       banner.innerHTML = `
         <div id="vn-chat-name" style="font-weight:bold;font-size:1.2em;margin-bottom:4px;"></div>
@@ -230,21 +222,25 @@ Hooks.once("init", () => {
 
     const widthPct  = gSetting("bannerWidthPercent");
     const heightPct = gSetting("bannerHeightPercent");
-    const offsetXPct = gSetting("bannerOffsetXPercent");
     const offsetYPct = gSetting("bannerOffsetYPercent");
 
+    const widthPx  = (widthPct / 100) * vw;
+    const heightPx = (heightPct / 100) * vh;
+    const offsetY  = (offsetYPct / 100) * vh;
+
     Object.assign(banner.style, {
-  width:  `${(widthPct / 100) * vw}px`,
-  height: `${(heightPct / 100) * vh}px`,
-  left:   `${(offsetXPct / 100) * vw}px`,
-  bottom: `${(offsetYPct / 100) * vh}px`
+      width: `${widthPx}px`,
+      height: `${heightPx}px`,
+      left: "50%",
+      bottom: `${offsetY}px`,
+      transform: "translateX(-50%)"
     });
   }
 
   Hooks.on("updateSetting", (namespace, key) => {
     if (namespace !== "hearme-chat-notification") return;
     const portraitKeys = ["portraitEnabled", "portraitSizePercent", "portraitOffsetXPercent", "portraitOffsetYPercent"];
-    const bannerKeys = ["bannerWidthPercent", "bannerHeightPercent", "bannerOffsetXPercent", "bannerOffsetYPercent"];
+    const bannerKeys = ["bannerWidthPercent", "bannerHeightPercent", "bannerOffsetYPercent"];
 
     if (portraitKeys.includes(key)) applyPortraitSettings();
     if (bannerKeys.includes(key)) applyBannerSettings();
@@ -383,3 +379,4 @@ Hooks.once("init", () => {
 
   ensureDom();
 })();
+
