@@ -47,7 +47,7 @@ Hooks.once("init", () => {
     scope: "world",
     config: true,
     type: Number,
-    range: { min: 5, max: 23, step: 1 },
+    range: { min: 5, max: 75, step: 1 },
     default: 13
   });
 
