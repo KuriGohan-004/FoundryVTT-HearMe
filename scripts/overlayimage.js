@@ -354,6 +354,57 @@ Hooks.on("highlightObjects", (active) => {
   if (active) return false; // cancel highlight
 });
 
+// Wow, here's the TTS script
+
+  Hooks.once("init", async function () {
+  game.settings.register("tts-voice", "ttsVoiceUsers", {
+    name: "TTS Players",
+    hint: "Choose which players' messages should be spoken aloud by TTS.",
+    scope: "world",
+    config: true,
+    type: String,
+    default: "",
+    choices: () => {
+      const choices = {};
+      for (const user of game.users) {
+        if (!user.isGM) choices[user.id] = user.name;
+      }
+      return choices;
+    }
+  });
+});
+
+Hooks.once("ready", () => {
+  const currentUser = game.user;
+  const selectedUserId = game.settings.get("tts-voice", "ttsVoiceUsers");
+
+  // Socket listener for TTS
+  game.socket.on("module.tts-voice", ({ senderName, message }) => {
+    if (currentUser.isGM || currentUser.id !== selectedUserId) {
+      const utterance = new SpeechSynthesisUtterance(`${senderName} says: ${message}`);
+      utterance.lang = "en-US";
+      utterance.rate = 1;
+      window.speechSynthesis.speak(utterance);
+    }
+  });
+
+  // On chat message
+  Hooks.on("chatMessage", (chatLog, messageText, chatData) => {
+    // Only for selected player
+    if (currentUser.id !== selectedUserId) return;
+
+    // Filter out rolls and system messages
+    const trimmed = messageText.trim();
+    if (trimmed.startsWith("/")) return false;
+
+    game.socket.emit("module.tts-voice", {
+      senderName: currentUser.name,
+      message: trimmed
+    });
+
+    return true; // Let the message go through normally
+  });
+});
 
 
 
