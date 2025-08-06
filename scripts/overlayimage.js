@@ -354,57 +354,67 @@ Hooks.on("highlightObjects", (active) => {
   if (active) return false; // cancel highlight
 });
 
-// Wow, here's the TTS script
 
-  Hooks.once("init", async function () {
-  game.settings.register("tts-voice", "ttsVoiceUsers", {
-    name: "TTS Players",
-    hint: "Choose which players' messages should be spoken aloud by TTS.",
+  
+// Wow, here's the TTS script
+Hooks.once("init", function () {
+  game.settings.register("hearme-chat-notification", "ttsVoiceUser", {
+    name: "TTS Player",
+    hint: "Choose which player's chat messages will be spoken aloud using text-to-speech.",
     scope: "world",
     config: true,
     type: String,
     default: "",
     choices: () => {
       const choices = {};
-      for (const user of game.users) {
+      for (const user of game.users.contents) {
         if (!user.isGM) choices[user.id] = user.name;
       }
       return choices;
-    }
+    },
+    onChange: () => window.location.reload()
   });
 });
 
 Hooks.once("ready", () => {
-  const currentUser = game.user;
-  const selectedUserId = game.settings.get("tts-voice", "ttsVoiceUsers");
+  const selectedUserId = game.settings.get("hearme-chat-notification", "ttsVoiceUser");
 
-  // Socket listener for TTS
-  game.socket.on("module.tts-voice", ({ senderName, message }) => {
-    if (currentUser.isGM || currentUser.id !== selectedUserId) {
-      const utterance = new SpeechSynthesisUtterance(`${senderName} says: ${message}`);
-      utterance.lang = "en-US";
-      utterance.rate = 1;
-      window.speechSynthesis.speak(utterance);
-    }
+  // Function to speak text
+  function speakTTS(senderName, message) {
+    const utterance = new SpeechSynthesisUtterance(`${senderName} says: ${message}`);
+    utterance.lang = "en-US";
+    utterance.rate = 1;
+    window.speechSynthesis.speak(utterance);
+  }
+
+  // Listen for TTS messages from socket
+  game.socket.on("module.hearme-chat-notification", ({ senderId, senderName, message }) => {
+    speakTTS(senderName, message);
   });
 
-  // On chat message
+  // Hook into chat submission
   Hooks.on("chatMessage", (chatLog, messageText, chatData) => {
-    // Only for selected player
-    if (currentUser.id !== selectedUserId) return;
+    if (game.user.id !== selectedUserId) return;
 
-    // Filter out rolls and system messages
-    const trimmed = messageText.trim();
-    if (trimmed.startsWith("/")) return false;
+    // Ignore system messages (e.g., /roll, /me)
+    if (messageText.trim().startsWith("/")) return false;
 
-    game.socket.emit("module.tts-voice", {
-      senderName: currentUser.name,
-      message: trimmed
+    const cleanMessage = messageText.trim();
+
+    // Send to other clients
+    game.socket.emit("module.hearme-chat-notification", {
+      senderId: game.user.id,
+      senderName: game.user.name,
+      message: cleanMessage
     });
 
-    return true; // Let the message go through normally
+    // Play TTS for the sender too
+    speakTTS(game.user.name, cleanMessage);
+
+    return true; // let the chat message go through
   });
 });
+
 
 
 
