@@ -357,12 +357,13 @@ Hooks.on("highlightObjects", (active) => {
 
   
 // Wow, here's the TTS script
+// Register the TTS setting under your module
 Hooks.once("init", function () {
   game.settings.register("hearme-chat-notification", "ttsVoiceUser", {
     name: "TTS Player",
     hint: "Choose which player's chat messages will be spoken aloud using text-to-speech.",
     scope: "world",
-    config: true,
+    config: true, // ✅ makes it show in Module Settings
     type: String,
     default: "",
     choices: () => {
@@ -379,7 +380,7 @@ Hooks.once("init", function () {
 Hooks.once("ready", () => {
   const selectedUserId = game.settings.get("hearme-chat-notification", "ttsVoiceUser");
 
-  // Function to speak text
+  // Speak the message
   function speakTTS(senderName, message) {
     const utterance = new SpeechSynthesisUtterance(`${senderName} says: ${message}`);
     utterance.lang = "en-US";
@@ -387,33 +388,33 @@ Hooks.once("ready", () => {
     window.speechSynthesis.speak(utterance);
   }
 
-  // Listen for TTS messages from socket
+  // When someone else sends a message
   game.socket.on("module.hearme-chat-notification", ({ senderId, senderName, message }) => {
+    // Everyone including sender hears it
     speakTTS(senderName, message);
   });
 
-  // Hook into chat submission
+  // When selected user sends a message
   Hooks.on("chatMessage", (chatLog, messageText, chatData) => {
     if (game.user.id !== selectedUserId) return;
-
-    // Ignore system messages (e.g., /roll, /me)
     if (messageText.trim().startsWith("/")) return false;
 
     const cleanMessage = messageText.trim();
 
-    // Send to other clients
+    // Send message to others (and self via socket)
     game.socket.emit("module.hearme-chat-notification", {
       senderId: game.user.id,
       senderName: game.user.name,
       message: cleanMessage
     });
 
-    // Play TTS for the sender too
+    // Also speak it locally
     speakTTS(game.user.name, cleanMessage);
 
-    return true; // let the chat message go through
+    return true; // allow normal message
   });
 });
+
 
 
 
