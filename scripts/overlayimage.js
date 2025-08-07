@@ -1,4 +1,29 @@
 (() => {
+
+
+  Hooks.once("init", function () {
+  console.log("🧠 HearMe: Registering TTS setting");
+
+  game.settings.register("hearme-chat-notification", "ttsVoiceUser", {
+    name: "TTS Player",
+    hint: "Choose which player's chat messages will be spoken aloud using text-to-speech.",
+    scope: "world",
+    config: true,
+    type: String,
+    default: "",
+    choices: () => {
+      const choices = {};
+      for (const user of game.users.contents) {
+        if (!user.isGM) choices[user.id] = user.name;
+      }
+      return choices;
+    },
+    onChange: () => window.location.reload()
+  });
+});
+
+
+  
   // scripts/token-bar.js
   Hooks.once('ready', async () => {
     const isGM = game.user.isGM;
