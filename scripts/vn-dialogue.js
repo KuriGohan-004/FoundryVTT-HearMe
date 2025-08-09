@@ -87,6 +87,7 @@ Hooks.once("init", () => {
   let imgElem  = document.getElementById("vn-chat-image");
   let arrow    = document.getElementById("vn-chat-arrow");
   let timerBar = null;
+  let queueIconsContainer = null;
 
   let typing         = false;
   let autoSkipTimer  = null;
@@ -136,16 +137,31 @@ Hooks.once("init", () => {
         overflowY: "auto",
         transition: "opacity 0.25s ease",
         opacity: "0",
-        pointerEvents: "none"
+        pointerEvents: "none",
+        borderRadius: "8px",
+        boxSizing: "border-box"
       });
       banner.innerHTML = `
+        <div id="vn-chat-queue-icons" style="position:absolute;top:-40px;right:0;display:flex;gap:6px;pointer-events:none;z-index:101;"></div>
         <div id="vn-chat-name" style="font-weight:bold;font-size:1.2em;margin-bottom:4px;"></div>
         <div id="vn-chat-msg"  style="font-size:2.2em;"></div>
-        <div id="vn-chat-arrow" style="position:absolute;bottom:8px;right:16px;font-size:1.5em;opacity:0.5;display:none;">&#8595;</div>
-        <div id="vn-chat-timer" style="position:absolute;bottom:0;left:0;height:5px;width:100%;background:white;transform-origin:left;transform:scaleX(1);transition:transform linear;opacity:1;"></div>`;
+        <div id="vn-chat-arrow" style="position:absolute;bottom:8px;right:16px;font-size:1.5em;opacity:0.5;display:none;color:white;">&#8595;</div>
+        <div id="vn-chat-timer" style="position:absolute;bottom:0;left:0;height:5px;width:100%;background:white;transform-origin:left;transform:scaleX(1);transition:transform linear;opacity:1;border-radius: 0 0 8px 8px;"></div>`;
       document.body.appendChild(banner);
       arrow    = document.getElementById("vn-chat-arrow");
       timerBar = document.getElementById("vn-chat-timer");
+      queueIconsContainer = document.getElementById("vn-chat-queue-icons");
+
+      // Add pulse animation CSS for arrow
+      const style = document.createElement('style');
+      style.textContent = `
+        @keyframes arrowPulse {
+          0%   { color: white; opacity: 1; }
+          50%  { color: #222; opacity: 0.3; }
+          100% { color: white; opacity: 1; }
+        }
+      `;
+      document.head.appendChild(style);
     }
 
     /* Portrait --------------------------------------------------- */
@@ -234,105 +250,151 @@ Hooks.once("init", () => {
 
   /* ------------------------ AUTO‑SKIP TIMER ---------------------- */
   function resetTimer() {
-    clearTimeout(autoSkipTimer);
-    autoSkipTimer = null;
+    if (!timerBar) return;
     timerBar.style.transition = "none";
-    timerBar.style.transform  = "scaleX(1)";
-    timerBar.style.opacity    = "1";
+    timerBar.style.transform = "scaleX(1)";
+    timerBar.style.opacity = "1";
+    if (autoSkipTimer) clearTimeout(autoSkipTimer);
   }
 
-  function startTimer(charCount) {
-    const duration = Math.max(AUTO_SKIP_MIN_SECONDS*1000, AUTO_SKIP_BASE_DELAY + charCount*AUTO_SKIP_CHAR_DELAY);
-    autoSkipStart  = Date.now();
-    autoSkipRemain = duration;
-
+  function startTimer(duration) {
+    if (!timerBar) return;
     timerBar.style.transition = `transform ${duration}ms linear`;
-    timerBar.style.transform  = "scaleX(0)";
-    autoSkipTimer = setTimeout(skipMessage, duration);
+    timerBar.style.transform = "scaleX(0)";
+    autoSkipTimer = setTimeout(() => {
+      autoSkipTimer = null;
+      advanceQueue();
+    }, duration);
   }
 
-  window.addEventListener("blur", () => {
-    if (!autoSkipTimer) return;
-    clearTimeout(autoSkipTimer);
-    autoSkipRemain -= Date.now() - autoSkipStart;
-    autoSkipTimer = null;
-    const ratio = autoSkipRemain / (AUTO_SKIP_BASE_DELAY + AUTO_SKIP_MIN_SECONDS*1000);
-    timerBar.style.transition = "none";
-    timerBar.style.transform  = `scaleX(${ratio})`;
-  });
+  /* ---------------------- NEW MESSAGE ARROW ----------------------- */
+  function showArrow() {
+    if (!arrow) return;
+    arrow.style.display = "block";
+    arrow.style.animation = "arrowPulse 1500ms infinite ease-in-out";
+  }
 
-  window.addEventListener("focus", () => {
-    if (autoSkipTimer || !autoSkipRemain) return;
-    autoSkipStart = Date.now();
-    timerBar.style.transition = `transform ${autoSkipRemain}ms linear`;
-    timerBar.style.transform  = "scaleX(0)";
-    autoSkipTimer = setTimeout(skipMessage, autoSkipRemain);
-  });
+  function hideArrow() {
+    if (!arrow) return;
+    arrow.style.animation = "";
+    arrow.style.display = "none";
+  }
 
-  /* -------------------------- DISPLAY MSG ------------------------ */
-  function updateArrow() { arrow.style.display = queue.length ? "block" : "none"; }
+  /* ----------------------- QUEUE ICONS RENDER -------------------- */
+  function renderQueueIcons() {
+    if (!queueIconsContainer) return;
+    queueIconsContainer.innerHTML = ""; // clear old
 
-  function displayMessage({ name, msg, image, userId }) {
+    queue.forEach(msg => {
+      if (!msg.tokenImg) return;
+      const icon = document.createElement("img");
+      icon.src = msg.tokenImg;
+      icon.alt = msg.name || "Speaker";
+      Object.assign(icon.style, {
+        width: "32px",
+        height: "32px",
+        borderRadius: "50%",
+        border: "1.5px solid white",
+        filter: "drop-shadow(0 0 2px black)"
+      });
+      queueIconsContainer.appendChild(icon);
+    });
+
+    // Hide container if no icons
+    queueIconsContainer.style.display = queue.length ? "flex" : "none";
+  }
+
+  /* -------------------- SHOW MESSAGE FROM QUEUE ------------------ */
+  function showMessage(msg) {
+    if (!banner) return;
     resetTimer();
+    hideArrow();
 
-    const nameEl = banner.querySelector("#vn-chat-name");
-    const msgEl  = banner.querySelector("#vn-chat-msg");
+    showPortraitForSpeaker(msg.name, msg.tokenImg);
 
-    nameEl.textContent = name;
+    // Show banner
     banner.style.display = "flex";
-    requestAnimationFrame(() => { banner.style.opacity = "1"; });
+    banner.style.opacity = "1";
+    banner.style.pointerEvents = "auto";
 
-    showPortraitForSpeaker(name, image);
+    const nameElem = document.getElementById("vn-chat-name");
+    const msgElem  = document.getElementById("vn-chat-msg");
 
-    if (userId === game.user.id) playChatSound();
+    if (nameElem) nameElem.textContent = msg.name || "";
 
-    typeHtml(msgEl, msg, () => {
-      updateArrow();
-      if (document.hasFocus()) startTimer(msgEl.textContent.length);
+    // Start typing effect, then auto skip timer + arrow
+    typeHtml(msgElem, msg.content, () => {
+      typing = false;
+
+      if (msg.autoSkip) {
+        const delay = Math.max(
+          AUTO_SKIP_MIN_SECONDS * 1000,
+          AUTO_SKIP_BASE_DELAY + (msg.content.length * AUTO_SKIP_CHAR_DELAY)
+        );
+        startTimer(delay);
+        showArrow();
+      } else {
+        hideArrow();
+        if (timerBar) timerBar.style.opacity = "0";
+      }
     });
   }
 
-  function skipMessage() {
-    if (typing) return;
-    resetTimer();
-    if (queue.length) displayMessage(queue.shift());
-    else {
-      banner.style.opacity = "0";
-      imgElem.style.opacity = "0";
-      setTimeout(() => { banner.style.display = "none"; currentSpeaker = null; }, 250);
+  /* -------------------- ADVANCE QUEUE ---------------------------- */
+  function advanceQueue() {
+    if (typing) return; // wait for typing to finish
+    if (queue.length === 0) {
+      // Hide banner if no more messages
+      if (banner) {
+        banner.style.opacity = "0";
+        banner.style.pointerEvents = "none";
+        setTimeout(() => {
+          banner.style.display = "none";
+          if (timerBar) timerBar.style.opacity = "0";
+        }, 250);
+      }
+      currentSpeaker = null;
+      renderQueueIcons();
+      return;
+    }
+
+    const next = queue.shift();
+    renderQueueIcons();
+    showMessage(next);
+  }
+
+  /* -------------------- ADD MESSAGE TO QUEUE --------------------- */
+  function queueMessage(name, content, tokenImg, autoSkip = true) {
+    queue.push({ name, content, tokenImg, autoSkip });
+    renderQueueIcons();
+
+    // Major fix: if no message is currently displayed, immediately advance
+    if (!typing && (banner.style.display === "none" || banner.style.opacity === "0")) {
+      advanceQueue();
     }
   }
 
-  /* ----------------------------- INPUT --------------------------- */
-  document.addEventListener("keydown", (ev) => {
-    if (document.activeElement?.closest(".chat-message") || document.activeElement?.tagName === "TEXTAREA") return;
-    if (document.querySelector(".app.window-app.sheet:not(.minimized)")) return;
-    const key = gSetting("skipKey").toLowerCase();
-    if (ev.key.toLowerCase() === key || ev.key === "Tab") { ev.preventDefault(); skipMessage(); }
+  /* -------------------- MESSAGE RECEIVED HOOK -------------------- */
+  Hooks.on("chatMessageReceived", (msgData) => {
+    // Example expected msgData: { name, content, tokenImg, autoSkip }
+    // The game or module must call this hook with message data objects
+    queueMessage(msgData.name, msgData.content, msgData.tokenImg, msgData.autoSkip);
   });
 
-  /* ---------------------------- CHAT ----------------------------- */
-  Hooks.on("createChatMessage", (message) => {
-    if (!message.visible || message.isRoll) return;
-    if (!message.speaker?.actor) return;
+  /* ---------------------- INIT DOM & HOOKS ---------------------- */
+  Hooks.once("ready", () => {
+    ensureDom();
 
-    const actor = game.actors.get(message.speaker.actor);
-    if (!actor) return;
-
-    let name = actor.name;
-    let img  = actor.img;
-
-    if (message.speaker.token) {
-      const scene = game.scenes.active;
-      const token = scene?.tokens.get(message.speaker.token);
-      if (token) { name = token.name; img = token.texture.src; }
-    }
-
-    const entry = { name, msg: message.content.trim(), image: img, userId: message.user.id };
-    if (banner.style.display === "flex") { queue.push(entry); updateArrow(); }
-    else displayMessage(entry);
+    // Example: Testing with dummy messages
+    /*
+    queueMessage("Alice", "Hello there! This is the first message.", "modules/mytokens/alice.png", true);
+    queueMessage("Bob", "And here comes Bob with the next message.", "modules/mytokens/bob.png", true);
+    queueMessage("Charlie", "Finally Charlie arrives!", "modules/mytokens/charlie.png", true);
+    */
   });
 
-  /* --------------------------- INIT ------------------------------ */
-  ensureDom();
+  /* ---------------------- EXPOSE QUEUE MESSAGE ------------------- */
+  // If you want to send a message externally, you can call this:
+  window.vnChatNotify = queueMessage;
+
 })();
