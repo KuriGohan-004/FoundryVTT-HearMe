@@ -1,139 +1,121 @@
 const MODULE_ID = "image-broadcast";
 
+// Register settings so we can store the active image and its visibility
+Hooks.once("init", () => {
+  game.settings.register(MODULE_ID, "imageSrc", {
+    scope: "world",
+    config: false,
+    type: String,
+    default: ""
+  });
+  game.settings.register(MODULE_ID, "imageVisible", {
+    scope: "world",
+    config: false,
+    type: Boolean,
+    default: false
+  });
+});
+
+// Socket listener for all clients
 Hooks.once("ready", () => {
-  // This runs for everyone, not just the GM
-  game.socket.on(`module.${MODULE_ID}`, (payload) => {
-    if (!payload || !payload.action) return;
-    if (payload.action === "showImage") {
-      showBroadcastImage(payload.src);
-    }
-    else if (payload.action === "hideImage") {
-      hideBroadcastImage();
+  game.socket.on(`module.${MODULE_ID}`, (data) => {
+    if (!data) return;
+    if (data.action === "updateImage") {
+      game.settings.set(MODULE_ID, "imageSrc", data.src);
+      game.settings.set(MODULE_ID, "imageVisible", data.visible);
+      updateDisplayedImage(data.src, data.visible);
     }
   });
 
+  // On join, check settings to show current image if needed
+  const src = game.settings.get(MODULE_ID, "imageSrc");
+  const visible = game.settings.get(MODULE_ID, "imageVisible");
+  updateDisplayedImage(src, visible);
+
+  // Only GM gets the toolbar
   if (game.user.isGM) {
-    createGMToolbar();
+    new ImageBroadcastToolbar().render(true);
   }
 });
 
-function createGMToolbar() {
-  const bar = $(`
-    <div id="${MODULE_ID}-toolbar" style="
-      position: fixed;
-      bottom: 20px;
-      left: 320px;
-      background: black;
-      color: white;
-      display: flex;
-      align-items: center;
-      padding: 4px;
-      gap: 4px;
-      border: 1px solid #666;
-      border-radius: 4px;
-      z-index: 10000;
-      cursor: move;
-    ">
-      <button id="${MODULE_ID}-browse" style="padding:2px 6px;">📁</button>
-      <img id="${MODULE_ID}-preview" src="" style="max-height: 30px; display:none; border: 1px solid white;" />
-      <button id="${MODULE_ID}-toggle" style="padding:2px 6px;">Show</button>
-    </div>
-  `);
-  $("body").append(bar);
-
-  let currentImage = null;
-  let isShown = false;
-
-  makeDraggableConstrained(bar[0]);
-
-  bar.find(`#${MODULE_ID}-browse`).on("click", async () => {
-    const fp = new FilePicker({
-      type: "image",
-      current: "public",
-      callback: (path) => {
-        currentImage = path;
-        bar.find(`#${MODULE_ID}-preview`).attr("src", path).show();
-      }
+// GM control bar as an Application
+class ImageBroadcastToolbar extends Application {
+  static get defaultOptions() {
+    return mergeObject(super.defaultOptions, {
+      id: `${MODULE_ID}-toolbar`,
+      template: `modules/${MODULE_ID}/templates/toolbar.html`,
+      popOut: false,
+      minimizable: false,
+      resizable: false,
+      draggable: true,
+      top: 200,
+      left: ui.sidebar?.width || 300,
+      width: "auto",
+      height: "auto"
     });
-    fp.render(true);
-  });
+  }
 
-  bar.find(`#${MODULE_ID}-toggle`).on("click", () => {
-    if (!currentImage) {
-      ui.notifications.warn("Please select an image first.");
-      return;
-    }
-    isShown = !isShown;
-    bar.find(`#${MODULE_ID}-toggle`).text(isShown ? "Hide" : "Show");
+  getData() {
+    return {
+      currentImage: game.settings.get(MODULE_ID, "imageSrc"),
+      isVisible: game.settings.get(MODULE_ID, "imageVisible")
+    };
+  }
 
-    if (isShown) {
-      game.socket.emit(`module.${MODULE_ID}`, { action: "showImage", src: currentImage });
-      showBroadcastImage(currentImage); // show locally for GM
-    } else {
-      game.socket.emit(`module.${MODULE_ID}`, { action: "hideImage" });
-      hideBroadcastImage(); // hide locally for GM
-    }
-  });
+  activateListeners(html) {
+    super.activateListeners(html);
+
+    html.find(".browse-btn").on("click", () => {
+      const fp = new FilePicker({
+        type: "image",
+        callback: (path) => {
+          game.settings.set(MODULE_ID, "imageSrc", path);
+          this.render();
+        }
+      });
+      fp.render(true);
+    });
+
+    html.find(".toggle-btn").on("click", () => {
+      const currentSrc = game.settings.get(MODULE_ID, "imageSrc");
+      if (!currentSrc) {
+        ui.notifications.warn("Please select an image first.");
+        return;
+      }
+      const currentlyVisible = game.settings.get(MODULE_ID, "imageVisible");
+      const newVisible = !currentlyVisible;
+      game.settings.set(MODULE_ID, "imageVisible", newVisible);
+      game.socket.emit(`module.${MODULE_ID}`, {
+        action: "updateImage",
+        src: currentSrc,
+        visible: newVisible
+      });
+      updateDisplayedImage(currentSrc, newVisible);
+      this.render();
+    });
+  }
 }
 
-function showBroadcastImage(src) {
-  hideBroadcastImage();
+// Show/hide image function
+function updateDisplayedImage(src, visible) {
+  $("#image-broadcast-display").remove();
 
-  const img = $(`<img id="${MODULE_ID}-display" src="${src}" style="
-    position: fixed;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    max-width: 90vw;
-    max-height: 90vh;
-    object-fit: contain;
-    background: black;
-    padding: 2%;
-    box-sizing: border-box;
-    z-index: 9999;
-    border: 4px solid black;
-  ">`);
+  if (!visible || !src) return;
+
+  const img = $(`<img id="image-broadcast-display" src="${src}">`).css({
+    position: "fixed",
+    top: "50%",
+    left: "50%",
+    transform: "translate(-50%, -50%)",
+    "max-width": "90vw",
+    "max-height": "90vh",
+    "object-fit": "contain",
+    background: "black",
+    padding: "2%",
+    "box-sizing": "border-box",
+    "z-index": 9999,
+    border: "4px solid black"
+  });
+
   $("body").append(img);
-}
-
-function hideBroadcastImage() {
-  $(`#${MODULE_ID}-display`).remove();
-}
-
-function makeDraggableConstrained(el) {
-  let isDragging = false;
-  let offsetX, offsetY;
-
-  el.addEventListener("mousedown", (e) => {
-    if (e.target.tagName === "BUTTON" || e.target.tagName === "IMG") return;
-    isDragging = true;
-    offsetX = e.clientX - el.getBoundingClientRect().left;
-    offsetY = e.clientY - el.getBoundingClientRect().top;
-    e.preventDefault();
-  });
-
-  window.addEventListener("mousemove", (e) => {
-    if (!isDragging) return;
-    const sidebarWidth = ui.sidebar?._collapsed ? 0 : ui.sidebar.element.width();
-    const minX = sidebarWidth;
-    const minY = 0;
-    const maxX = window.innerWidth - el.offsetWidth;
-    const maxY = window.innerHeight - el.offsetHeight;
-
-    let newX = e.clientX - offsetX;
-    let newY = e.clientY - offsetY;
-
-    if (newX < minX) newX = minX;
-    if (newX > maxX) newX = maxX;
-    if (newY < minY) newY = minY;
-    if (newY > maxY) newY = maxY;
-
-    el.style.left = `${newX}px`;
-    el.style.top = `${newY}px`;
-    el.style.bottom = "auto";
-  });
-
-  window.addEventListener("mouseup", () => {
-    isDragging = false;
-  });
 }
