@@ -1,18 +1,20 @@
 const MODULE_ID = "image-broadcast";
 
 Hooks.once("ready", () => {
-  if (game.user.isGM) {
-    createGMToolbar();
-  }
-
-  // Listen for GM broadcast
-  game.socket.on(`module.${MODULE_ID}`, ({ action, data }) => {
-    if (action === "showImage") {
-      showBroadcastImage(data.src);
-    } else if (action === "hideImage") {
+  // This runs for everyone, not just the GM
+  game.socket.on(`module.${MODULE_ID}`, (payload) => {
+    if (!payload || !payload.action) return;
+    if (payload.action === "showImage") {
+      showBroadcastImage(payload.src);
+    }
+    else if (payload.action === "hideImage") {
       hideBroadcastImage();
     }
   });
+
+  if (game.user.isGM) {
+    createGMToolbar();
+  }
 });
 
 function createGMToolbar() {
@@ -20,7 +22,7 @@ function createGMToolbar() {
     <div id="${MODULE_ID}-toolbar" style="
       position: fixed;
       bottom: 20px;
-      left: 320px; /* start right of sidebar */
+      left: 320px;
       background: black;
       color: white;
       display: flex;
@@ -42,10 +44,8 @@ function createGMToolbar() {
   let currentImage = null;
   let isShown = false;
 
-  // Make draggable but constrain to screen + avoid sidebar
   makeDraggableConstrained(bar[0]);
 
-  // Browse button → Foundry file picker
   bar.find(`#${MODULE_ID}-browse`).on("click", async () => {
     const fp = new FilePicker({
       type: "image",
@@ -58,7 +58,6 @@ function createGMToolbar() {
     fp.render(true);
   });
 
-  // Toggle show/hide
   bar.find(`#${MODULE_ID}-toggle`).on("click", () => {
     if (!currentImage) {
       ui.notifications.warn("Please select an image first.");
@@ -66,18 +65,19 @@ function createGMToolbar() {
     }
     isShown = !isShown;
     bar.find(`#${MODULE_ID}-toggle`).text(isShown ? "Hide" : "Show");
+
     if (isShown) {
-      game.socket.emit(`module.${MODULE_ID}`, { action: "showImage", data: { src: currentImage } });
-      showBroadcastImage(currentImage); // also show for GM
+      game.socket.emit(`module.${MODULE_ID}`, { action: "showImage", src: currentImage });
+      showBroadcastImage(currentImage); // show locally for GM
     } else {
       game.socket.emit(`module.${MODULE_ID}`, { action: "hideImage" });
-      hideBroadcastImage(); // hide for GM
+      hideBroadcastImage(); // hide locally for GM
     }
   });
 }
 
 function showBroadcastImage(src) {
-  hideBroadcastImage(); // Remove any existing
+  hideBroadcastImage();
 
   const img = $(`<img id="${MODULE_ID}-display" src="${src}" style="
     position: fixed;
@@ -130,7 +130,7 @@ function makeDraggableConstrained(el) {
 
     el.style.left = `${newX}px`;
     el.style.top = `${newY}px`;
-    el.style.bottom = "auto"; // prevent snapping back
+    el.style.bottom = "auto";
   });
 
   window.addEventListener("mouseup", () => {
