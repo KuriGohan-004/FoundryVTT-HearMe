@@ -17,10 +17,12 @@
     "chat-sound.js",
   "scripts/vn-dialogue.js",
   "scripts/overlayimage.js",
+  "scripts/CinematicDiceRolls.js",
   "scripts/splashimage.js"],
   "url": "https://github.com/KuriGohan-004/FoundryVTT-HearMe",
   "manifest": "https://github.com/KuriGohan-004/FoundryVTT-HearMe/blob/main/module.json",
   "download": "https://github.com/KuriGohan-004/FoundryVTT-HearMe/archive/refs/heads/main.zip",
   "license": ""
 }
+
 
