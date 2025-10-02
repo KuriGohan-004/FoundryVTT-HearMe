@@ -4,7 +4,7 @@
   "description": "Make a noise when someone sends a chat message.",
   "version": "1.0.0",
   "compatibility": {
-    "minimum": "13",
+    "minimum": "10",
     "verified": "13"
   },
   "authors": [
@@ -21,6 +21,7 @@
   "download": "https://github.com/KuriGohan-004/FoundryVTT-HearMe/archive/refs/heads/main.zip",
   "license": ""
 }
+
 
 
 
