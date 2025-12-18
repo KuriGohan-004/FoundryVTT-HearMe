@@ -1,27 +1,28 @@
 // z-order.js
-// Foundry VTT v13+ compatible - Revised with debounce and fallback hook for reliable init
+// Foundry VTT v13+ compatible - Revised with robust init retry and ready hook
 // Tokens lower on canvas (higher Y) appear on top (higher sort value)
 
 class ZOrderManager {
   static ID = "z-order";
   static refreshAttempts = 0;
-  static MAX_REFRESH_ATTEMPTS = 3;
+  static MAX_REFRESH_ATTEMPTS = 60; // ~30s max wait
 
   // Refresh z-order for all tokens on the current scene
   static async refreshZOrder() {
-    const canvas = ui.canvas;
-    if (!canvas || !canvas.scene || !canvas.tokens) {
+    const canvas = game.canvas; // Use game.canvas for reliability
+    if (!canvas || !canvas.ready || !canvas.scene || !canvas.tokens) {
       if (this.refreshAttempts < this.MAX_REFRESH_ATTEMPTS) {
         this.refreshAttempts++;
-        console.warn(`Z-Order | Canvas or scene not ready (attempt ${this.refreshAttempts}), retrying in 500ms`);
+        console.warn(`Z-Order | Canvas not fully ready (attempt ${this.refreshAttempts}), retrying in 500ms`);
         setTimeout(() => ZOrderManager.refreshZOrder(), 500);
       } else {
-        console.warn("Z-Order | Max refresh attempts reached; canvas may be unavailable");
+        console.error("Z-Order | Max refresh attempts reached; check if a scene is active and canvas is initialized");
       }
       return;
     }
 
     this.refreshAttempts = 0; // Reset on success
+    console.log("Z-Order | Canvas check passed, refreshing sort");
 
     const tokens = canvas.tokens.placeables
       .filter(t => t.document && t.visible && t.center && t.scene?.id === canvas.scene.id) // Scene-specific visible tokens
@@ -49,35 +50,25 @@ class ZOrderManager {
     const hasPositionChange = changes.x !== undefined || changes.y !== undefined;
     if (!hasPositionChange) return;
 
-    console.log("Z-Order | Token position changed, awaiting move end");
+    console.log("Z-Order | Token position changed");
 
-    if (!options.animate || options.animate === false) {
+    if (!options.animation) {
       // Instant move: refresh immediately
       await this.refreshZOrder();
     } else {
       // Animated move: wait for completion
       const token = document.object;
       if (token) {
-        // Use 'refresh' event for rendering/movement end in v13
         token.once("refresh", async () => {
-          console.log("Z-Order | Token refresh event, re-sorting");
+          console.log("Z-Order | Token refresh after move, re-sorting");
           await this.refreshZOrder();
         });
       }
     }
   }
 
-  // Fallback initial sort via world time update (fires reliably post-ready)
-  static async onUpdateWorldTime(worldTime, deltaTime) {
-    if (this.refreshAttempts === 0 && ui.canvas?.scene) { // Only once per load
-      console.log("Z-Order | Initial sort via time tick");
-      await this.refreshZOrder();
-    }
-  }
-
-  // Refresh on scene controls render (e.g., scene switch)
+  // Refresh on scene controls render (e.g., layer switch)
   static async onRenderSceneControls() {
-    // Delay to ensure tokens are loaded
     setTimeout(async () => {
       console.log("Z-Order | Scene controls rendered, refreshing");
       await this.refreshZOrder();
@@ -90,13 +81,14 @@ Hooks.once("init", () => {
   console.log("Z-Order Module | Initializing vertical z-order (lower on screen = on top)");
 });
 
-Hooks.on("canvasReady", async () => {
-  console.log("Z-Order | canvasReady hook fired");
+Hooks.once("ready", async () => {
+  console.log("Z-Order | Ready hook fired, initial sort");
   await ZOrderManager.refreshZOrder();
 });
 
-Hooks.on("updateWorldTime", (worldTime, deltaTime) => {
-  ZOrderManager.onUpdateWorldTime(worldTime, deltaTime);
+Hooks.on("canvasReady", async () => {
+  console.log("Z-Order | canvasReady hook fired");
+  await ZOrderManager.refreshZOrder();
 });
 
 Hooks.on("renderSceneControls", () => {
@@ -107,7 +99,6 @@ Hooks.on("updateToken", (document, changes, options, userId) => {
   ZOrderManager.onUpdateToken(document, changes, options, userId);
 });
 
-// Optional: Refresh on scene change
 Hooks.on("updateScene", async (scene, changes) => {
   if (changes.active) {
     console.log("Z-Order | Scene activated, refreshing");
