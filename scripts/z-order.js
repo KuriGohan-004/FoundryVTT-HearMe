@@ -1,3 +1,15 @@
+let depthRefreshQueued = false;
+
+function queueDepthRefresh() {
+  if (depthRefreshQueued) return;
+  depthRefreshQueued = true;
+
+  requestAnimationFrame(() => {
+    depthRefreshQueued = false;
+    updateAllTokenSorts();
+  });
+}
+
 function updateAllTokenSorts() {
   if (!canvas?.tokens) return;
 
@@ -8,7 +20,6 @@ function updateAllTokenSorts() {
     );
   }
 
-  // Re-assert display order after sort updates
   canvas.tokens.placeables.sort((a, b) => a.document.sort - b.document.sort);
   canvas.tokens.refresh();
 }
@@ -18,20 +29,18 @@ Hooks.on("canvasReady", () => {
 });
 
 Hooks.on("updateToken", (doc, change) => {
-  // Only re-sort when vertical position changes
   if (change.y === undefined) return;
-
-  updateAllTokenSorts();
+  queueDepthRefresh();
 });
 
-// Prevent selected tokens from being raised above others
 Hooks.on("controlToken", () => {
-  updateAllTokenSorts();
+  queueDepthRefresh();
 });
 
 Hooks.on("releaseToken", () => {
-  updateAllTokenSorts();
+  queueDepthRefresh();
 });
+
 
 
 
