@@ -29,15 +29,5 @@
     "scripts/vn-dialogue.js",
     "scripts/z-order.js"
   ],
-  "settings": [
-    {
-      "key": "autoZOrder",
-      "name": "Auto Z-Order by Y Position",
-      "hint": "If enabled, tokens will automatically reorder based on their Y position (higher = on top).",
-      "scope": "world",
-      "config": true,
-      "type": "Boolean",
-      "default": true
-    }
-  ]
 }
+
