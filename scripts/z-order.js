@@ -7,6 +7,10 @@ function updateAllTokenSorts() {
       { diff: false, silent: true }
     );
   }
+
+  // Re-assert display order after sort updates
+  canvas.tokens.placeables.sort((a, b) => a.document.sort - b.document.sort);
+  canvas.tokens.refresh();
 }
 
 Hooks.on("canvasReady", () => {
@@ -19,6 +23,16 @@ Hooks.on("updateToken", (doc, change) => {
 
   updateAllTokenSorts();
 });
+
+// Prevent selected tokens from being raised above others
+Hooks.on("controlToken", () => {
+  updateAllTokenSorts();
+});
+
+Hooks.on("releaseToken", () => {
+  updateAllTokenSorts();
+});
+
 
 
 
