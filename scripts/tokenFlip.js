@@ -1,25 +1,28 @@
-// hearme-chat-notification/scripts/autoFlip.js
-Hooks.on("updateToken", async (tokenDoc, diff, options) => {
-  // Avoid recursion from our own update
-  if (options.autoFlip) return;
+const MODULE_ID = "token-auto-flip";
 
-  // Only act when x has changed (horizontal movement)
-  if (typeof diff.x !== "number") return;
+Hooks.once("init", () => {
+  // Optional: add a module setting to enable/disable
+  game.settings.register(MODULE_ID, "enabled", {
+    name: "Enable Auto Flip on Movement",
+    scope: "world",
+    config: true,
+    type: Boolean,
+    default: true
+  });
+});
 
-  const oldX = tokenDoc.x;
-  const newX = diff.x;
+// Best hook for v13+ — fires when movement animation begins
+Hooks.on("tokenMoveStart", (token, direction) => {
+  if (!game.settings.get(MODULE_ID, "enabled")) return;
+  if (!token.actor) return; // safety
 
-  // No horizontal change → skip
-  if (newX === oldX) return;
+  if (direction.dx === 0) return;
 
-  // Determine the desired mirror value
-  const shouldMirror = newX > oldX;
+  const faceLeft = direction.dx < 0;
+  const newScaleX = faceLeft ? -1 : 1;
 
-  // Only update if it’s actually different
-  if (tokenDoc.texture?.mirrorX !== shouldMirror) {
-    await tokenDoc.update(
-      { "texture.mirrorX": shouldMirror },
-      { autoFlip: true }
-    );
+  // Avoid unnecessary updates
+  if (token.document.texture.scaleX !== newScaleX) {
+    token.document.update({ "texture.scaleX": newScaleX });
   }
 });
