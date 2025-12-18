@@ -1,23 +1,24 @@
 /**
  * token-auto-flip.js
- * Instantly flips tokens horizontally when moving right or left in Foundry VTT v13.
- * No animation, rotation, or indicators — true instantaneous sprite flip.
+ * Instantly flips tokens horizontally (left/right)
+ * BEFORE movement animation begins in Foundry VTT v13.
  */
 
 Hooks.once("ready", () => {
-  console.log("hearme-chat-notification | token-auto-flip (instant) active");
+  console.log("hearme-chat-notification | token-auto-flip (pre-move instant) active");
 
   const lastX = new Map();
 
-  // Track starting positions
+  // Record initial token positions
   Hooks.on("canvasReady", (canvas) => {
     for (const token of canvas.tokens.placeables) {
       lastX.set(token.id, token.x);
     }
   });
 
-  Hooks.on("updateToken", async (tokenDoc, changes, options, userId) => {
-    // Only handle position changes by user (not internal Foundry updates)
+  // Flip before movement animation occurs
+  Hooks.on("preUpdateToken", async (tokenDoc, changes, options, userId) => {
+    // Only react to x-movement changes
     if (!("x" in changes)) return;
 
     const oldX = lastX.get(tokenDoc.id) ?? tokenDoc.x;
@@ -29,22 +30,22 @@ Hooks.once("ready", () => {
     const currentScaleX = tokenDoc.texture.scaleX ?? 1;
     let targetScaleX = currentScaleX;
 
-    // Determine direction → flip immediately
+    // Determine flip direction instantly
     if (movingRight && currentScaleX > 0) targetScaleX = -Math.abs(currentScaleX);
     else if (movingLeft && currentScaleX < 0) targetScaleX = Math.abs(currentScaleX);
 
-    // Skip if no change
     if (targetScaleX === currentScaleX) {
       lastX.set(tokenDoc.id, newX);
       return;
     }
 
-    // Update without animation or vision refresh
+    // Apply immediately, disable animation/rendering delays
     await tokenDoc.update(
       { "texture.scaleX": targetScaleX },
       { animate: false, diff: false, render: false }
     );
 
+    // Record new position baseline
     lastX.set(tokenDoc.id, newX);
   });
 
