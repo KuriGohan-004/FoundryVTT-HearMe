@@ -1,61 +1,74 @@
 // z-order.js
-// Foundry VTT v13+ compatible
-// Makes tokens lower on the canvas appear on top of tokens higher up (natural scrolling feel)
+// Foundry VTT v13+ compatible - Revised for reliable sorting via Token.sort
+// Tokens lower on canvas (higher Y) appear on top (higher sort value)
 
 class ZOrderManager {
   static ID = "z-order";
 
-  // Refresh z-order for all tokens on the current view
-  static refreshZOrder() {
+  // Refresh z-order for all tokens on the current scene
+  static async refreshZOrder() {
     const canvas = ui.canvas;
-    if (!canvas || !canvas.tokens || !canvas.stage) return;
+    if (!canvas?.scene || !canvas.tokens) {
+      console.warn("Z-Order | Canvas or scene not ready");
+      return;
+    }
 
-    const controlledTokens = canvas.tokens.placeables
-      .filter(t => t.document && t.center) // ensure token has position
-      .sort((a, b) => {
-        // Sort by Y position (top to bottom), ascending = top tokens get lower z
-        return a.center.y - b.center.y;
-      });
+    const tokens = canvas.tokens.placeables
+      .filter(t => t.document && t.visible && t.center) // Visible tokens with position
+      .sort((a, b) => a.center.y - b.center.y); // Ascending Y: top-to-bottom
 
-    // Apply new sort order using Pixi display list
-    controlledTokens.forEach((token, idx) => {
-      if (token.sortableChildren) {
-        canvas.tokens.placeables.sortableChildren = true;
-      }
-      token.zIndex = idx; // lower idx = higher on screen = lower zIndex
-    });
+    console.log(`Z-Order | Refreshing ${tokens.length} tokens`);
 
-    // Force PIXI to re-sort children
-    canvas.tokens.sortDirty = true;
+    // Batch update sort values (0 = behind, higher = on top)
+    const updates = tokens.map((token, idx) => ({
+      _id: token.document.id,
+      sort: idx // Lower Y = lower sort (behind)
+    }));
+
+    if (updates.length > 0) {
+      await canvas.scene.updateEmbeddedDocuments("Token", updates);
+      canvas.tokens.sortDirty = true; // Trigger PIXI re-sort
+      canvas.tokens.render();
+      console.log("Z-Order | Sort updated successfully");
+    }
   }
 
   // Hook: when a token finishes movement
-  static onUpdateToken(document, changes, options, userId) {
-    // Only react if position actually changed and movement is complete
-    if (changes.x !== undefined || changes.y !== undefined) {
-      if (!options.animation || options.animation === false) {
-        // Immediate move (e.g. teleport) → refresh immediately
-        this.refreshZOrder();
-      } else {
-        // Wait for the movement animation to finish
-        const token = document.object;
-        if (token) {
-          token.once("moveend", () => {
-            this.refreshZOrder();
-          });
-        }
+  static async onUpdateToken(document, changes, options, userId) {
+    if (!game.user.isGM) return; // Optional: GM-only to avoid spam
+
+    const hasPositionChange = changes.x !== undefined || changes.y !== undefined;
+    if (!hasPositionChange) return;
+
+    console.log("Z-Order | Token position changed, awaiting move end");
+
+    if (!options.animate || options.animate === false) {
+      // Instant move: refresh immediately
+      await this.refreshZOrder();
+    } else {
+      // Animated move: wait for completion
+      const token = document.object;
+      if (token) {
+        token.once("stop", async () => { // v13 uses 'stop' for move end
+          console.log("Z-Order | Move animation ended, refreshing");
+          await this.refreshZOrder();
+        });
       }
     }
   }
 
-  // Initial sort when canvas is ready or view changes
-  static onCanvasReady(canvas) {
-    this.refreshZOrder();
+  // Initial sort when canvas is ready
+  static async onCanvasReady() {
+    console.log("Z-Order | Canvas ready, initial sort");
+    await this.refreshZOrder();
   }
 
-  static onRenderSceneControls(controls) {
-    // When switching layers or pages, re-sort
-    this.refreshZOrder();
+  // Refresh on scene controls render (e.g., scene switch)
+  static async onRenderSceneControls() {
+    // Delay to ensure tokens are loaded
+    setTimeout(async () => {
+      await this.refreshZOrder();
+    }, 200);
   }
 }
 
@@ -69,20 +82,14 @@ Hooks.on("canvasReady", () => {
 });
 
 Hooks.on("renderSceneControls", () => {
-  // Small delay to ensure tokens are rendered after layer change
-  setTimeout(() => ZOrderManager.refreshZOrder(), 100);
+  ZOrderManager.onRenderSceneControls();
 });
 
 Hooks.on("updateToken", (document, changes, options, userId) => {
   ZOrderManager.onUpdateToken(document, changes, options, userId);
 });
 
-Hooks.on("updateTile", () => {
-  // Optional: refresh when tiles change (rarely needed)
-  ZOrderManager.refreshZOrder();
-});
-
-// Also refresh when switching scenes or pages
-Hooks.on("sightRefresh", () => {
-  ZOrderManager.refreshZOrder();
+// Optional: Refresh on scene change
+Hooks.on("updateScene", async () => {
+  await ZOrderManager.refreshZOrder();
 });
