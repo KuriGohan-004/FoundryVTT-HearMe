@@ -24,11 +24,11 @@ Hooks.once("init", () => {
 
   game.settings.register("hearme-chat-notification", "skipKey", {
     name: "Skip Key (client)",
-    hint: "Key for a player to skip/advance dialogue (default Q).",
+    hint: "Key for a player to skip/advance dialogue (default TAB).",
     scope: "client",
     config: true,
     type: String,
-    default: "q"
+    default: "tab"
   });
 
   /* GM‑controlled portrait settings */
@@ -336,3 +336,4 @@ Hooks.once("init", () => {
   /* --------------------------- INIT ------------------------------ */
   ensureDom();
 })();
+
