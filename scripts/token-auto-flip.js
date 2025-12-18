@@ -1,35 +1,57 @@
 /**
- * Token Auto-Flip on Movement (Left/Right)
- * Foundry VTT v13+
+ * token-auto-flip.js
+ * Part of the hearme-chat-notification module for FoundryVTT 13
+ *
+ * Behavior:
+ *  - When a token moves to the right (x increases), its image mirrors on the X axis.
+ *  - When a token moves to the left (x decreases), it restores to normal.
  */
 
-const MODULE_ID = "token-auto-flip";
+Hooks.once("ready", () => {
+  console.log("hearme-chat-notification | token-auto-flip.js active");
 
-Hooks.once("init", () => {
-  console.log(`${MODULE_ID} | Initializing`);
-});
+  // Store the last known X position of each token
+  const lastPositions = new Map();
 
-Hooks.on("preUpdateToken", (tokenDoc, updateData, options, userId) => {
-  // We only care about position changes (x or y)
-  if (!updateData.x && !updateData.y) return;
+  // Initialize when scene is ready
+  Hooks.on("canvasReady", (canvas) => {
+    for (const token of canvas.tokens.placeables) {
+      lastPositions.set(token.id, token.x);
+    }
+  });
 
-  const token = tokenDoc.object; // The Token canvas object
-  if (!token) return;
+  // Listen for token movement
+  Hooks.on("updateToken", async (tokenDoc, updateData, options, userId) => {
+    try {
+      const oldX = lastPositions.get(tokenDoc.id) ?? tokenDoc.x;
+      const newX = updateData.x ?? oldX;
 
-  const prevX = tokenDoc.x;
-  const newX = updateData.x ?? tokenDoc.x;
+      // No X change → do nothing
+      if (oldX === newX) return;
 
-  // If there's no horizontal movement, don't do anything
-  if (newX === prevX) return;
+      const movingRight = newX > oldX;
+      const movingLeft = newX < oldX;
 
-  const movingRight = newX > prevX;
-  
-  // Only change if it's actually different from current state
-  if (token.texture.scaleX === 1 && !movingRight) {
-    // Was facing right, now moving left → flip
-    tokenDoc.update({ "texture.scaleX": -1 });
-  } else if (token.texture.scaleX === -1 && movingRight) {
-    // Was facing left, now moving right → unflip
-    tokenDoc.update({ "texture.scaleX": 1 });
-  }
+      // Flip horizontally when moving right, unflip when moving left
+      if (movingRight && !tokenDoc.texture.mirrorX) {
+        await tokenDoc.update({ "texture.mirrorX": true });
+      } else if (movingLeft && tokenDoc.texture.mirrorX) {
+        await tokenDoc.update({ "texture.mirrorX": false });
+      }
+
+      // Update stored X position
+      lastPositions.set(tokenDoc.id, newX);
+    } catch (err) {
+      console.error("Error in token-auto-flip.js:", err);
+    }
+  });
+
+  // Handle token creation/deletion gracefully
+  Hooks.on("createToken", (tokenDoc) => {
+    lastPositions.set(tokenDoc.id, tokenDoc.x);
+  });
+
+  Hooks.on("deleteToken", (tokenDoc) => {
+    lastPositions.delete(tokenDoc.id);
+  });
 });
