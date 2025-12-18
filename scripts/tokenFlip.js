@@ -1,30 +1,25 @@
-// hearme-chat-notification/tokenFlip.js
+// hearme-chat-notification/scripts/autoFlip.js
+Hooks.on("updateToken", async (tokenDoc, diff, options) => {
+  // Avoid recursion from our own update
+  if (options.autoFlip) return;
 
-Hooks.on("updateToken", async (tokenDoc, change, options, userId) => {
-  // Prevent infinite loops
-  if (options.hearmeFlip) return;
-
-  // Only care about horizontal movement
-  if (typeof change.x !== "number") return;
+  // Only act when x has changed (horizontal movement)
+  if (typeof diff.x !== "number") return;
 
   const oldX = tokenDoc.x;
-  const newX = change.x;
+  const newX = diff.x;
 
+  // No horizontal change → skip
   if (newX === oldX) return;
 
-  // Moving right → face right (mirror ON)
-  if (newX > oldX && !tokenDoc.texture.mirrorX) {
-    await tokenDoc.update(
-      { "texture.mirrorX": true },
-      { hearmeFlip: true }
-    );
-  }
+  // Determine the desired mirror value
+  const shouldMirror = newX > oldX;
 
-  // Moving left → face left (mirror OFF)
-  if (newX < oldX && tokenDoc.texture.mirrorX) {
+  // Only update if it’s actually different
+  if (tokenDoc.texture?.mirrorX !== shouldMirror) {
     await tokenDoc.update(
-      { "texture.mirrorX": false },
-      { hearmeFlip: true }
+      { "texture.mirrorX": shouldMirror },
+      { autoFlip: true }
     );
   }
 });
