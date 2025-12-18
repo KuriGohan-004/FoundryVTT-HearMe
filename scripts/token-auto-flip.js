@@ -1,26 +1,16 @@
-/**
- * token-auto-flip.js
- * Foundry VTT v13
- * - Instantly flips tokens before they move (left/right movement)
- * - Adds "face target" hotkey: press T to instantly flip toward mouse cursor
- */
-
 Hooks.once("ready", () => {
-  console.log("hearme-chat-notification | token-auto-flip (instant pre-move + face key) active");
+  console.log("token-auto-flip | instant flip + normal move active");
 
   const lastX = new Map();
-  const FACE_KEY = "KeyT"; // Default: 'T' key (use event.code)
-  const FLIP_SPEED = { animate: false, diff: false, render: false };
+  const FACE_KEY = "KeyT";
 
-  // --- 1️⃣ Record starting positions
   Hooks.on("canvasReady", (canvas) => {
     for (const token of canvas.tokens.placeables) {
       lastX.set(token.id, token.x);
     }
   });
 
-  // --- 2️⃣ Instant flip before move animation
-  Hooks.on("preUpdateToken", async (tokenDoc, changes, options, userId) => {
+  Hooks.on("preUpdateToken", (tokenDoc, changes, options, userId) => {
     if (!("x" in changes)) return;
     const oldX = lastX.get(tokenDoc.id) ?? tokenDoc.x;
     const newX = changes.x;
@@ -34,8 +24,13 @@ Hooks.once("ready", () => {
     if (movingRight && currentScaleX > 0) targetScaleX = -Math.abs(currentScaleX);
     else if (movingLeft && currentScaleX < 0) targetScaleX = Math.abs(currentScaleX);
 
-    if (targetScaleX !== currentScaleX)
-      await tokenDoc.update({ "texture.scaleX": targetScaleX }, FLIP_SPEED);
+    if (targetScaleX !== currentScaleX) {
+      // --- Instant flip on the token's PIXI object directly
+      const token = canvas.tokens.get(tokenDoc.id);
+      if (token?.texture) token.texture.scale.x = targetScaleX;
+      // Update the document's scale so it persists, but don't animate or interfere with movement
+      tokenDoc.updateSource({ "texture.scaleX": targetScaleX });
+    }
 
     lastX.set(tokenDoc.id, newX);
   });
@@ -43,11 +38,9 @@ Hooks.once("ready", () => {
   Hooks.on("createToken", (doc) => lastX.set(doc.id, doc.x));
   Hooks.on("deleteToken", (doc) => lastX.delete(doc.id));
 
-  // --- 3️⃣ Target key press to face cursor instantly
-  window.addEventListener("keydown", async (event) => {
+  // --- Face cursor key
+  window.addEventListener("keydown", (event) => {
     if (event.code !== FACE_KEY) return;
-
-    // Ignore if typing in chat, form, or input
     const active = document.activeElement;
     if (active && (active.tagName === "INPUT" || active.tagName === "TEXTAREA" || active.isContentEditable)) return;
 
@@ -68,8 +61,10 @@ Hooks.once("ready", () => {
       if (facingRight && currentScaleX > 0) targetScaleX = -Math.abs(currentScaleX);
       else if (facingLeft && currentScaleX < 0) targetScaleX = Math.abs(currentScaleX);
 
-      if (targetScaleX !== currentScaleX)
-        await tokenDoc.update({ "texture.scaleX": targetScaleX }, FLIP_SPEED);
+      if (targetScaleX !== currentScaleX) {
+        token.texture.scale.x = targetScaleX; // Instant flip
+        tokenDoc.updateSource({ "texture.scaleX": targetScaleX }); // Persist flip
+      }
     }
   });
 });
