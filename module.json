@@ -2,7 +2,7 @@
   "id": "hearme-chat-notification",
   "title": "HearMe Chat Notifications",
   "description": "Make a noise when someone sends a chat message.",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "compatibility": {
     "minimum": "10",
     "verified": "13"
@@ -14,19 +14,30 @@
     }
   ],
   "scripts": [
-  "scripts/key-commands.js",
-  "scripts/token-auto-flip.js",
-  "scripts/vn-dialogue.js"],
+    "scripts/key-commands.js",
+    "scripts/token-auto-flip.js",
+    "scripts/vn-dialogue.js",
+    "scripts/z-order.js"
+  ],
   "url": "https://github.com/KuriGohan-004/FoundryVTT-HearMe",
   "manifest": "https://github.com/KuriGohan-004/FoundryVTT-HearMe/blob/main/module.json",
   "download": "https://github.com/KuriGohan-004/FoundryVTT-HearMe/archive/refs/heads/main.zip",
-  "license": ""
+  "license": "",
+  "esmodules": [
+    "scripts/key-commands.js",
+    "scripts/token-auto-flip.js",
+    "scripts/vn-dialogue.js",
+    "scripts/z-order.js"
+  ],
+  "settings": [
+    {
+      "key": "autoZOrder",
+      "name": "Auto Z-Order by Y Position",
+      "hint": "If enabled, tokens will automatically reorder based on their Y position (higher = on top).",
+      "scope": "world",
+      "config": true,
+      "type": "Boolean",
+      "default": true
+    }
+  ]
 }
-
-
-
-
-
-
-
-
