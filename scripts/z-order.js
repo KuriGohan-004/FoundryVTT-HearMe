@@ -7,8 +7,6 @@ Hooks.on("canvasReady", () => {
   canvas.tokens.placeables.forEach(updateTokenSort);
 });
 
-Hooks.on("updateToken", (doc, change) => {
-  if (change.x !== undefined || change.y !== undefined) {
-    updateTokenSort(doc.object);
-  }
+Hooks.on("updateToken", (doc) => {
+  updateTokenSort(doc.object);
 });
