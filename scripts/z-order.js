@@ -1,15 +1,26 @@
-function updateTokenSort(token) {
-  if (!token) return;
-  token.document.update({ sort: Math.round(token.y) });
+function updateAllTokenSorts() {
+  if (!canvas?.tokens) return;
+
+  for (const token of canvas.tokens.placeables) {
+    token.document.update(
+      { sort: Math.round(token.y) },
+      { diff: false, silent: true }
+    );
+  }
 }
 
 Hooks.on("canvasReady", () => {
-  canvas.tokens.placeables.forEach(updateTokenSort);
+  updateAllTokenSorts();
 });
 
-Hooks.on("updateToken", (doc) => {
-  updateTokenSort(doc.object);
+Hooks.on("updateToken", (doc, change) => {
+  // Only re-sort when vertical position changes
+  if (change.y === undefined) return;
+
+  updateAllTokenSorts();
 });
+
+
 
 /* -------------------------------------------- */
 /* Prevent tokens from occupying same grid + elevation */
