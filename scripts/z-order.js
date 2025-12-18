@@ -1,16 +1,51 @@
 function updateTokenSort(token) {
   if (!token) return;
-  const y = Math.round(token.y);
-  if (token.document.sort === y) return;
-  token.document.update({ sort: y }, { animate: false });
+  token.document.update({ sort: Math.round(token.y) });
 }
 
 Hooks.on("canvasReady", () => {
   canvas.tokens.placeables.forEach(updateTokenSort);
 });
 
-Hooks.on("preUpdateToken", (doc, change) => {
-  if (change.x !== undefined || change.y !== undefined) {
-    updateTokenSort(doc.object);
+Hooks.on("updateToken", (doc) => {
+  updateTokenSort(doc.object);
+});
+
+/* -------------------------------------------- */
+/* Prevent tokens from occupying same grid + elevation */
+/* -------------------------------------------- */
+
+Hooks.on("preUpdateToken", (doc, change, options, userId) => {
+  // Only care about movement or elevation changes
+  if (change.x === undefined && change.y === undefined && change.elevation === undefined) {
+    return;
+  }
+
+  const gridSize = canvas.grid.size;
+
+  // Determine the token's new position
+  const newX = change.x ?? doc.x;
+  const newY = change.y ?? doc.y;
+  const newElevation = change.elevation ?? doc.elevation;
+
+  // Snap to grid space
+  const newGridX = Math.round(newX / gridSize);
+  const newGridY = Math.round(newY / gridSize);
+
+  // Check all other tokens
+  for (const token of canvas.tokens.placeables) {
+    if (token.document.id === doc.id) continue;
+
+    const otherGridX = Math.round(token.x / gridSize);
+    const otherGridY = Math.round(token.y / gridSize);
+
+    if (
+      otherGridX === newGridX &&
+      otherGridY === newGridY &&
+      token.document.elevation === newElevation
+    ) {
+      ui.notifications.warn("That space is already occupied.");
+      return false; // ❌ Cancel the move
+    }
   }
 });
