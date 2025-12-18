@@ -51,7 +51,7 @@ Hooks.once("ready", () => {
   Hooks.on("chatMessage", () => {
     const chatInput = document.querySelector("#chat-message");
     if (chatInput && document.activeElement === chatInput) {
-      setTimeout(() => chatInput.blur(), 1000);
+      setTimeout(() => chatInput.blur(), 100);
     }
   });
 
