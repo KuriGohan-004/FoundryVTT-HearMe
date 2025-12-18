@@ -1,47 +1,53 @@
 /**
  * token-auto-flip.js
- * Auto-flips tokens horizontally in Foundry VTT 13 when they move left or right.
- * No rotation, indicators, or delays — instant flip.
+ * Instantly flips tokens horizontally when moving right or left in Foundry VTT v13.
+ * No animation, rotation, or indicators — true instantaneous sprite flip.
  */
 
 Hooks.once("ready", () => {
-  console.log("hearme-chat-notification | token-auto-flip active");
+  console.log("hearme-chat-notification | token-auto-flip (instant) active");
 
-  const lastPositions = new Map();
+  const lastX = new Map();
 
+  // Track starting positions
   Hooks.on("canvasReady", (canvas) => {
     for (const token of canvas.tokens.placeables) {
-      lastPositions.set(token.id, token.x);
+      lastX.set(token.id, token.x);
     }
   });
 
-  Hooks.on("updateToken", (tokenDoc, changes, options, userId) => {
-    try {
-      if (!("x" in changes)) return; // only care about X movement
+  Hooks.on("updateToken", async (tokenDoc, changes, options, userId) => {
+    // Only handle position changes by user (not internal Foundry updates)
+    if (!("x" in changes)) return;
 
-      const prevX = lastPositions.get(tokenDoc.id) ?? tokenDoc.x;
-      const newX = changes.x;
-      if (newX === prevX) return;
+    const oldX = lastX.get(tokenDoc.id) ?? tokenDoc.x;
+    const newX = changes.x;
+    if (newX === oldX) return;
 
-      const movingRight = newX > prevX;
-      const movingLeft  = newX < prevX;
+    const movingRight = newX > oldX;
+    const movingLeft  = newX < oldX;
+    const currentScaleX = tokenDoc.texture.scaleX ?? 1;
+    let targetScaleX = currentScaleX;
 
-      const currentScaleX = tokenDoc.texture.scaleX ?? 1;
-      let targetScaleX = currentScaleX;
+    // Determine direction → flip immediately
+    if (movingRight && currentScaleX > 0) targetScaleX = -Math.abs(currentScaleX);
+    else if (movingLeft && currentScaleX < 0) targetScaleX = Math.abs(currentScaleX);
 
-      if (movingRight && currentScaleX > 0) targetScaleX = -Math.abs(currentScaleX);
-      else if (movingLeft && currentScaleX < 0) targetScaleX = Math.abs(currentScaleX);
-
-      if (targetScaleX !== currentScaleX) {
-        tokenDoc.update({ "texture.scaleX": targetScaleX });
-      }
-
-      lastPositions.set(tokenDoc.id, newX);
-    } catch (e) {
-      console.error("token-auto-flip | Error flipping token:", e);
+    // Skip if no change
+    if (targetScaleX === currentScaleX) {
+      lastX.set(tokenDoc.id, newX);
+      return;
     }
+
+    // Update without animation or vision refresh
+    await tokenDoc.update(
+      { "texture.scaleX": targetScaleX },
+      { animate: false, diff: false, render: false }
+    );
+
+    lastX.set(tokenDoc.id, newX);
   });
 
-  Hooks.on("createToken", (doc) => lastPositions.set(doc.id, doc.x));
-  Hooks.on("deleteToken", (doc) => lastPositions.delete(doc.id));
+  Hooks.on("createToken", (doc) => lastX.set(doc.id, doc.x));
+  Hooks.on("deleteToken", (doc) => lastX.delete(doc.id));
 });
