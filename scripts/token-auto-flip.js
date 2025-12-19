@@ -2,55 +2,59 @@
  * token-auto-flip.js
  * Foundry VTT v13
  * - Flips tokens to face movement direction
- * - HALTS movement if token is not facing that direction
- * - Adds a short flip lock to prevent simultaneous movement
- * - Adds "face target" hotkey: press T to instantly flip toward mouse cursor
+ * - NO automatic movement when flipping
+ * - Only moves if already facing the intended direction
+ * - Adds "face target" hotkey (T)
  */
 
 Hooks.once("ready", () => {
-  console.log("token-auto-flip | flip lock active");
+  console.log("token-auto-flip | flip without movement active");
 
   const FLIP_SPEED = { animate: false, diff: false, render: false };
   const FACE_KEY = "KeyT";
-  const flipLock = new Map(); // token.id -> timestamp until movement is locked
-  const LOCK_DURATION = 100; // milliseconds
 
-  // --- Flip before move, halt movement if not facing direction
-  Hooks.on("preUpdateToken", async (tokenDoc, changes, options, userId) => {
-    if (!("x" in changes)) return;
+  // --- Keyboard movement interception
+  window.addEventListener("keydown", async (event) => {
+    // Ignore if typing in chat/input
+    const active = document.activeElement;
+    if (active && (active.tagName === "INPUT" || active.tagName === "TEXTAREA" || active.isContentEditable)) return;
 
-    const oldX = tokenDoc.x;
-    const newX = changes.x;
-    if (newX === oldX) return;
+    const controlled = canvas.tokens.controlled;
+    if (!controlled?.length) return;
 
-    const now = Date.now();
-    if (flipLock.get(tokenDoc.id) > now) {
-      // Token is locked: cancel movement
-      changes.x = oldX;
-      return;
+    const moveRightKeys = ["ArrowRight", "KeyD"];
+    const moveLeftKeys  = ["ArrowLeft", "KeyA"];
+
+    let wantMoveRight = moveRightKeys.includes(event.code);
+    let wantMoveLeft  = moveLeftKeys.includes(event.code);
+
+    // If key is not horizontal movement, ignore
+    if (!wantMoveRight && !wantMoveLeft) return;
+
+    for (const token of controlled) {
+      const tokenDoc = token.document;
+      const currentScaleX = tokenDoc.texture.scaleX ?? 1;
+
+      const facingRight = currentScaleX < 0;
+      const facingLeft  = currentScaleX > 0;
+
+      // Determine if flip is needed
+      let needFlip = false;
+      if (wantMoveRight && facingLeft) needFlip = true;
+      if (wantMoveLeft && facingRight) needFlip = true;
+
+      if (needFlip) {
+        // Flip token
+        const targetScaleX = wantMoveRight ? -Math.abs(currentScaleX) : Math.abs(currentScaleX);
+        await tokenDoc.update({ "texture.scaleX": targetScaleX }, FLIP_SPEED);
+
+        // Prevent default movement
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        return; // Only flip once
+      }
     }
-
-    const movingRight = newX > oldX;
-    const movingLeft = newX < oldX;
-    const currentScaleX = tokenDoc.texture.scaleX ?? 1;
-
-    const facingRight = currentScaleX < 0;
-    const facingLeft = currentScaleX > 0;
-
-    const needFlip = (movingRight && facingLeft) || (movingLeft && facingRight);
-
-    if (needFlip) {
-      // Flip token
-      const targetScaleX = movingRight ? -Math.abs(currentScaleX) : Math.abs(currentScaleX);
-      await tokenDoc.update({ "texture.scaleX": targetScaleX }, FLIP_SPEED);
-
-      // Cancel movement
-      changes.x = oldX;
-
-      // Lock further movement briefly
-      flipLock.set(tokenDoc.id, now + LOCK_DURATION);
-    }
-  });
+  }, true); // use capture phase to intercept before Foundry
 
   // --- Face target hotkey
   window.addEventListener("keydown", async (event) => {
