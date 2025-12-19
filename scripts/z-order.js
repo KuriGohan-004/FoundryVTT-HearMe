@@ -78,7 +78,6 @@ Hooks.on("preUpdateToken", (doc, change, options, userId) => {
       otherGridY === newGridY &&
       token.document.elevation === newElevation
     ) {
-      ui.notifications.warn("That space is already occupied.");
       return false; // ❌ Cancel the move
     }
   }
