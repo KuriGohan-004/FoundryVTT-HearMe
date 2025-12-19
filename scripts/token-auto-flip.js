@@ -9,16 +9,7 @@
 Hooks.once("ready", () => {
   console.log("token-auto-flip | instant pre-move + face key active");
 
-  const lastX = new Map();
-  const FACE_KEY = "KeyT";
   const FLIP_SPEED = { animate: false, diff: false, render: false };
-
-  // Record starting positions
-  Hooks.on("canvasReady", (canvas) => {
-    for (const token of canvas.tokens.placeables) {
-      lastX.set(token.id, token.x);
-    }
-  });
 
   // Flip before move, halt movement if not facing direction
   Hooks.on("preUpdateToken", async (tokenDoc, changes, options, userId) => {
@@ -33,34 +24,25 @@ Hooks.once("ready", () => {
     const currentScaleX = tokenDoc.texture.scaleX ?? 1;
 
     // Determine facing based on scale
-    const facingRight = currentScaleX < 0;  // negative scale = facing right
-    const facingLeft = currentScaleX > 0;   // positive scale = facing left
+    const facingRight = currentScaleX < 0; // negative scale = facing right
+    const facingLeft = currentScaleX > 0;  // positive scale = facing left
 
-    let needFlip = false;
-
-    if (movingRight && facingLeft) needFlip = true;
-    if (movingLeft && facingRight) needFlip = true;
+    // Check if flip is needed
+    const needFlip = (movingRight && facingLeft) || (movingLeft && facingRight);
 
     if (needFlip) {
       // Flip token
       const targetScaleX = movingRight ? -Math.abs(currentScaleX) : Math.abs(currentScaleX);
       await tokenDoc.update({ "texture.scaleX": targetScaleX }, FLIP_SPEED);
 
-      // Halt movement by removing x change
-      delete changes.x;
-
-      // Update lastX to current position
-      lastX.set(tokenDoc.id, oldX);
-    } else {
-      // Already facing correct direction → allow move
-      lastX.set(tokenDoc.id, newX);
+      // Completely cancel movement: revert x to old value
+      changes.x = oldX;
     }
+    // else: allow movement normally
   });
 
-  Hooks.on("createToken", (doc) => lastX.set(doc.id, doc.x));
-  Hooks.on("deleteToken", (doc) => lastX.delete(doc.id));
-
   // Face target key
+  const FACE_KEY = "KeyT";
   window.addEventListener("keydown", async (event) => {
     if (event.code !== FACE_KEY) return;
 
