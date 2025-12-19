@@ -14,13 +14,19 @@ function updateAllTokenSorts() {
   if (!canvas?.tokens) return;
 
   for (const token of canvas.tokens.placeables) {
-    token.document.update(
-      { sort: Math.round(token.y) },
-      { diff: false, silent: true }
-    );
+    // Only update client-side sort if the user can't update the token
+    if (token.document.isOwner) {
+      token.document.update(
+        { sort: Math.round(token.y) },
+        { diff: false, silent: true }
+      );
+    } else {
+      // For players without permission, just set the internal _sort
+      token.document._sort = Math.round(token.y);
+    }
   }
 
-  canvas.tokens.placeables.sort((a, b) => a.document.sort - b.document.sort);
+  canvas.tokens.placeables.sort((a, b) => (a.document.sort ?? a.document._sort) - (b.document.sort ?? b.document._sort));
   canvas.tokens.refresh();
 }
 
@@ -41,32 +47,24 @@ Hooks.on("releaseToken", () => {
   queueDepthRefresh();
 });
 
-
-
-
-
 /* -------------------------------------------- */
 /* Prevent tokens from occupying same grid + elevation */
 /* -------------------------------------------- */
 
 Hooks.on("preUpdateToken", (doc, change, options, userId) => {
-  // Only care about movement or elevation changes
   if (change.x === undefined && change.y === undefined && change.elevation === undefined) {
     return;
   }
 
   const gridSize = canvas.grid.size;
 
-  // Determine the token's new position
   const newX = change.x ?? doc.x;
   const newY = change.y ?? doc.y;
   const newElevation = change.elevation ?? doc.elevation;
 
-  // Snap to grid space
   const newGridX = Math.round(newX / gridSize);
   const newGridY = Math.round(newY / gridSize);
 
-  // Check all other tokens
   for (const token of canvas.tokens.placeables) {
     if (token.document.id === doc.id) continue;
 
