@@ -203,8 +203,6 @@ Hooks.once("init", () => {
 
 
 Hooks.once("ready", () => {
-
-  // Only run if VN banner enabled
   if (!game.settings.get("hearme-chat-notification", "vnEnabled")) return;
 
   let banner, nameBar, nameEl, msgBar, msgEl, portrait, timerBar;
@@ -215,9 +213,6 @@ Hooks.once("ready", () => {
   let typeProgress = 0;
   let hideTimeout = null;
 
-  // -----------------------------
-  // DOM Setup
-  // -----------------------------
   function createBannerDom() {
     if (banner) return;
 
@@ -242,7 +237,6 @@ Hooks.once("ready", () => {
       height: `${vh * 0.2}px`
     });
 
-    // Name Bar
     nameBar = document.createElement("div");
     Object.assign(nameBar.style, {
       display: "flex",
@@ -258,7 +252,6 @@ Hooks.once("ready", () => {
     nameBar.appendChild(nameEl);
     banner.appendChild(nameBar);
 
-    // Message Bar
     msgBar = document.createElement("div");
     Object.assign(msgBar.style, {
       position: "relative",
@@ -289,7 +282,6 @@ Hooks.once("ready", () => {
     banner.appendChild(msgBar);
     document.body.appendChild(banner);
 
-    // Portrait
     portrait = document.createElement("img");
     Object.assign(portrait.style, {
       position: "fixed",
@@ -302,9 +294,6 @@ Hooks.once("ready", () => {
     window.addEventListener("resize", applyBannerSettings);
   }
 
-  // -----------------------------
-  // Apply Settings
-  // -----------------------------
   function applyBannerSettings() {
     if (!banner) return;
     const vw = window.innerWidth;
@@ -332,9 +321,6 @@ Hooks.once("ready", () => {
     } else portrait.style.display = "none";
   }
 
-  // -----------------------------
-  // Typewriter w/ punctuation slowdown
-  // -----------------------------
   function formatMessageText(text) {
     return text.replace(/\*(.*?)\*/g, "<i>$1</i>").replace(/\n/g,"<br>");
   }
@@ -366,18 +352,17 @@ Hooks.once("ready", () => {
       timerBar.style.transform = `scaleX(${progressRatio})`;
 
       clearInterval(typeInterval);
-      typeInterval = setInterval(arguments.callee, delay);
+      typeInterval = setInterval(() => typeWriter(element,text,callback), delay);
     },30);
   }
 
-  // -----------------------------
-  // Show / Hide Banner
-  // -----------------------------
   function hideBanner() {
+    if(!banner) return;
     banner.style.opacity="0";
     portrait.style.opacity="0";
     timerBar.style.transform="scaleX(0)";
-    setTimeout(()=>{
+    clearTimeout(hideTimeout);
+    hideTimeout = setTimeout(()=>{
       banner.style.display="none";
       currentMessage=null;
       processNextMessage();
@@ -394,7 +379,7 @@ Hooks.once("ready", () => {
 
     if(game.settings.get("hearme-chat-notification","vnPortraitEnabled")){
       portrait.src = message.speaker?.token
-        ? game.scenes.active?.tokens.get(message.speaker.token)?.texture.src
+        ? game.scenes.active?.tokens.get(message.speaker.token)?.texture.src || ""
         : game.actors.get(message.speaker.actor)?.img || "";
       portrait.style.opacity="1";
     }
@@ -420,9 +405,6 @@ Hooks.once("ready", () => {
     });
   }
 
-  // -----------------------------
-  // Queue Messages
-  // -----------------------------
   function queueMessage(message){
     messageQueue.push(message);
     if(!typing && !currentMessage) processNextMessage();
@@ -450,9 +432,6 @@ Hooks.once("ready", () => {
     }
   });
 
-  // -----------------------------
-  // Chat Hook
-  // -----------------------------
   createBannerDom();
   Hooks.on("createChatMessage",(message)=>{
     if(!message.visible || message.isRoll) return;
