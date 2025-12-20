@@ -204,6 +204,51 @@ game.settings.register("hearme-chat-notification", "vnBackgroundImage", {
     range: { min: 0, max: 75, step: 1 }
   });
 
+  // BLOCK
+  // Padding (top & bottom) for Name
+game.settings.register("hearme-chat-notification", "vnNamePaddingTop", {
+  name: "Name Padding Top (px)",
+  hint: "Top padding for the character name in the VN banner.",
+  scope: "world",
+  config: true,
+  type: Number,
+  default: 2,
+  range: { min: 0, max: 50, step: 1 }
+});
+
+game.settings.register("hearme-chat-notification", "vnNamePaddingBottom", {
+  name: "Name Padding Bottom (px)",
+  hint: "Bottom padding for the character name in the VN banner.",
+  scope: "world",
+  config: true,
+  type: Number,
+  default: 2,
+  range: { min: 0, max: 50, step: 1 }
+});
+
+// Padding (top & bottom) for Message
+game.settings.register("hearme-chat-notification", "vnMsgPaddingTop", {
+  name: "Message Padding Top (px)",
+  hint: "Top padding for the message text in the VN banner.",
+  scope: "world",
+  config: true,
+  type: Number,
+  default: 2,
+  range: { min: 0, max: 50, step: 1 }
+});
+
+game.settings.register("hearme-chat-notification", "vnMsgPaddingBottom", {
+  name: "Message Padding Bottom (px)",
+  hint: "Bottom padding for the message text in the VN banner.",
+  scope: "world",
+  config: true,
+  type: Number,
+  default: 2,
+  range: { min: 0, max: 50, step: 1 }
+});
+  // CHCEK
+
+  
 });
 
 
@@ -269,6 +314,7 @@ function createBannerDom() {
 }
 
 
+  
 function applyBannerSettings() {
   if (!banner) return;
 
@@ -308,6 +354,11 @@ function applyBannerSettings() {
     portrait.style.bottom = bottom + "px";
   } else portrait.style.display = "none";
 }
+// Apply padding
+nameEl.style.paddingTop = `${game.settings.get("hearme-chat-notification", "vnNamePaddingTop")}px`;
+nameEl.style.paddingBottom = `${game.settings.get("hearme-chat-notification", "vnNamePaddingBottom")}px`;
+msgEl.style.paddingTop = `${game.settings.get("hearme-chat-notification", "vnMsgPaddingTop")}px`;
+msgEl.style.paddingBottom = `${game.settings.get("hearme-chat-notification", "vnMsgPaddingBottom")}px`;
 
 
   function formatMessageText(text) {
@@ -432,4 +483,5 @@ function applyBannerSettings() {
   });
 
 });
+
 
