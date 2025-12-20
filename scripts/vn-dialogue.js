@@ -267,15 +267,15 @@ function createBannerDom() {
 
 // APPLY Banner Settings
 
-  function applyBannerSettings() {
+applyBannerSettings();
+window.addEventListener("resize", applyBannerSettings);
+
+function applyBannerSettings() {
   if (!banner) return;
 
   const vw = window.innerWidth;
   const vh = window.innerHeight;
 
-  // -----------------------------
-  // Banner sizing & positioning
-  // -----------------------------
   const widthPx = game.settings.get("hearme-chat-notification", "vnWidthPct") / 100 * vw;
   const heightPx = game.settings.get("hearme-chat-notification", "vnHeightPct") / 100 * vh;
   banner.style.width = `${widthPx}px`;
@@ -285,9 +285,6 @@ function createBannerDom() {
   banner.style.left = (game.settings.get("hearme-chat-notification", "vnOffsetXPct") / 100 * vw) + "px";
   banner.style.bottom = (game.settings.get("hearme-chat-notification", "vnOffsetYPct") / 100 * vh) + "px";
 
-  // -----------------------------
-  // Font sizing & style
-  // -----------------------------
   const fontSizeNamePx = game.settings.get("hearme-chat-notification", "vnFontSizeNamePct") / 100 * vw;
   const fontSizeMsgPx = game.settings.get("hearme-chat-notification", "vnFontSizeMsgPct") / 100 * vw;
   nameEl.style.fontSize = `${fontSizeNamePx}px`;
@@ -295,9 +292,6 @@ function createBannerDom() {
   nameEl.style.color = msgEl.style.color = game.settings.get("hearme-chat-notification", "vnFontColor");
   nameEl.style.fontFamily = msgEl.style.fontFamily = game.settings.get("hearme-chat-notification", "vnFontFamily");
 
-  // -----------------------------
-  // Background image or color
-  // -----------------------------
   const bgImage = game.settings.get("hearme-chat-notification", "vnBackgroundImage");
   if (bgImage) {
     banner.style.background = `url("${bgImage}") no-repeat center center / cover`;
@@ -305,30 +299,19 @@ function createBannerDom() {
     banner.style.background = game.settings.get("hearme-chat-notification", "vnBackgroundColor");
   }
 
-  // -----------------------------
-  // Name & message padding (top/bottom)
-  // -----------------------------
-  const bannerHeight = heightPx; // use computed height, not getBoundingClientRect
-
-  nameEl.style.paddingTop = (game.settings.get("hearme-chat-notification", "vnNamePaddingTop") / 100 * bannerHeight) + "px";
-  nameEl.style.paddingBottom = (game.settings.get("hearme-chat-notification", "vnNamePaddingBottom") / 100 * bannerHeight) + "px";
-
-  msgEl.style.paddingTop = (game.settings.get("hearme-chat-notification", "vnMsgPaddingTop") / 100 * bannerHeight) + "px";
-  msgEl.style.paddingBottom = (game.settings.get("hearme-chat-notification", "vnMsgPaddingBottom") / 100 * bannerHeight) + "px";
-
-  // -----------------------------
-  // Portrait positioning
-  // -----------------------------
   if (game.settings.get("hearme-chat-notification", "vnPortraitEnabled")) {
     portrait.style.display = "block";
     const size = game.settings.get("hearme-chat-notification", "vnPortraitSizePct") / 100 * vw;
     const left = game.settings.get("hearme-chat-notification", "vnPortraitOffsetXPct") / 100 * vw;
     const bottom = game.settings.get("hearme-chat-notification", "vnPortraitOffsetYPct") / 100 * vh;
-    portrait.style.width = portrait.style.height = size + "px";
-    portrait.style.left = left + "px";
-    portrait.style.bottom = bottom + "px";
-  } else portrait.style.display = "none";
+    portrait.style.width = portrait.style.height = `${size}px`;
+    portrait.style.left = `${left}px`;
+    portrait.style.bottom = `${bottom}px`;
+  } else {
+    portrait.style.display = "none";
+  }
 }
+
 
 
   // END Banner Settings
@@ -456,6 +439,7 @@ function createBannerDom() {
   });
 
 });
+
 
 
 
