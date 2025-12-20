@@ -209,7 +209,11 @@ Hooks.once("ready", () => {
   let hideTimeout = null;
   let typing = false;
   let messageQueue = [];
+  let currentMessage = null;
 
+  // -----------------------------
+  // DOM Setup
+  // -----------------------------
   function createBannerDom() {
     if (banner) return;
 
@@ -290,20 +294,18 @@ Hooks.once("ready", () => {
   function typeWriter(element, text, callback) {
     typing = true;
     element.innerHTML = "";
-    const sanitized = text;
     let i = 0;
 
     function nextChar() {
-      if (i >= sanitized.length) {
+      if (i >= text.length) {
         typing = false;
         callback?.();
         return;
       }
-      const char = sanitized[i];
+      const char = text[i];
       element.innerHTML += char;
       i++;
 
-      // Slow down for punctuation
       let delay = 30;
       if (char === "." || char === "!" || char === "?") delay = 200;
       if (char === "," || char === ";") delay = 100;
@@ -317,18 +319,23 @@ Hooks.once("ready", () => {
     if (!banner) return;
     banner.style.opacity = "0";
     portrait.style.opacity = "0";
-    setTimeout(() => banner.style.display = "none", 250);
-    processNextMessage();
+    setTimeout(() => {
+      banner.style.display = "none";
+      currentMessage = null;
+      processNextMessage();
+    }, 250);
   }
 
   function showBanner(message) {
     if (!game.settings.get("hearme-chat-notification", "vnEnabled")) return;
     if (!banner) createBannerDom();
     if (game.settings.get("hearme-chat-notification", "vnHideInCombat") && game.combat) {
+      currentMessage = null;
       processNextMessage();
       return;
     }
 
+    currentMessage = message;
     applyBannerSettings();
 
     const actorName = message.speaker?.actor ? game.actors.get(message.speaker.actor)?.name : message.user?.name || "Unknown";
@@ -346,19 +353,16 @@ Hooks.once("ready", () => {
     banner.style.display = "flex";
     banner.style.opacity = "1";
 
-    // Typewriter effect
     typeWriter(msgEl, message.content, () => {
-      // After typing completes, start auto-hide
       const delayPerChar = game.settings.get("hearme-chat-notification", "vnAutoHideTimePerChar");
       if (delayPerChar > 0) {
         hideTimeout = setTimeout(hideBanner, message.content.length * delayPerChar * 1000);
       } else if (!game.settings.get("hearme-chat-notification", "vnHideUntilDismissed")) {
-        hideTimeout = setTimeout(hideBanner, 3000); // default fallback
+        hideTimeout = setTimeout(hideBanner, 3000);
       }
 
-      // Show message in chat after banner if option enabled
       if (game.settings.get("hearme-chat-notification", "vnHideUntilDismissed") && !message._vnShown) {
-        message._vnShown = true; // mark it so it only appears once
+        message._vnShown = true;
         ChatMessage.create({
           content: message.content,
           speaker: message.speaker
@@ -369,9 +373,7 @@ Hooks.once("ready", () => {
 
   function queueMessage(message) {
     messageQueue.push(message);
-    if (!typing && banner.style.display !== "flex") {
-      processNextMessage();
-    }
+    if (!typing && !currentMessage) processNextMessage();
   }
 
   function processNextMessage() {
@@ -383,19 +385,24 @@ Hooks.once("ready", () => {
   document.addEventListener("keydown", (ev) => {
     if (document.activeElement.tagName === "INPUT" || document.activeElement.tagName === "TEXTAREA") return;
     const skipKey = game.settings.get("hearme-chat-notification", "vnSkipKey");
-    if (ev.key === skipKey && typing) {
-      // Finish typing immediately
-      msgEl.innerHTML = formatMessageText(messageQueue[0]?.content || msgEl.textContent);
-      typing = false;
+    if (!currentMessage) return;
 
-      const delayPerChar = game.settings.get("hearme-chat-notification", "vnAutoHideTimePerChar");
-      if (delayPerChar > 0 && messageQueue[0]) {
-        hideTimeout = setTimeout(hideBanner, messageQueue[0].content.length * delayPerChar * 1000);
+    if (ev.key === skipKey) {
+      if (typing) {
+        msgEl.innerHTML = formatMessageText(currentMessage.content);
+        typing = false;
+        const delayPerChar = game.settings.get("hearme-chat-notification", "vnAutoHideTimePerChar");
+        if (delayPerChar > 0) hideTimeout = setTimeout(hideBanner, currentMessage.content.length * delayPerChar * 1000);
+      } else {
+        hideBanner();
       }
-    } else if (ev.key === skipKey) {
-      hideBanner();
     }
   });
+
+  // -----------------------------
+  // Chat hook
+  // -----------------------------
+  createBannerDom();
 
   Hooks.on("createChatMessage", (message) => {
     if (!message.visible) return;
