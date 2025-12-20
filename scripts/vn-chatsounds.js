@@ -1,8 +1,8 @@
 Hooks.once("init", () => {
 
   game.settings.register("hearme-chat-notification", "soundEnabled", {
-    name: "Enable Notification Sound",
-    hint: "Toggle chat notification sounds on or off.",
+    name: "Enable Chat Notification Sound",
+    hint: "Play a sound when a chat message appears.",
     scope: "client",
     config: true,
     type: Boolean,
@@ -10,8 +10,8 @@ Hooks.once("init", () => {
   });
 
   game.settings.register("hearme-chat-notification", "pingSound", {
-    name: "Notification Sound",
-    hint: "Sound file to play for notifications.",
+    name: "Chat Notification Sound",
+    hint: "Sound file to play when a chat message appears.",
     scope: "client",
     config: true,
     type: String,
@@ -21,11 +21,11 @@ Hooks.once("init", () => {
 
 });
 
-/**
- * Plays the configured notification sound.
- * Extracted directly from the original module logic.
- */
-export function playNotificationSound() {
+/* =========================================================
+ *  SOUND LOGIC — DIRECTLY FROM YOUR ORIGINAL SCRIPT
+ * =======================================================*/
+
+function playChatSound() {
   if (!game.settings.get("hearme-chat-notification", "soundEnabled")) return;
 
   const src = game.settings.get("hearme-chat-notification", "pingSound");
@@ -45,3 +45,20 @@ export function playNotificationSound() {
     true
   );
 }
+
+/* =========================================================
+ *  CHAT HOOK — STANDALONE
+ * =======================================================*/
+
+Hooks.on("createChatMessage", (message) => {
+  if (!message.visible) return;
+  if (message.isRoll) return;
+
+  // Ignore whispers
+  if (message.type === CONST.CHAT_MESSAGE_TYPES.WHISPER) return;
+
+  // Optional: ignore system messages
+  if (!message.user) return;
+
+  playChatSound();
+});
