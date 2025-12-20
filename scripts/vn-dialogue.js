@@ -204,14 +204,10 @@ game.settings.register("hearme-chat-notification", "vnBackgroundImage", {
     range: { min: 0, max: 75, step: 1 }
   });
 
-  
-});
-
 
 
 
 Hooks.once("ready", () => {
-
   if (!game.settings.get("hearme-chat-notification", "vnEnabled")) return;
 
   let banner, nameEl, msgEl, portrait;
@@ -223,52 +219,44 @@ Hooks.once("ready", () => {
   // -----------------------------
   // DOM Setup
   // -----------------------------
-function createBannerDom() {
-  if (banner) return;
+  function createBannerDom() {
+    if (banner) return;
 
-  banner = document.createElement("div");
-  banner.id = "vn-chat-banner";
-  banner.style.position = "fixed";
-  banner.style.display = "none";
-  banner.style.flexDirection = "column";
-  banner.style.justifyContent = "flex-start";
-  banner.style.zIndex = 999;
-  banner.style.padding = "0.5em";
-  banner.style.backdropFilter = "blur(4px)";
-  banner.style.boxShadow = "0 -2px 10px rgba(0,0,0,0.7)";
-  banner.style.opacity = "0";
-  banner.style.transition = "opacity 0.25s ease";
-  banner.style.overflowY = "auto";
+    banner = document.createElement("div");
+    banner.id = "vn-chat-banner";
+    banner.style.position = "fixed";
+    banner.style.display = "none";
+    banner.style.flexDirection = "column";
+    banner.style.justifyContent = "flex-start";
+    banner.style.zIndex = 999;
+    banner.style.padding = "0.5em";
+    banner.style.backdropFilter = "blur(4px)";
+    banner.style.boxShadow = "0 -2px 10px rgba(0,0,0,0.7)";
+    banner.style.opacity = "0";
+    banner.style.transition = "opacity 0.25s ease";
+    banner.style.overflowY = "auto";
 
-  // **Allow clicks to pass through**
-  banner.style.pointerEvents = "none";
+    nameEl = document.createElement("div");
+    nameEl.id = "vn-chat-name";
+    nameEl.style.fontWeight = "bold";
+    banner.appendChild(nameEl);
 
-  nameEl = document.createElement("div");
-  nameEl.id = "vn-chat-name";
-  nameEl.style.fontWeight = "bold";
-  banner.appendChild(nameEl);
+    msgEl = document.createElement("div");
+    msgEl.id = "vn-chat-msg";
+    banner.appendChild(msgEl);
 
-  msgEl = document.createElement("div");
-  msgEl.id = "vn-chat-msg";
-  banner.appendChild(msgEl);
+    document.body.appendChild(banner);
 
-  document.body.appendChild(banner);
+    portrait = document.createElement("img");
+    portrait.id = "vn-chat-portrait";
+    portrait.style.position = "fixed";
+    portrait.style.opacity = "0";
+    portrait.style.transition = "opacity 0.5s ease";
+    document.body.appendChild(portrait);
 
-  portrait = document.createElement("img");
-  portrait.id = "vn-chat-portrait";
-  portrait.style.position = "fixed";
-  portrait.style.opacity = "0";
-  portrait.style.transition = "opacity 0.5s ease";
-
-  // **Allow clicks to pass through**
-  portrait.style.pointerEvents = "none";
-
-  document.body.appendChild(portrait);
-
-// APPLY Banner Settings
-
-applyBannerSettings();
-window.addEventListener("resize", applyBannerSettings);
+    applyBannerSettings();
+    window.addEventListener("resize", applyBannerSettings);
+  }
 
 function applyBannerSettings() {
   if (!banner) return;
@@ -304,23 +292,23 @@ function applyBannerSettings() {
     const size = game.settings.get("hearme-chat-notification", "vnPortraitSizePct") / 100 * vw;
     const left = game.settings.get("hearme-chat-notification", "vnPortraitOffsetXPct") / 100 * vw;
     const bottom = game.settings.get("hearme-chat-notification", "vnPortraitOffsetYPct") / 100 * vh;
-    portrait.style.width = portrait.style.height = `${size}px`;
-    portrait.style.left = `${left}px`;
-    portrait.style.bottom = `${bottom}px`;
-  } else {
-    portrait.style.display = "none";
-  }
+    portrait.style.width = portrait.style.height = size + "px";
+    portrait.style.left = left + "px";
+    portrait.style.bottom = bottom + "px";
+  } else portrait.style.display = "none";
 }
 
 
-
-  // END Banner Settings
-
-
+  // -----------------------------
+  // Text formatting
+  // -----------------------------
   function formatMessageText(text) {
     return text.replace(/\*(.*?)\*/g, "<i>$1</i>").replace(/\n/g, "<br>");
   }
 
+  // -----------------------------
+  // Typewriter effect
+  // -----------------------------
   function typeWriter(element, text, callback) {
     typing = true;
     element.innerHTML = "";
@@ -345,6 +333,9 @@ function applyBannerSettings() {
     nextChar();
   }
 
+  // -----------------------------
+  // Hide banner
+  // -----------------------------
   function hideBanner() {
     if (!banner) return;
     banner.style.opacity = "0";
@@ -356,44 +347,53 @@ function applyBannerSettings() {
     }, 250);
   }
 
- function showBanner(message) {
-  if (!game.settings.get("hearme-chat-notification", "vnEnabled")) return;
-  if (!banner) createBannerDom();
-  if (game.settings.get("hearme-chat-notification", "vnHideInCombat") && game.combat) {
-    currentMessage = null;
-    processNextMessage();
-    return;
+  // -----------------------------
+  // Show banner
+  // -----------------------------
+  function showBanner(message) {
+    if (!game.settings.get("hearme-chat-notification", "vnEnabled")) return;
+    if (!banner) createBannerDom();
+    if (game.settings.get("hearme-chat-notification", "vnHideInCombat") && game.combat) {
+      currentMessage = null;
+      processNextMessage();
+      return;
+    }
+
+    currentMessage = message;
+    applyBannerSettings();
+
+    const actorName = message.speaker?.actor
+      ? game.actors.get(message.speaker.actor)?.name
+      : message.user?.name || "Unknown";
+    nameEl.innerHTML = actorName;
+
+    if (game.settings.get("hearme-chat-notification", "vnPortraitEnabled")) {
+      if (message.speaker?.token) {
+        const scene = game.scenes.active;
+        const token = scene?.tokens.get(message.speaker.token);
+        portrait.src = token?.texture.src || game.actors.get(message.speaker.actor)?.img || "";
+      } else {
+        portrait.src = game.actors.get(message.speaker.actor)?.img || "";
+      }
+      portrait.style.opacity = "1";
+    }
+
+    banner.style.display = "flex";
+    banner.style.opacity = "1";
+
+    typeWriter(msgEl, message.content, () => {
+      const delayPerChar = game.settings.get("hearme-chat-notification", "vnAutoHideTimePerChar");
+      const timePerChar = delayPerChar > 0 ? message.content.length * delayPerChar * 1000 : 0;
+      const minTime = 2000; // minimum 2 seconds
+      const totalTime = Math.max(minTime, timePerChar);
+
+      hideTimeout = setTimeout(hideBanner, totalTime);
+    });
   }
 
-  currentMessage = message;
-  applyBannerSettings();
-
-  const actorName = message.speaker?.actor ? game.actors.get(message.speaker.actor)?.name : message.user?.name || "Unknown";
-  nameEl.innerHTML = actorName;
-
-  if (game.settings.get("hearme-chat-notification", "vnPortraitEnabled")) {
-    if (message.speaker?.token) {
-      const scene = game.scenes.active;
-      const token = scene?.tokens.get(message.speaker.token);
-      portrait.src = token?.texture.src || game.actors.get(message.speaker.actor)?.img || "";
-    } else portrait.src = game.actors.get(message.speaker.actor)?.img || "";
-    portrait.style.opacity = "1";
-  }
-
-  banner.style.display = "flex";
-  banner.style.opacity = "1";
-
-  typeWriter(msgEl, message.content, () => {
-    const delayPerChar = game.settings.get("hearme-chat-notification", "vnAutoHideTimePerChar");
-    const timePerChar = delayPerChar > 0 ? message.content.length * delayPerChar * 1000 : 0;
-    const minTime = 2000; // minimum 2 seconds
-    const totalTime = Math.max(minTime, timePerChar);
-
-    hideTimeout = setTimeout(hideBanner, totalTime);
-  });
-}
-
-
+  // -----------------------------
+  // Message queue
+  // -----------------------------
   function queueMessage(message) {
     messageQueue.push(message);
     if (!typing && !currentMessage) processNextMessage();
@@ -405,6 +405,9 @@ function applyBannerSettings() {
     showBanner(next);
   }
 
+  // -----------------------------
+  // Skip key handling
+  // -----------------------------
   document.addEventListener("keydown", (ev) => {
     if (document.activeElement.tagName === "INPUT" || document.activeElement.tagName === "TEXTAREA") return;
     const skipKey = game.settings.get("hearme-chat-notification", "vnSkipKey");
@@ -437,11 +440,4 @@ function applyBannerSettings() {
 
     queueMessage(message);
   });
-
 });
-
-
-
-
-
-
