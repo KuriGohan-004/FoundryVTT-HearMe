@@ -361,8 +361,8 @@ Hooks.once("ready", () => {
         hideTimeout = setTimeout(hideBanner, 3000);
       }
 
-      if (game.settings.get("hearme-chat-notification", "vnHideUntilDismissed") && !message._vnShown) {
-        message._vnShown = true;
+      if (game.settings.get("hearme-chat-notification", "vnHideUntilDismissed") && !message.getFlag("hearme-chat-notification", "vnSent")) {
+        message.setFlag("hearme-chat-notification", "vnSent", true);
         ChatMessage.create({
           content: message.content,
           speaker: message.speaker
@@ -408,6 +408,7 @@ Hooks.once("ready", () => {
     if (!message.visible) return;
     if (message.isRoll) return;
     if (message.type === CONST.CHAT_MESSAGE_TYPES.WHISPER) return;
+    if (message.getFlag("hearme-chat-notification", "vnSent")) return;
 
     const content = message.content.trim();
     if (!content || content.startsWith("/ooc") || !message.speaker?.actor) return;
