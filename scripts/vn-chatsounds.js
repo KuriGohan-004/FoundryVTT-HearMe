@@ -1,39 +1,47 @@
 Hooks.once("init", () => {
 
-  game.settings.register("hearme-chat-notification", "soundEnabled", {
-    name: "Enable Chat Notification Sound",
-    hint: "Play a sound when a chat message appears.",
-    scope: "world",
-    config: true,
-    type: Boolean,
-    default: true
-  });
-
+  // Sound for normal messages
   game.settings.register("hearme-chat-notification", "pingSound", {
-    name: "Chat Notification Sound",
-    hint: "Sound file to play when a chat message appears.",
-    scope: "world",
+    name: "Chat Notification Sound (Normal)",
+    hint: "Sound file to play when a regular chat message appears.",
+    scope: "world",          // GM chooses the sound
     config: true,
     type: String,
     default: "modules/hearme-chat-notification/ui/chat-ping.ogg",
     filePicker: "audio"
   });
 
+  // Sound for OOC messages
+  game.settings.register("hearme-chat-notification", "oocPingSound", {
+    name: "Chat Notification Sound (OOC)",
+    hint: "Sound file to play when an OOC or player message appears.",
+    scope: "world",          // GM chooses the sound
+    config: true,
+    type: String,
+    default: "modules/hearme-chat-notification/ui/chat-ooc.ogg",
+    filePicker: "audio"
+  });
+
+  // Toggle for sounds
+  game.settings.register("hearme-chat-notification", "soundEnabled", {
+    name: "Enable Chat Notification Sounds",
+    hint: "Play sounds for chat messages.",
+    scope: "world",
+    config: true,
+    type: Boolean,
+    default: true
+  });
+
 });
 
 /* =========================================================
- *  SOUND LOGIC — SAME AS ORIGINAL SCRIPT
+ *  SOUND LOGIC
  * =======================================================*/
-
-function playChatSound() {
+function playChatSound(src) {
   if (!game.settings.get("hearme-chat-notification", "soundEnabled")) return;
-
-  const src = game.settings.get("hearme-chat-notification", "pingSound");
   if (!src) return;
 
-  if (game.audio?.context?.state === "suspended") {
-    game.audio.context.resume();
-  }
+  if (game.audio?.context?.state === "suspended") game.audio.context.resume();
 
   AudioHelper.play(
     {
@@ -49,13 +57,23 @@ function playChatSound() {
 /* =========================================================
  *  CHAT HOOK — STANDALONE
  * =======================================================*/
-
 Hooks.on("createChatMessage", (message) => {
   if (!message.visible) return;
   if (message.isRoll) return;
 
-  // Ignore whispers
-  if (message.type === CONST.CHAT_MESSAGE_TYPES.WHISPER) return;
+  const content = message.content.trim().toLowerCase();
+  let isOOC = false;
 
-  playChatSound();
+  // Detect OOC:
+  // 1. /ooc command
+  // 2. Message from a user without a token
+  if (content.startsWith("/ooc") || !message.speaker?.token) {
+    isOOC = true;
+  }
+
+  const soundSrc = isOOC
+    ? game.settings.get("hearme-chat-notification", "oocPingSound")
+    : game.settings.get("hearme-chat-notification", "pingSound");
+
+  playChatSound(soundSrc);
 });
