@@ -354,11 +354,14 @@ function applyBannerSettings() {
     portrait.style.bottom = bottom + "px";
   } else portrait.style.display = "none";
 }
-// Apply padding
-nameEl.style.paddingTop = `${game.settings.get("hearme-chat-notification", "vnNamePaddingTop")}px`;
-nameEl.style.paddingBottom = `${game.settings.get("hearme-chat-notification", "vnNamePaddingBottom")}px`;
-msgEl.style.paddingTop = `${game.settings.get("hearme-chat-notification", "vnMsgPaddingTop")}px`;
-msgEl.style.paddingBottom = `${game.settings.get("hearme-chat-notification", "vnMsgPaddingBottom")}px`;
+
+  // Apply Name and Message padding
+if (nameEl && msgEl) {
+  nameEl.style.paddingTop = `${game.settings.get("hearme-chat-notification", "vnNamePaddingTop")}px`;
+  nameEl.style.paddingBottom = `${game.settings.get("hearme-chat-notification", "vnNamePaddingBottom")}px`;
+  msgEl.style.paddingTop = `${game.settings.get("hearme-chat-notification", "vnMsgPaddingTop")}px`;
+  msgEl.style.paddingBottom = `${game.settings.get("hearme-chat-notification", "vnMsgPaddingBottom")}px`;
+}
 
 
   function formatMessageText(text) {
@@ -483,5 +486,6 @@ msgEl.style.paddingBottom = `${game.settings.get("hearme-chat-notification", "vn
   });
 
 });
+
 
 
