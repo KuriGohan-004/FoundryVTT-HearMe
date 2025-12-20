@@ -3,7 +3,7 @@ Hooks.once("init", () => {
   game.settings.register("hearme-chat-notification", "soundEnabled", {
     name: "Enable Chat Notification Sound",
     hint: "Play a sound when a chat message appears.",
-    scope: "client",
+    scope: "world",
     config: true,
     type: Boolean,
     default: true
@@ -12,7 +12,7 @@ Hooks.once("init", () => {
   game.settings.register("hearme-chat-notification", "pingSound", {
     name: "Chat Notification Sound",
     hint: "Sound file to play when a chat message appears.",
-    scope: "client",
+    scope: "world",
     config: true,
     type: String,
     default: "modules/hearme-chat-notification/ui/chat-ping.ogg",
@@ -22,7 +22,7 @@ Hooks.once("init", () => {
 });
 
 /* =========================================================
- *  SOUND LOGIC — DIRECTLY FROM YOUR ORIGINAL SCRIPT
+ *  SOUND LOGIC — SAME AS ORIGINAL SCRIPT
  * =======================================================*/
 
 function playChatSound() {
@@ -56,9 +56,6 @@ Hooks.on("createChatMessage", (message) => {
 
   // Ignore whispers
   if (message.type === CONST.CHAT_MESSAGE_TYPES.WHISPER) return;
-
-  // Optional: ignore system messages
-  if (!message.user) return;
 
   playChatSound();
 });
