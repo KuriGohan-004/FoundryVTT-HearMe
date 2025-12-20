@@ -170,7 +170,7 @@ Hooks.once("init", () => {
     config: true,
     type: Number,
     default: 15,
-    range: { min: 5, max: 50, step: 1 }
+    range: { min: 5, max: 75, step: 1 }
   });
 
   game.settings.register("hearme-chat-notification", "vnPortraitOffsetXPct", {
@@ -180,7 +180,7 @@ Hooks.once("init", () => {
     config: true,
     type: Number,
     default: 0,
-    range: { min: 0, max: 50, step: 1 }
+    range: { min: 0, max: 75, step: 1 }
   });
 
   game.settings.register("hearme-chat-notification", "vnPortraitOffsetYPct", {
@@ -190,7 +190,7 @@ Hooks.once("init", () => {
     config: true,
     type: Number,
     default: 0,
-    range: { min: 0, max: 50, step: 1 }
+    range: { min: 0, max: 75, step: 1 }
   });
 
 });
@@ -323,42 +323,43 @@ Hooks.once("ready", () => {
     }, 250);
   }
 
-  function showBanner(message) {
-    if (!game.settings.get("hearme-chat-notification", "vnEnabled")) return;
-    if (!banner) createBannerDom();
-    if (game.settings.get("hearme-chat-notification", "vnHideInCombat") && game.combat) {
-      currentMessage = null;
-      processNextMessage();
-      return;
-    }
-
-    currentMessage = message;
-    applyBannerSettings();
-
-    const actorName = message.speaker?.actor ? game.actors.get(message.speaker.actor)?.name : message.user?.name || "Unknown";
-    nameEl.innerHTML = actorName;
-
-    if (game.settings.get("hearme-chat-notification", "vnPortraitEnabled")) {
-      if (message.speaker?.token) {
-        const scene = game.scenes.active;
-        const token = scene?.tokens.get(message.speaker.token);
-        portrait.src = token?.texture.src || game.actors.get(message.speaker.actor)?.img || "";
-      } else portrait.src = game.actors.get(message.speaker.actor)?.img || "";
-      portrait.style.opacity = "1";
-    }
-
-    banner.style.display = "flex";
-    banner.style.opacity = "1";
-
-    typeWriter(msgEl, message.content, () => {
-      const delayPerChar = game.settings.get("hearme-chat-notification", "vnAutoHideTimePerChar");
-      if (delayPerChar > 0) {
-        hideTimeout = setTimeout(hideBanner, message.content.length * delayPerChar * 1000);
-      } else {
-        hideTimeout = setTimeout(hideBanner, 3000);
-      }
-    });
+ function showBanner(message) {
+  if (!game.settings.get("hearme-chat-notification", "vnEnabled")) return;
+  if (!banner) createBannerDom();
+  if (game.settings.get("hearme-chat-notification", "vnHideInCombat") && game.combat) {
+    currentMessage = null;
+    processNextMessage();
+    return;
   }
+
+  currentMessage = message;
+  applyBannerSettings();
+
+  const actorName = message.speaker?.actor ? game.actors.get(message.speaker.actor)?.name : message.user?.name || "Unknown";
+  nameEl.innerHTML = actorName;
+
+  if (game.settings.get("hearme-chat-notification", "vnPortraitEnabled")) {
+    if (message.speaker?.token) {
+      const scene = game.scenes.active;
+      const token = scene?.tokens.get(message.speaker.token);
+      portrait.src = token?.texture.src || game.actors.get(message.speaker.actor)?.img || "";
+    } else portrait.src = game.actors.get(message.speaker.actor)?.img || "";
+    portrait.style.opacity = "1";
+  }
+
+  banner.style.display = "flex";
+  banner.style.opacity = "1";
+
+  typeWriter(msgEl, message.content, () => {
+    const delayPerChar = game.settings.get("hearme-chat-notification", "vnAutoHideTimePerChar");
+    const timePerChar = delayPerChar > 0 ? message.content.length * delayPerChar * 1000 : 0;
+    const minTime = 2000; // minimum 2 seconds
+    const totalTime = Math.max(minTime, timePerChar);
+
+    hideTimeout = setTimeout(hideBanner, totalTime);
+  });
+}
+
 
   function queueMessage(message) {
     messageQueue.push(message);
@@ -405,3 +406,4 @@ Hooks.once("ready", () => {
   });
 
 });
+
