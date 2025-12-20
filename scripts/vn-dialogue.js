@@ -204,48 +204,6 @@ game.settings.register("hearme-chat-notification", "vnBackgroundImage", {
     range: { min: 0, max: 75, step: 1 }
   });
 
-// Name padding
-game.settings.register("hearme-chat-notification", "vnNamePaddingTop", {
-  name: "Name Padding Top (%)",
-  hint: "Padding above the character name inside the banner (percentage of banner height).",
-  scope: "world",
-  config: true,
-  type: Number,
-  default: 5,
-  range: { min: 0, max: 50, step: 1 }
-});
-
-game.settings.register("hearme-chat-notification", "vnNamePaddingBottom", {
-  name: "Name Padding Bottom (%)",
-  hint: "Padding below the character name inside the banner (percentage of banner height).",
-  scope: "world",
-  config: true,
-  type: Number,
-  default: 2,
-  range: { min: 0, max: 50, step: 1 }
-});
-
-// Message padding
-game.settings.register("hearme-chat-notification", "vnMsgPaddingTop", {
-  name: "Message Padding Top (%)",
-  hint: "Padding above the message text inside the banner (percentage of banner height).",
-  scope: "world",
-  config: true,
-  type: Number,
-  default: 2,
-  range: { min: 0, max: 50, step: 1 }
-});
-
-game.settings.register("hearme-chat-notification", "vnMsgPaddingBottom", {
-  name: "Message Padding Bottom (%)",
-  hint: "Padding below the message text inside the banner (percentage of banner height).",
-  scope: "world",
-  config: true,
-  type: Number,
-  default: 5,
-  range: { min: 0, max: 50, step: 1 }
-});
-
   
 });
 
@@ -498,6 +456,7 @@ function createBannerDom() {
   });
 
 });
+
 
 
 
