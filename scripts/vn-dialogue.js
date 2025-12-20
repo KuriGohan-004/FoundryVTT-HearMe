@@ -199,3 +199,149 @@ Hooks.once("init", () => {
   });
 
 });
+// VN Banner Runtime
+Hooks.once("ready", () => {
+
+  if (!game.settings.get("hearme-chat-notification", "vnEnabled")) return;
+
+  let banner, nameEl, msgEl, portrait;
+
+  function createBannerDom() {
+    if (banner) return;
+
+    banner = document.createElement("div");
+    banner.id = "vn-chat-banner";
+    banner.style.position = "fixed";
+    banner.style.display = "none";
+    banner.style.flexDirection = "column";
+    banner.style.justifyContent = "flex-start";
+    banner.style.zIndex = 999;
+    banner.style.padding = "1em";
+    banner.style.backdropFilter = "blur(4px)";
+    banner.style.boxShadow = "0 -2px 10px rgba(0,0,0,0.7)";
+    banner.style.opacity = "0";
+    banner.style.transition = "opacity 0.25s ease";
+
+    nameEl = document.createElement("div");
+    nameEl.id = "vn-chat-name";
+    nameEl.style.fontWeight = "bold";
+    banner.appendChild(nameEl);
+
+    msgEl = document.createElement("div");
+    msgEl.id = "vn-chat-msg";
+    banner.appendChild(msgEl);
+
+    document.body.appendChild(banner);
+
+    portrait = document.createElement("img");
+    portrait.id = "vn-chat-portrait";
+    portrait.style.position = "fixed";
+    portrait.style.opacity = "0";
+    portrait.style.transition = "opacity 0.5s ease";
+    document.body.appendChild(portrait);
+
+    applyBannerSettings();
+    window.addEventListener("resize", applyBannerSettings);
+  }
+
+  function applyBannerSettings() {
+    if (!banner) return;
+
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+
+    // Banner dimensions & position
+    banner.style.width = (game.settings.get("hearme-chat-notification", "vnWidthPct") / 100 * vw) + "px";
+    banner.style.height = (game.settings.get("hearme-chat-notification", "vnHeightPct") / 100 * vh) + "px";
+    banner.style.left = (game.settings.get("hearme-chat-notification", "vnOffsetXPct") / 100 * vw) + "px";
+    banner.style.bottom = (game.settings.get("hearme-chat-notification", "vnOffsetYPct") / 100 * vh) + "px";
+
+    // Font
+    nameEl.style.fontSize = (game.settings.get("hearme-chat-notification", "vnFontSizeNamePct") / 100 * vw) + "px";
+    msgEl.style.fontSize = (game.settings.get("hearme-chat-notification", "vnFontSizeMsgPct") / 100 * vw) + "px";
+    nameEl.style.color = msgEl.style.color = game.settings.get("hearme-chat-notification", "vnFontColor");
+    nameEl.style.fontFamily = msgEl.style.fontFamily = game.settings.get("hearme-chat-notification", "vnFontFamily");
+    banner.style.background = game.settings.get("hearme-chat-notification", "vnBackgroundColor");
+
+    // Portrait
+    if (game.settings.get("hearme-chat-notification", "vnPortraitEnabled")) {
+      portrait.style.display = "block";
+      const size = game.settings.get("hearme-chat-notification", "vnPortraitSizePct") / 100 * vw;
+      const left = game.settings.get("hearme-chat-notification", "vnPortraitOffsetXPct") / 100 * vw;
+      const bottom = game.settings.get("hearme-chat-notification", "vnPortraitOffsetYPct") / 100 * vh;
+      portrait.style.width = portrait.style.height = size + "px";
+      portrait.style.left = left + "px";
+      portrait.style.bottom = bottom + "px";
+    } else portrait.style.display = "none";
+  }
+
+  function formatMessageText(text) {
+    // convert *italic* to <i>italic</i>
+    return text.replace(/\*(.*?)\*/g, "<i>$1</i>").replace(/\n/g, "<br>");
+  }
+
+  let hideTimeout = null;
+
+  function showBanner(message) {
+    if (!game.settings.get("hearme-chat-notification", "vnEnabled")) return;
+    if (!banner) createBannerDom();
+    if (game.settings.get("hearme-chat-notification", "vnHideInCombat") && game.combat) return;
+
+    const actorName = message.speaker?.actor ? game.actors.get(message.speaker.actor)?.name : message.user?.name || "Unknown";
+    nameEl.innerHTML = actorName;
+    msgEl.innerHTML = formatMessageText(message.content);
+
+    // Portrait
+    if (game.settings.get("hearme-chat-notification", "vnPortraitEnabled")) {
+      if (message.speaker?.token) {
+        const scene = game.scenes.active;
+        const token = scene?.tokens.get(message.speaker.token);
+        if (token) portrait.src = token.texture.src;
+        else portrait.src = game.actors.get(message.speaker.actor)?.img || "";
+      } else portrait.src = game.actors.get(message.speaker.actor)?.img || "";
+      portrait.style.opacity = "1";
+    }
+
+    banner.style.display = "flex";
+    banner.style.opacity = "1";
+
+    // Auto-hide
+    if (hideTimeout) clearTimeout(hideTimeout);
+    const delayPerChar = game.settings.get("hearme-chat-notification", "vnAutoHideTimePerChar");
+    if (delayPerChar > 0) {
+      hideTimeout = setTimeout(() => hideBanner(), message.content.length * delayPerChar * 1000);
+    }
+  }
+
+  function hideBanner() {
+    if (!banner) return;
+    banner.style.opacity = "0";
+    portrait.style.opacity = "0";
+    setTimeout(() => banner.style.display = "none", 250);
+  }
+
+  // Key press skip
+  document.addEventListener("keydown", (ev) => {
+    if (document.activeElement.tagName === "INPUT" || document.activeElement.tagName === "TEXTAREA") return;
+    const skipKey = game.settings.get("hearme-chat-notification", "vnSkipKey");
+    if (ev.key === skipKey) hideBanner();
+  });
+
+  // -----------------------------
+  // Chat hook
+  // -----------------------------
+  Hooks.on("createChatMessage", (message) => {
+    if (!message.visible) return;
+    if (message.isRoll) return;
+    if (message.type === CONST.CHAT_MESSAGE_TYPES.WHISPER) return;
+
+    const content = message.content.trim();
+    if (!content || content.startsWith("/ooc") || !message.speaker?.actor) return;
+
+    // Show banner after sound
+    const soundDelay = 50; // small delay to allow chat sound to trigger first
+    setTimeout(() => showBanner(message), soundDelay);
+  });
+
+});
+
