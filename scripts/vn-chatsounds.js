@@ -55,18 +55,20 @@ function playChatSound(src) {
 }
 
 /* =========================================================
- *  CHAT HOOK — STANDALONE
+ *  CHAT HOOK — LOCAL ONLY
  * =======================================================*/
 Hooks.on("createChatMessage", (message) => {
+  // Only play for messages the local user can see
   if (!message.visible) return;
   if (message.isRoll) return;
+
+  // Avoid duplicate bleeps: only the **local client** plays sounds
+  if (!game.user.active) return;
 
   const content = message.content.trim().toLowerCase();
   let isOOC = false;
 
   // Detect OOC:
-  // 1. /ooc command
-  // 2. Message from a user without a token
   if (content.startsWith("/ooc") || !message.speaker?.token) {
     isOOC = true;
   }
