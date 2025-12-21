@@ -62,13 +62,13 @@ Hooks.on("createChatMessage", (message) => {
   if (!message.visible) return;
   if (message.isRoll) return;
 
-  // Avoid duplicate bleeps: only the **local client** plays sounds
-  if (!game.user.active) return;
+  // ✅ Prevent duplicate playback across clients
+  if (!message.isAuthor) return;
 
   const content = message.content.trim().toLowerCase();
   let isOOC = false;
 
-  // Detect OOC:
+  // Detect OOC
   if (content.startsWith("/ooc") || !message.speaker?.token) {
     isOOC = true;
   }
