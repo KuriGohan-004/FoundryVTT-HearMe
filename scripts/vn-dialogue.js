@@ -1,4 +1,5 @@
 Hooks.once("init", () => {
+
   // -----------------------------
   // Visual separator in settings
   // -----------------------------
@@ -10,6 +11,7 @@ Hooks.once("init", () => {
     type: Boolean,
     default: false
   });
+
   // -----------------------------
   // Core enable
   // -----------------------------
@@ -21,6 +23,7 @@ Hooks.once("init", () => {
     type: Boolean,
     default: true
   });
+
   // Banner sizing & position (% of screen)
   game.settings.register("hearme-chat-notification", "vnWidthPct", {
     name: "Banner Width (%)",
@@ -31,6 +34,7 @@ Hooks.once("init", () => {
     default: 60,
     range: { min: 10, max: 100, step: 1 }
   });
+
   game.settings.register("hearme-chat-notification", "vnHeightPct", {
     name: "Banner Height (%)",
     hint: "Height of the VN banner as % of screen height.",
@@ -40,6 +44,7 @@ Hooks.once("init", () => {
     default: 20,
     range: { min: 5, max: 50, step: 1 }
   });
+
   game.settings.register("hearme-chat-notification", "vnOffsetXPct", {
     name: "Banner Offset X (%)",
     hint: "Distance from left edge of screen.",
@@ -49,6 +54,7 @@ Hooks.once("init", () => {
     default: 20,
     range: { min: 0, max: 100, step: 1 }
   });
+
   game.settings.register("hearme-chat-notification", "vnOffsetYPct", {
     name: "Banner Offset Y (%)",
     hint: "Distance from bottom edge of screen.",
@@ -58,6 +64,7 @@ Hooks.once("init", () => {
     default: 5,
     range: { min: 0, max: 50, step: 1 }
   });
+
   // Text customization
   game.settings.register("hearme-chat-notification", "vnFontSizeNamePct", {
     name: "Font Size Name (%)",
@@ -68,6 +75,7 @@ Hooks.once("init", () => {
     default: 2,
     range: { min: 0.5, max: 10, step: 0.1 }
   });
+
   game.settings.register("hearme-chat-notification", "vnFontSizeMsgPct", {
     name: "Font Size Message (%)",
     hint: "Font size of the message text (percentage of screen width).",
@@ -77,6 +85,7 @@ Hooks.once("init", () => {
     default: 3,
     range: { min: 0.5, max: 10, step: 0.1 }
   });
+
   // Font color (color picker)
   game.settings.register("hearme-chat-notification", "vnFontColor", {
     name: "Font Color",
@@ -87,6 +96,7 @@ Hooks.once("init", () => {
     default: "#ffffff",
     color: true
   });
+
   // Background color (color picker)
   game.settings.register("hearme-chat-notification", "vnBackgroundColor", {
     name: "Background Color",
@@ -97,6 +107,7 @@ Hooks.once("init", () => {
     default: "rgba(0,0,0,0.75)",
     color: true
   });
+
   // VN Banner Background Image
   game.settings.register("hearme-chat-notification", "vnBackgroundImage", {
     name: "Background Image",
@@ -107,7 +118,7 @@ Hooks.once("init", () => {
     filePicker: "image",
     default: ""
   });
- 
+  
   game.settings.register("hearme-chat-notification", "vnFontFamily", {
     name: "Font Family",
     hint: "Font used for VN banner text.",
@@ -123,6 +134,7 @@ Hooks.once("init", () => {
     },
     default: "Arial, sans-serif"
   });
+
   // Auto-hide / skip options
   game.settings.register("hearme-chat-notification", "vnAutoHideTimePerChar", {
     name: "Auto-hide Delay (s/char)",
@@ -133,6 +145,7 @@ Hooks.once("init", () => {
     default: 0.3,
     range: { min: 0, max: 10, step: 0.1 }
   });
+
   game.settings.register("hearme-chat-notification", "vnSkipKey", {
     name: "Skip Key",
     hint: "Key to skip VN banner (while no input focused).",
@@ -141,6 +154,7 @@ Hooks.once("init", () => {
     type: String,
     default: " "
   });
+
   game.settings.register("hearme-chat-notification", "vnHideInCombat", {
     name: "Hide Banner In Combat",
     hint: "If enabled, VN banners are hidden during combat.",
@@ -149,6 +163,7 @@ Hooks.once("init", () => {
     type: Boolean,
     default: false
   });
+
   // Portrait
   game.settings.register("hearme-chat-notification", "vnPortraitEnabled", {
     name: "Enable Portrait",
@@ -158,6 +173,7 @@ Hooks.once("init", () => {
     type: Boolean,
     default: true
   });
+
   game.settings.register("hearme-chat-notification", "vnPortraitSizePct", {
     name: "Portrait Size (%)",
     hint: "Width/height of the portrait as % of screen width.",
@@ -167,6 +183,7 @@ Hooks.once("init", () => {
     default: 15,
     range: { min: 5, max: 75, step: 1 }
   });
+
   game.settings.register("hearme-chat-notification", "vnPortraitOffsetXPct", {
     name: "Portrait Offset X (%)",
     hint: "Distance from left screen edge.",
@@ -176,6 +193,7 @@ Hooks.once("init", () => {
     default: 0,
     range: { min: 0, max: 75, step: 1 }
   });
+
   game.settings.register("hearme-chat-notification", "vnPortraitOffsetYPct", {
     name: "Portrait Offset Y (%)",
     hint: "Distance from bottom of screen.",
@@ -185,6 +203,7 @@ Hooks.once("init", () => {
     default: 0,
     range: { min: 0, max: 75, step: 1 }
   });
+
   // Padding (top) for Name
   game.settings.register("hearme-chat-notification", "vnNamePaddingTop", {
     name: "Name Padding Top (px)",
@@ -195,6 +214,7 @@ Hooks.once("init", () => {
     default: 2,
     range: { min: 0, max: 50, step: 1 }
   });
+
   // Left margin for Name
   game.settings.register("hearme-chat-notification", "vnNameMarginLeft", {
     name: "Name Left Margin (px)",
@@ -205,6 +225,7 @@ Hooks.once("init", () => {
     default: 0,
     range: { min: 0, max: 100, step: 1 }
   });
+
   // Padding (top) for Message
   game.settings.register("hearme-chat-notification", "vnMsgPaddingTop", {
     name: "Message Padding Top (px)",
@@ -215,6 +236,7 @@ Hooks.once("init", () => {
     default: 2,
     range: { min: 0, max: 50, step: 1 }
   });
+
   // Left margin for Message
   game.settings.register("hearme-chat-notification", "vnMsgMarginLeft", {
     name: "Message Left Margin (px)",
@@ -225,6 +247,7 @@ Hooks.once("init", () => {
     default: 10,
     range: { min: 0, max: 100, step: 1 }
   });
+
   // Border customization
   game.settings.register("hearme-chat-notification", "vnBorderWidth", {
     name: "Border Width (px)",
@@ -235,6 +258,7 @@ Hooks.once("init", () => {
     default: 0,
     range: { min: 0, max: 20, step: 1 }
   });
+
   game.settings.register("hearme-chat-notification", "vnBorderColor", {
     name: "Border Color",
     hint: "Color of the border around the VN banner.",
@@ -244,6 +268,7 @@ Hooks.once("init", () => {
     default: "#000000",
     color: true
   });
+
   game.settings.register("hearme-chat-notification", "vnBorderRadius", {
     name: "Border Radius (px)",
     hint: "Radius for rounded corners on the VN banner. Set to 0 for a sharp rectangle.",
@@ -253,20 +278,25 @@ Hooks.once("init", () => {
     default: 0,
     range: { min: 0, max: 50, step: 1 }
   });
- 
+  
 });
+
 Hooks.once("ready", () => {
+
   if (!game.settings.get("hearme-chat-notification", "vnEnabled")) return;
+
   let banner, nameEl, msgEl, portrait;
   let hideTimeout = null;
   let typing = false;
   let messageQueue = [];
   let currentMessage = null;
+
   // -----------------------------
   // DOM Setup
   // -----------------------------
   function createBannerDom() {
     if (banner) return;
+
     banner = document.createElement("div");
     banner.id = "vn-chat-banner";
     banner.style.position = "fixed";
@@ -280,32 +310,42 @@ Hooks.once("ready", () => {
     banner.style.opacity = "0";
     banner.style.transition = "opacity 0.25s ease";
     banner.style.overflowY = "auto";
+
     // Allow clicks to pass through
     banner.style.pointerEvents = "none";
+
     nameEl = document.createElement("div");
     nameEl.id = "vn-chat-name";
     nameEl.style.fontWeight = "bold";
     banner.appendChild(nameEl);
+
     msgEl = document.createElement("div");
     msgEl.id = "vn-chat-msg";
     msgEl.style.overflowWrap = "break-word";
     msgEl.style.wordBreak = "break-word";
     banner.appendChild(msgEl);
+
     document.body.appendChild(banner);
+
     portrait = document.createElement("img");
     portrait.id = "vn-chat-portrait";
     portrait.style.position = "fixed";
     portrait.style.opacity = "0";
     portrait.style.transition = "opacity 0.5s ease";
     portrait.style.pointerEvents = "none";
+
     document.body.appendChild(portrait);
+
     applyBannerSettings();
     window.addEventListener("resize", applyBannerSettings);
   }
+
   function applyBannerSettings() {
     if (!banner) return;
+
     const vw = window.innerWidth;
     const vh = window.innerHeight;
+
     const widthPx = game.settings.get("hearme-chat-notification", "vnWidthPct") / 100 * vw;
     const heightPx = game.settings.get("hearme-chat-notification", "vnHeightPct") / 100 * vh;
     banner.style.width = `${widthPx}px`;
@@ -314,18 +354,21 @@ Hooks.once("ready", () => {
     banner.style.maxHeight = `${0.5 * vh}px`;
     banner.style.left = (game.settings.get("hearme-chat-notification", "vnOffsetXPct") / 100 * vw) + "px";
     banner.style.bottom = (game.settings.get("hearme-chat-notification", "vnOffsetYPct") / 100 * vh) + "px";
+
     const fontSizeNamePx = game.settings.get("hearme-chat-notification", "vnFontSizeNamePct") / 100 * vw;
     const fontSizeMsgPx = game.settings.get("hearme-chat-notification", "vnFontSizeMsgPct") / 100 * vw;
     nameEl.style.fontSize = `${fontSizeNamePx}px`;
     msgEl.style.fontSize = `${fontSizeMsgPx}px`;
     nameEl.style.color = msgEl.style.color = game.settings.get("hearme-chat-notification", "vnFontColor");
     nameEl.style.fontFamily = msgEl.style.fontFamily = game.settings.get("hearme-chat-notification", "vnFontFamily");
+
     const bgImage = game.settings.get("hearme-chat-notification", "vnBackgroundImage");
     if (bgImage) {
       banner.style.background = `url("${bgImage}") no-repeat center center / cover`;
     } else {
       banner.style.background = game.settings.get("hearme-chat-notification", "vnBackgroundColor");
     }
+
     if (game.settings.get("hearme-chat-notification", "vnPortraitEnabled")) {
       portrait.style.display = "block";
       const size = game.settings.get("hearme-chat-notification", "vnPortraitSizePct") / 100 * vw;
@@ -335,13 +378,16 @@ Hooks.once("ready", () => {
       portrait.style.left = left + "px";
       portrait.style.bottom = bottom + "px";
     } else portrait.style.display = "none";
+
     // Apply padding and margin settings
     if (nameEl && msgEl) {
       nameEl.style.paddingTop = `${game.settings.get("hearme-chat-notification", "vnNamePaddingTop")}px`;
       nameEl.style.marginLeft = `${game.settings.get("hearme-chat-notification", "vnNameMarginLeft")}px`;
+
       msgEl.style.paddingTop = `${game.settings.get("hearme-chat-notification", "vnMsgPaddingTop")}px`;
       msgEl.style.marginLeft = `${game.settings.get("hearme-chat-notification", "vnMsgMarginLeft")}px`;
     }
+
     // Apply border settings
     const borderWidth = game.settings.get("hearme-chat-notification", "vnBorderWidth");
     const borderColor = game.settings.get("hearme-chat-notification", "vnBorderColor");
@@ -354,35 +400,38 @@ Hooks.once("ready", () => {
       banner.style.borderRadius = "0px";
     }
   }
+
   // Use Foundry's TextEditor to enrich the message content (preserves all formatting)
   async function enrichMessageContent(content) {
     return await TextEditor.enrichHTML(content, { async: true });
   }
+
   function typeWriter(element, html, callback) {
     typing = true;
     element.innerHTML = "";
     let i = 0;
+
     function nextChar() {
       if (i >= html.length) {
         typing = false;
         callback?.();
         return;
       }
+
       i++;
       element.innerHTML = html.substring(0, i);
+
       let delay = 30;
       const char = html[i - 1];
       if (char === "." || char === "!" || char === "?") delay = 200;
       if (char === "," || char === ";") delay = 100;
+
       setTimeout(nextChar, delay);
     }
     nextChar();
   }
+
   function hideBanner() {
-    if (hideTimeout) {
-      clearTimeout(hideTimeout);
-      hideTimeout = null;
-    }
     if (!banner) return;
     banner.style.opacity = "0";
     portrait.style.opacity = "0";
@@ -392,6 +441,7 @@ Hooks.once("ready", () => {
       processNextMessage();
     }, 250);
   }
+
   async function showBanner(message) {
     if (!game.settings.get("hearme-chat-notification", "vnEnabled")) return;
     if (!banner) createBannerDom();
@@ -400,10 +450,13 @@ Hooks.once("ready", () => {
       processNextMessage();
       return;
     }
+
     currentMessage = message;
     applyBannerSettings();
+
     const actorName = message.speaker?.actor ? game.actors.get(message.speaker.actor)?.name : message.user?.name || "Unknown";
     nameEl.innerHTML = actorName;
+
     if (game.settings.get("hearme-chat-notification", "vnPortraitEnabled")) {
       if (message.speaker?.token) {
         const scene = game.scenes.active;
@@ -412,31 +465,39 @@ Hooks.once("ready", () => {
       } else portrait.src = game.actors.get(message.speaker.actor)?.img || "";
       portrait.style.opacity = "1";
     }
+
     banner.style.display = "flex";
     banner.style.opacity = "1";
+
     const enrichedContent = await enrichMessageContent(message.content);
+
     typeWriter(msgEl, enrichedContent, () => {
       const delayPerChar = game.settings.get("hearme-chat-notification", "vnAutoHideTimePerChar");
       const visibleLength = msgEl.textContent.length;
       const timePerChar = delayPerChar > 0 ? visibleLength * delayPerChar * 1000 : 0;
       const minTime = 2000; // minimum 2 seconds
       const totalTime = Math.max(minTime, timePerChar);
+
       hideTimeout = setTimeout(hideBanner, totalTime);
     });
   }
+
   function queueMessage(message) {
     messageQueue.push(message);
     if (!typing && !currentMessage) processNextMessage();
   }
+
   function processNextMessage() {
     if (messageQueue.length === 0) return;
     const next = messageQueue.shift();
     showBanner(next);
   }
+
   document.addEventListener("keydown", (ev) => {
     if (document.activeElement.tagName === "INPUT" || document.activeElement.tagName === "TEXTAREA") return;
     const skipKey = game.settings.get("hearme-chat-notification", "vnSkipKey");
     if (!currentMessage) return;
+
     if (ev.key === skipKey) {
       if (typing) {
         TextEditor.enrichHTML(currentMessage.content, { async: false }).then(fullHTML => {
@@ -453,16 +514,22 @@ Hooks.once("ready", () => {
       }
     }
   });
+
   // -----------------------------
   // Chat hook
   // -----------------------------
   createBannerDom();
+
   Hooks.on("createChatMessage", (message) => {
     if (!message.visible) return;
     if (message.isRoll) return;
     if (message.type === CONST.CHAT_MESSAGE_TYPES.WHISPER) return;
+
     const content = message.content.trim();
     if (!content || content.startsWith("/ooc") || !message.speaker?.actor) return;
+
     queueMessage(message);
   });
+
 });
+
