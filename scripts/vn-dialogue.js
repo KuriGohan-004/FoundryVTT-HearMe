@@ -247,6 +247,37 @@ Hooks.once("init", () => {
     default: 10,
     range: { min: 0, max: 100, step: 1 }
   });
+
+  // Border customization
+  game.settings.register("hearme-chat-notification", "vnBorderWidth", {
+    name: "Border Width (px)",
+    hint: "Width of the border around the VN banner. Set to 0 to disable the border.",
+    scope: "world",
+    config: true,
+    type: Number,
+    default: 0,
+    range: { min: 0, max: 20, step: 1 }
+  });
+
+  game.settings.register("hearme-chat-notification", "vnBorderColor", {
+    name: "Border Color",
+    hint: "Color of the border around the VN banner.",
+    scope: "world",
+    config: true,
+    type: String,
+    default: "#000000",
+    color: true
+  });
+
+  game.settings.register("hearme-chat-notification", "vnBorderRadius", {
+    name: "Border Radius (px)",
+    hint: "Radius for rounded corners on the VN banner. Set to 0 for a sharp rectangle.",
+    scope: "world",
+    config: true,
+    type: Number,
+    default: 0,
+    range: { min: 0, max: 50, step: 1 }
+  });
   
 });
 
@@ -290,6 +321,8 @@ Hooks.once("ready", () => {
 
     msgEl = document.createElement("div");
     msgEl.id = "vn-chat-msg";
+    msgEl.style.overflowWrap = "break-word";
+    msgEl.style.wordBreak = "break-word";
     banner.appendChild(msgEl);
 
     document.body.appendChild(banner);
@@ -354,6 +387,18 @@ Hooks.once("ready", () => {
       msgEl.style.paddingTop = `${game.settings.get("hearme-chat-notification", "vnMsgPaddingTop")}px`;
       msgEl.style.marginLeft = `${game.settings.get("hearme-chat-notification", "vnMsgMarginLeft")}px`;
     }
+
+    // Apply border settings
+    const borderWidth = game.settings.get("hearme-chat-notification", "vnBorderWidth");
+    const borderColor = game.settings.get("hearme-chat-notification", "vnBorderColor");
+    const borderRadius = game.settings.get("hearme-chat-notification", "vnBorderRadius");
+    if (borderWidth > 0) {
+      banner.style.border = `${borderWidth}px solid ${borderColor}`;
+      banner.style.borderRadius = `${borderRadius}px`;
+    } else {
+      banner.style.border = "none";
+      banner.style.borderRadius = "0px";
+    }
   }
 
   // Use Foundry's TextEditor to enrich the message content (preserves all formatting)
@@ -361,40 +406,25 @@ Hooks.once("ready", () => {
     return await TextEditor.enrichHTML(content, { async: true });
   }
 
-  // Typewriter that works with full HTML (types visible text only)
-  async function typeWriter(element, fullHTML, callback) {
+  function typeWriter(element, html, callback) {
     typing = true;
     element.innerHTML = "";
-
-    // Create a temporary div to extract visible text while preserving structure
-    const tempDiv = document.createElement("div");
-    tempDiv.innerHTML = fullHTML;
-    const visibleText = tempDiv.textContent || tempDiv.innerText || "";
-
     let i = 0;
 
     function nextChar() {
-      if (i >= visibleText.length) {
-        element.innerHTML = fullHTML; // Ensure final HTML is exact
+      if (i >= html.length) {
         typing = false;
         callback?.();
         return;
       }
 
       i++;
+      element.innerHTML = html.substring(0, i);
 
       let delay = 30;
-      const lastChar = visibleText[i - 1];
-      if (lastChar === "." || lastChar === "!" || lastChar === "?") delay = 200;
-      if (lastChar === "," || lastChar === ";") delay = 100;
-
-      // Simple partial reveal: show progressively more of the full HTML
-      // This gives a good visual effect while preserving formatting
-      const ratio = i / visibleText.length;
-      const partialHTML = fullHTML.slice(0, Math.floor(fullHTML.length * ratio)) + "...";
-
-      element.innerHTML = fullHTML; // Temporarily use full for smoothness; actual partial is complex
-      // Note: For perfect partial HTML typing with tags, it's very complex — this approximation works well visually
+      const char = html[i - 1];
+      if (char === "." || char === "!" || char === "?") delay = 200;
+      if (char === "," || char === ";") delay = 100;
 
       setTimeout(nextChar, delay);
     }
@@ -432,9 +462,7 @@ Hooks.once("ready", () => {
         const scene = game.scenes.active;
         const token = scene?.tokens.get(message.speaker.token);
         portrait.src = token?.texture.src || game.actors.get(message.speaker.actor)?.img || "";
-      } else {
-        portrait.src = game.actors.get(message.speaker.actor)?.img || "";
-      }
+      } else portrait.src = game.actors.get(message.speaker.actor)?.img || "";
       portrait.style.opacity = "1";
     }
 
@@ -443,16 +471,15 @@ Hooks.once("ready", () => {
 
     const enrichedContent = await enrichMessageContent(message.content);
 
-    // For simplicity and reliability, we skip complex partial HTML typing and just use a smooth reveal
-    msgEl.innerHTML = enrichedContent;
+    typeWriter(msgEl, enrichedContent, () => {
+      const delayPerChar = game.settings.get("hearme-chat-notification", "vnAutoHideTimePerChar");
+      const visibleLength = msgEl.textContent.length;
+      const timePerChar = delayPerChar > 0 ? visibleLength * delayPerChar * 1000 : 0;
+      const minTime = 2000; // minimum 2 seconds
+      const totalTime = Math.max(minTime, timePerChar);
 
-    const delayPerChar = game.settings.get("hearme-chat-notification", "vnAutoHideTimePerChar");
-    const visibleLength = msgEl.textContent.length;
-    const timePerChar = delayPerChar > 0 ? visibleLength * delayPerChar * 1000 : 0;
-    const minTime = 2000;
-    const totalTime = Math.max(minTime, timePerChar);
-
-    hideTimeout = setTimeout(hideBanner, totalTime);
+      hideTimeout = setTimeout(hideBanner, totalTime);
+    });
   }
 
   function queueMessage(message) {
@@ -472,7 +499,19 @@ Hooks.once("ready", () => {
     if (!currentMessage) return;
 
     if (ev.key === skipKey) {
-      hideBanner();
+      if (typing) {
+        TextEditor.enrichHTML(currentMessage.content, { async: false }).then(fullHTML => {
+          msgEl.innerHTML = fullHTML;
+        });
+        typing = false;
+        const delayPerChar = game.settings.get("hearme-chat-notification", "vnAutoHideTimePerChar");
+        if (delayPerChar > 0) {
+          const visibleLength = msgEl.textContent.length;
+          hideTimeout = setTimeout(hideBanner, visibleLength * delayPerChar * 1000);
+        }
+      } else {
+        hideBanner();
+      }
     }
   });
 
