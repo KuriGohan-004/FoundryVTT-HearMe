@@ -25,6 +25,22 @@ Hooks.once("init", () => {
         requiresReload: false
     });
 
+    // 🔽 NEW: Vertical offset slider
+    game.settings.register("hearme-chat-notification", "verticalOffset", {
+        name: "Vertical Offset (%)",
+        hint: "How far down from the top of the screen the notification appears.",
+        scope: "world",
+        config: true,
+        type: Number,
+        range: {
+            min: 0,
+            max: 50,
+            step: 1
+        },
+        default: 5,
+        requiresReload: false
+    });
+
     game.settings.register("hearme-chat-notification", "width", {
         name: "Notification Width (px)",
         hint: "Width of the notification box.",
@@ -86,9 +102,6 @@ Hooks.on("createChatMessage", (message) => {
     const content = message.content.trim();
     if (!content) return;
 
-    // Debug log (uncomment if you want to verify the hook is firing)
-    // console.log("GM OOC detected:", message.user.name, content);
-
     // Remove any previous notification immediately
     if (currentNotification) {
         currentNotification.remove();
@@ -112,6 +125,10 @@ Hooks.on("createChatMessage", (message) => {
     const position = game.settings.get("hearme-chat-notification", "position");
     const width = game.settings.get("hearme-chat-notification", "width");
 
+    // 🔽 NEW: read vertical offset
+    const verticalOffset = game.settings.get("hearme-chat-notification", "verticalOffset");
+    const topValue = `${verticalOffset}vh`;
+
     $notification.css({
         position: "fixed",
         zIndex: 10000,
@@ -133,18 +150,18 @@ Hooks.on("createChatMessage", (message) => {
     // Set position
     if (position === "top") {
         $notification.css({
-            top: "20px",
+            top: topValue,
             left: "50%",
             transform: "translateX(-50%)"
         });
     } else if (position === "top-left") {
         $notification.css({
-            top: "20px",
+            top: topValue,
             left: "20px"
         });
     } else if (position === "top-right") {
         $notification.css({
-            top: "20px",
+            top: topValue,
             right: "20px"
         });
     }
