@@ -1,5 +1,3 @@
-// hearm-chat-notification/scripts/main.js
-
 // Register module settings
 Hooks.once("init", () => {
     game.settings.register("hearme-chat-notification", "enabled", {
@@ -68,24 +66,28 @@ Hooks.once("init", () => {
     });
 });
 
-// Create and manage the notification element
+// Global variables to manage the current notification
 let currentNotification = null;
 let fadeTimeout = null;
 
-Hooks.on("chatMessage", (message) => {
+// Listen for new chat messages (including OOC)
+Hooks.on("createChatMessage", (message) => {
     // Only proceed if module is enabled
     if (!game.settings.get("hearme-chat-notification", "enabled")) return;
 
-    // Only care about OOC messages
+    // Only OOC messages
     if (message.style !== CONST.CHAT_MESSAGE_STYLES.OOC) return;
 
-    // Only GM or Assistant GM messages
+    // Only messages from GM or Assistant GM
     const isGM = message.user?.isGM ?? false;
     if (!isGM) return;
 
-    // Get the message content (strip any HTML if needed)
+    // Get clean content
     const content = message.content.trim();
     if (!content) return;
+
+    // Debug log (uncomment if you want to verify the hook is firing)
+    // console.log("GM OOC detected:", message.user.name, content);
 
     // Remove any previous notification immediately
     if (currentNotification) {
@@ -128,7 +130,7 @@ Hooks.on("chatMessage", (message) => {
         textAlign: "center"
     });
 
-    // Position
+    // Set position
     if (position === "top") {
         $notification.css({
             top: "20px",
@@ -168,9 +170,11 @@ Hooks.on("chatMessage", (message) => {
     }
 });
 
-// Optional: Clean up on window unload (just in case)
+// Clean up on window unload (just in case)
 Hooks.once("ready", () => {
     window.addEventListener("beforeunload", () => {
-        if (currentNotification) currentNotification.remove();
+        if (currentNotification) {
+            currentNotification.remove();
+        }
     });
 });
