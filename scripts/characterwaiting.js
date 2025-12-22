@@ -1,12 +1,10 @@
 // CharactersWaiting.js
-// Final fixed standalone version
-// - Portraits correctly fade/slide out when speaker finishes
-// - All settings integrated into main module menu (no separator)
+// Final version: proper coloring, true left/right alignment with mirror
 
 Hooks.once("init", () => {
   game.settings.register("hearme-chat-notification", "vnWaitingBarEnabled", {
     name: "Enable Characters Waiting Bar",
-    hint: "Show a row of upcoming (and optionally current) speaker portraits below the VN banner.",
+    hint: "Show a row of upcoming (and optionally current) speaker portraits.",
     scope: "world",
     config: true,
     type: Boolean,
@@ -23,8 +21,8 @@ Hooks.once("init", () => {
   });
 
   game.settings.register("hearme-chat-notification", "vnWaitingMirrorQueue", {
-    name: "Mirror Waiting Queue Direction",
-    hint: "Queue grows from right to left instead of left to right.",
+    name: "Align Waiting Bar to Right",
+    hint: "If enabled, bar aligns to the right and queue grows right-to-left (next speaker on right). If disabled, aligns left and grows left-to-right.",
     scope: "world",
     config: true,
     type: Boolean,
@@ -62,13 +60,13 @@ Hooks.once("init", () => {
   });
 
   game.settings.register("hearme-chat-notification", "vnWaitingOffsetXPct", {
-    name: "Waiting Bar Horizontal Position (%)",
-    hint: "Horizontal center point of the bar (0 = left, 100 = right).",
+    name: "Waiting Bar Horizontal Offset (%)",
+    hint: "Left offset when aligned left, right offset when aligned right.",
     scope: "world",
     config: true,
     type: Number,
-    default: 50,
-    range: { min: 0, max: 100, step: 1 }
+    default: 5,
+    range: { min: 0, max: 50, step: 1 }
   });
 
   game.settings.register("hearme-chat-notification", "vnWaitingOffsetYPct", {
@@ -82,8 +80,8 @@ Hooks.once("init", () => {
   });
 
   game.settings.register("hearme-chat-notification", "vnWaitingGrayscale", {
-    name: "Grayscale Waiting Portraits",
-    hint: "Show upcoming portraits in grayscale; current/next in full color.",
+    name: "Grayscale Upcoming Portraits",
+    hint: "Show only the current speaker in color; all waiting ones in grayscale.",
     scope: "world",
     config: true,
     type: Boolean,
@@ -95,7 +93,7 @@ Hooks.once("ready", () => {
   if (!game.settings.get("hearme-chat-notification", "vnEnabled")) return;
 
   let waitingBar = null;
-  let waitingPortraits = []; // { imgEl, messageId, isCurrent }
+  let waitingPortraits = [];
   let internalQueue = [];
   let currentMessageId = null;
   let lastSpeakerName = "";
@@ -113,7 +111,6 @@ Hooks.once("ready", () => {
     waitingBar.style.zIndex = 998;
     waitingBar.style.opacity = "0";
     waitingBar.style.transition = "opacity 0.4s ease";
-    waitingBar.style.transform = "translateX(-50%)";
 
     document.body.appendChild(waitingBar);
 
@@ -127,27 +124,37 @@ Hooks.once("ready", () => {
     const vw = window.innerWidth;
     const vh = window.innerHeight;
     const mirror = game.settings.get("hearme-chat-notification", "vnWaitingMirrorQueue");
+    const offsetX = game.settings.get("hearme-chat-notification", "vnWaitingOffsetXPct") / 100 * vw;
 
     const size = game.settings.get("hearme-chat-notification", "vnWaitingSizePct") / 100 * vw;
     const gap = game.settings.get("hearme-chat-notification", "vnWaitingGapPx");
-    const left = game.settings.get("hearme-chat-notification", "vnWaitingOffsetXPct") / 100 * vw;
     const bottom = game.settings.get("hearme-chat-notification", "vnWaitingOffsetYPct") / 100 * vh;
 
     waitingBar.style.gap = `${gap}px`;
-    waitingBar.style.left = `${left}px`;
     waitingBar.style.bottom = `${bottom}px`;
     waitingBar.style.flexDirection = mirror ? "row-reverse" : "row";
 
-    waitingPortraits.forEach((port, index) => {
+    // Alignment: left or right, not centered
+    if (mirror) {
+      waitingBar.style.right = `${offsetX}px`;
+      waitingBar.style.left = "auto";
+      waitingBar.style.transform = "none";
+    } else {
+      waitingBar.style.left = `${offsetX}px`;
+      waitingBar.style.right = "auto";
+      waitingBar.style.transform = "none";
+    }
+
+    waitingPortraits.forEach((port) => {
       port.imgEl.style.width = `${size}px`;
       port.imgEl.style.height = `${size}px`;
       port.imgEl.style.borderRadius = "50%";
       port.imgEl.style.objectFit = "cover";
       port.imgEl.style.transition = "all 0.4s ease";
 
-      const isCurrentOrNext = port.isCurrent || index === (port.isCurrent ? 1 : 0);
+      // Only current speaker in color; all others grayscale
       if (game.settings.get("hearme-chat-notification", "vnWaitingGrayscale")) {
-        port.imgEl.style.filter = isCurrentOrNext ? "none" : "grayscale(100%)";
+        port.imgEl.style.filter = port.isCurrent ? "none" : "grayscale(100%)";
       } else {
         port.imgEl.style.filter = "none";
       }
@@ -173,12 +180,12 @@ Hooks.once("ready", () => {
 
   function rebuildWaitingBar() {
     const enabled = game.settings.get("hearme-chat-notification", "vnWaitingBarEnabled");
-    if (!enabled || internalQueue.length === 0 && !currentMessageId) {
+    if (!enabled || (internalQueue.length === 0 && !currentMessageId)) {
       waitingPortraits.forEach(p => {
         const direction = game.settings.get("hearme-chat-notification", "vnWaitingMirrorQueue") ? "-100%" : "100%";
         p.imgEl.style.transform = `translateX(${direction})`;
         p.imgEl.style.opacity = "0";
-        setTimeout(() => p.imgEl.remove(), 400);
+        setTimeout(() => { if (p.imgEl.parentElement) p.imgEl.remove(); }, 400);
       });
       waitingPortraits = [];
       updateVisibility();
@@ -189,12 +196,12 @@ Hooks.once("ready", () => {
 
     const showCurrent = game.settings.get("hearme-chat-notification", "vnWaitingShowCurrent");
     const maxUpcoming = game.settings.get("hearme-chat-notification", "vnWaitingMaxShown");
+    const mirror = game.settings.get("hearme-chat-notification", "vnWaitingMirrorQueue");
 
     let displayList = [];
 
     if (showCurrent && currentMessageId) {
-      const currentMsg = internalQueue.find(m => m.id === currentMessageId) ||
-                         game.messages.get(currentMessageId);
+      const currentMsg = internalQueue.find(m => m.id === currentMessageId) || game.messages.get(currentMessageId);
       if (currentMsg) displayList.push({ msg: currentMsg, isCurrent: true });
     }
 
@@ -203,29 +210,27 @@ Hooks.once("ready", () => {
 
     const desiredIds = displayList.map(item => item.msg.id);
 
-    // Remove portraits that are no longer in the list
+    // Remove old
     const toRemove = waitingPortraits.filter(p => !desiredIds.includes(p.messageId));
     toRemove.forEach(port => {
-      const direction = game.settings.get("hearme-chat-notification", "vnWaitingMirrorQueue") ? "-100%" : "100%";
+      const direction = mirror ? "-100%" : "100%";
       port.imgEl.style.transform = `translateX(${direction})`;
       port.imgEl.style.opacity = "0";
-      setTimeout(() => {
-        if (port.imgEl.parentElement) port.imgEl.remove();
-      }, 400);
+      setTimeout(() => { if (port.imgEl.parentElement) port.imgEl.remove(); }, 400);
     });
     waitingPortraits = waitingPortraits.filter(p => desiredIds.includes(p.messageId));
 
-    // Add missing portraits
+    // Add new
     displayList.forEach((item, index) => {
       if (!waitingPortraits.find(p => p.messageId === item.msg.id)) {
         const img = document.createElement("img");
         img.src = getPortraitSrc(item.msg);
         img.style.opacity = "0";
-        const slideFrom = game.settings.get("hearme-chat-notification", "vnWaitingMirrorQueue") ? "-50%" : "50%";
+        const slideFrom = mirror ? "-50%" : "50%";
         img.style.transform = `translateX(${slideFrom})`;
         waitingBar.appendChild(img);
 
-        img.offsetHeight; // reflow
+        img.offsetHeight;
         img.style.opacity = "1";
         img.style.transform = "translateX(0)";
 
@@ -237,7 +242,7 @@ Hooks.once("ready", () => {
       }
     });
 
-    // Reorder
+    // Reorder (important for correct flex direction)
     displayList.forEach((item, index) => {
       const port = waitingPortraits.find(p => p.messageId === item.msg.id);
       if (port && waitingBar.children[index] !== port.imgEl) {
@@ -248,7 +253,6 @@ Hooks.once("ready", () => {
     applySettings();
   }
 
-  // Queue messages
   Hooks.on("createChatMessage", (message) => {
     if (!message.visible) return;
     if (message.isRoll) return;
@@ -260,7 +264,6 @@ Hooks.once("ready", () => {
     rebuildWaitingBar();
   });
 
-  // Start observers once banner and name elements exist
   function startObservers() {
     const bannerEl = document.getElementById("vn-chat-banner");
     const nameEl = document.getElementById("vn-chat-name");
@@ -270,7 +273,6 @@ Hooks.once("ready", () => {
       return;
     }
 
-    // Track banner visibility
     const visibilityObserver = new MutationObserver(() => {
       const visible = bannerEl.style.display !== "none";
       if (visible && internalQueue.length > 0) {
@@ -281,18 +283,14 @@ Hooks.once("ready", () => {
     });
     visibilityObserver.observe(bannerEl, { attributes: true, attributeFilter: ["style"] });
 
-    // Detect new speaker by name change
     const nameObserver = new MutationObserver(() => {
       const newName = nameEl.textContent.trim();
       if (newName && newName !== lastSpeakerName) {
         lastSpeakerName = newName;
-
-        // New speaker started → advance queue
         if (internalQueue.length > 0) {
           internalQueue.shift();
           currentMessageId = internalQueue[0]?.id || null;
         }
-
         if (debounceTimer) clearTimeout(debounceTimer);
         debounceTimer = setTimeout(rebuildWaitingBar, 100);
       }
@@ -302,12 +300,10 @@ Hooks.once("ready", () => {
 
   startObservers();
 
-  // Rebuild when settings change
   Hooks.on("renderSettingsConfig", () => {
     if (debounceTimer) clearTimeout(debounceTimer);
     debounceTimer = setTimeout(rebuildWaitingBar, 100);
   });
 
-  // Initial build
   rebuildWaitingBar();
 });
