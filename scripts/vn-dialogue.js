@@ -12,6 +12,8 @@ Hooks.once("init", () => {
     default: false
   });
 
+  
+
   // -----------------------------
   // Core enable
   // -----------------------------
@@ -24,6 +26,15 @@ Hooks.once("init", () => {
     default: true
   });
 
+  game.settings.register("hearme-chat-notification", "vnHideInCombat", {
+    name: "Hide Banner In Combat",
+    hint: "If enabled, VN banners are hidden during combat.",
+    scope: "world",
+    config: true,
+    type: Boolean,
+    default: false
+  });
+  
   // Banner sizing & position (% of screen)
   game.settings.register("hearme-chat-notification", "vnWidthPct", {
     name: "Banner Width (%)",
@@ -65,6 +76,59 @@ Hooks.once("init", () => {
     range: { min: 0, max: 50, step: 1 }
   });
 
+  // Background color (color picker)
+  game.settings.register("hearme-chat-notification", "vnBackgroundColor", {
+    name: "Background Color",
+    hint: "Background color of the VN banner.",
+    scope: "world",
+    config: true,
+    type: String,
+    default: "rgba(0,0,0,0.75)",
+    color: true
+  });
+
+  // VN Banner Background Image
+  game.settings.register("hearme-chat-notification", "vnBackgroundImage", {
+    name: "Background Image",
+    hint: "Upload an image to use as the VN banner background. If none is selected, the solid background color will be used.",
+    scope: "world",
+    config: true,
+    type: String,
+    filePicker: "image",
+    default: ""
+  });
+
+  // Border customization
+  game.settings.register("hearme-chat-notification", "vnBorderWidth", {
+    name: "Border Width (px)",
+    hint: "Width of the border around the VN banner. Set to 0 to disable the border.",
+    scope: "world",
+    config: true,
+    type: Number,
+    default: 0,
+    range: { min: 0, max: 20, step: 1 }
+  });
+
+  game.settings.register("hearme-chat-notification", "vnBorderColor", {
+    name: "Border Color",
+    hint: "Color of the border around the VN banner.",
+    scope: "world",
+    config: true,
+    type: String,
+    default: "#000000",
+    color: true
+  });
+
+  game.settings.register("hearme-chat-notification", "vnBorderRadius", {
+    name: "Border Radius (px)",
+    hint: "Radius for rounded corners on the VN banner. Set to 0 for a sharp rectangle.",
+    scope: "world",
+    config: true,
+    type: Number,
+    default: 0,
+    range: { min: 0, max: 50, step: 1 }
+  });
+  
   // Text customization
   game.settings.register("hearme-chat-notification", "vnFontSizeNamePct", {
     name: "Font Size Name (%)",
@@ -95,28 +159,6 @@ Hooks.once("init", () => {
     type: String,
     default: "#ffffff",
     color: true
-  });
-
-  // Background color (color picker)
-  game.settings.register("hearme-chat-notification", "vnBackgroundColor", {
-    name: "Background Color",
-    hint: "Background color of the VN banner.",
-    scope: "world",
-    config: true,
-    type: String,
-    default: "rgba(0,0,0,0.75)",
-    color: true
-  });
-
-  // VN Banner Background Image
-  game.settings.register("hearme-chat-notification", "vnBackgroundImage", {
-    name: "Background Image",
-    hint: "Upload an image to use as the VN banner background. If none is selected, the solid background color will be used.",
-    scope: "world",
-    config: true,
-    type: String,
-    filePicker: "image",
-    default: ""
   });
   
   game.settings.register("hearme-chat-notification", "vnFontFamily", {
@@ -153,15 +195,6 @@ Hooks.once("init", () => {
     config: true,
     type: String,
     default: " "
-  });
-
-  game.settings.register("hearme-chat-notification", "vnHideInCombat", {
-    name: "Hide Banner In Combat",
-    hint: "If enabled, VN banners are hidden during combat.",
-    scope: "world",
-    config: true,
-    type: Boolean,
-    default: false
   });
 
   // Portrait
@@ -246,37 +279,6 @@ Hooks.once("init", () => {
     type: Number,
     default: 10,
     range: { min: 0, max: 100, step: 1 }
-  });
-
-  // Border customization
-  game.settings.register("hearme-chat-notification", "vnBorderWidth", {
-    name: "Border Width (px)",
-    hint: "Width of the border around the VN banner. Set to 0 to disable the border.",
-    scope: "world",
-    config: true,
-    type: Number,
-    default: 0,
-    range: { min: 0, max: 20, step: 1 }
-  });
-
-  game.settings.register("hearme-chat-notification", "vnBorderColor", {
-    name: "Border Color",
-    hint: "Color of the border around the VN banner.",
-    scope: "world",
-    config: true,
-    type: String,
-    default: "#000000",
-    color: true
-  });
-
-  game.settings.register("hearme-chat-notification", "vnBorderRadius", {
-    name: "Border Radius (px)",
-    hint: "Radius for rounded corners on the VN banner. Set to 0 for a sharp rectangle.",
-    scope: "world",
-    config: true,
-    type: Number,
-    default: 0,
-    range: { min: 0, max: 50, step: 1 }
   });
 
 // Next message indicator
@@ -550,7 +552,7 @@ Hooks.once("ready", () => {
       if (delayPerChar > 0) {
         const visibleLength = msgEl.textContent.length;
         const timePerChar = delayPerChar * visibleLength * 1000;
-        const minTime = 2000;
+        const minTime = 3000;
         const totalTime = Math.max(minTime, timePerChar);
         hideTimeout = setTimeout(hideBanner, totalTime);
       }
@@ -613,3 +615,4 @@ Hooks.once("ready", () => {
     queueMessage(message);
   });
 });
+
