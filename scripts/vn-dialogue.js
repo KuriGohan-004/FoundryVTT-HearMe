@@ -282,7 +282,7 @@ Hooks.once("init", () => {
 // Next message indicator
 game.settings.register("hearme-chat-notification", "vnNextIconImage", {
   name: "Next Message Icon (image)",
-  hint: "Custom image for the 'next message' indicator. Leave blank for default triangle.",
+  hint: "Custom image for the 'next message' indicator. Leave blank for default down arrow.",
   scope: "world",
   config: true,
   type: String,
@@ -333,9 +333,9 @@ Hooks.once("ready", () => {
     banner.style.boxShadow = "0 -2px 10px rgba(0,0,0,0.7)";
     banner.style.opacity = "0";
     banner.style.transition = "opacity 0.25s ease";
-    banner.style.overflowY = "hidden"; // Changed to hidden
-    banner.style.maxHeight = "none";   // We'll control growth via JS
+    banner.style.overflowY = "auto"; // Allow scrolling
     banner.style.pointerEvents = "none";
+    banner.style.scrollBehavior = "smooth"; // Smooth scroll
 
     nameEl = document.createElement("div");
     nameEl.id = "vn-chat-name";
@@ -358,7 +358,7 @@ Hooks.once("ready", () => {
     nextIcon.style.opacity = "0";
     nextIcon.style.transition = "opacity 0.4s ease";
     nextIcon.style.pointerEvents = "none";
-    nextIcon.textContent = "▶"; // Default triangle
+    nextIcon.textContent = "▼"; // Default: thick down arrow
     banner.appendChild(nextIcon);
 
     document.body.appendChild(banner);
@@ -380,9 +380,12 @@ Hooks.once("ready", () => {
     const vw = window.innerWidth;
     const vh = window.innerHeight;
     const widthPx = game.settings.get("hearme-chat-notification", "vnWidthPct") / 100 * vw;
-    const baseHeightPx = game.settings.get("hearme-chat-notification", "vnHeightPct") / 100 * vh;
+    const heightPx = game.settings.get("hearme-chat-notification", "vnHeightPct") / 100 * vh;
 
     banner.style.width = `${widthPx}px`;
+    banner.style.height = `${heightPx}px`; // Fixed height
+    banner.style.minHeight = `${heightPx}px`;
+    banner.style.maxHeight = `${heightPx}px`;
     banner.style.left = (game.settings.get("hearme-chat-notification", "vnOffsetXPct") / 100 * vw) + "px";
     banner.style.bottom = (game.settings.get("hearme-chat-notification", "vnOffsetYPct") / 100 * vh) + "px";
 
@@ -406,7 +409,7 @@ Hooks.once("ready", () => {
     if (nextIconImage) {
       nextIcon.innerHTML = `<img src="${nextIconImage}" style="width:1.4em;height:1.4em;object-fit:contain;">`;
     } else {
-      nextIcon.textContent = "▶";
+      nextIcon.textContent = "▼";
     }
 
     // Apply animation
@@ -447,7 +450,7 @@ Hooks.once("ready", () => {
     }
   }
 
-  // Add CSS animations (injected once)
+  // Add CSS animations + scrollbar hiding (injected once)
   if (!document.getElementById("vn-next-icon-styles")) {
     const style = document.createElement("style");
     style.id = "vn-next-icon-styles";
@@ -462,6 +465,10 @@ Hooks.once("ready", () => {
       }
       .vn-next-spin { animation: vnSpin 2s linear infinite; }
       .vn-next-bob  { animation: vnBob 1.6s ease-in-out infinite; }
+
+      /* Hide scrollbar but keep functionality */
+      #vn-chat-banner::-webkit-scrollbar { display: none; }
+      #vn-chat-banner { -ms-overflow-style: none; scrollbar-width: none; }
     `;
     document.head.appendChild(style);
   }
@@ -477,12 +484,14 @@ Hooks.once("ready", () => {
     function nextChar() {
       if (i >= html.length) {
         typing = false;
-        nextIcon.style.opacity = "1"; // Show next icon when typing done
+        nextIcon.style.opacity = "1";
+        element.scrollTop = element.scrollHeight; // Final scroll
         callback?.();
         return;
       }
       i++;
       element.innerHTML = html.substring(0, i);
+      element.scrollTop = element.scrollHeight; // Auto-scroll during typing
       let delay = 30;
       const char = html[i - 1];
       if (char === "." || char === "!" || char === "?") delay = 200;
@@ -531,7 +540,7 @@ Hooks.once("ready", () => {
 
     banner.style.display = "flex";
     banner.style.opacity = "1";
-    nextIcon.style.opacity = "0"; // Hide until typing finished
+    nextIcon.style.opacity = "0";
 
     const enrichedContent = await enrichMessageContent(message.content);
     typeWriter(msgEl, enrichedContent, () => {
@@ -563,21 +572,16 @@ Hooks.once("ready", () => {
     if (!currentMessage) return;
     if (ev.key === skipKey) {
       ev.preventDefault();
-
-      // Clear any existing hide timeout
       if (hideTimeout) {
         clearTimeout(hideTimeout);
         hideTimeout = null;
       }
-
       if (typing) {
-        // Skip typing
         TextEditor.enrichHTML(currentMessage.content, { async: false }).then(fullHTML => {
           msgEl.innerHTML = fullHTML;
           typing = false;
-          nextIcon.style.opacity = "1"; // Show next icon
-
-          // Start new auto-hide timer from full message length
+          nextIcon.style.opacity = "1";
+          msgEl.scrollTop = msgEl.scrollHeight;
           const delayPerChar = game.settings.get("hearme-chat-notification", "vnAutoHideTimePerChar");
           if (delayPerChar > 0) {
             const visibleLength = msgEl.textContent.length;
@@ -588,7 +592,6 @@ Hooks.once("ready", () => {
           }
         });
       } else {
-        // Already finished typing → skip to next
         hideBanner();
       }
     }
@@ -607,3 +610,4 @@ Hooks.once("ready", () => {
     queueMessage(message);
   });
 });
+
