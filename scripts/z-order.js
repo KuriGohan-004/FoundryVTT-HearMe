@@ -143,7 +143,6 @@ Hooks.on("preUpdateToken", (tokenDoc, change, options, userId) => {
 
         if (occupiedGridPositions.has(key)) {
           // Collision detected!
-          ui.notifications.warn("Cannot move there: space is occupied by another token.");
           return false; // Cancel the update
         }
       }
