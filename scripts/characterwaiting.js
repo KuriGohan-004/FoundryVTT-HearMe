@@ -1,5 +1,5 @@
 // CharactersWaiting.js
-// Fixed version - no more freezing!
+// Fixed: Queue advances immediately when next message starts (banner reappears with new name)
 
 Hooks.once("init", () => {
   game.settings.register("hearme-chat-notification", "waitingQueueSeparator", {
@@ -104,7 +104,7 @@ Hooks.once("ready", () => {
   let waitingPortraits = [];
   let internalQueue = [];
   let currentMessageId = null;
-  let bannerVisible = false; // Track banner state manually
+  let lastSpeakerName = "";
   let debounceTimer = null;
 
   function createWaitingBar() {
@@ -193,7 +193,7 @@ Hooks.once("ready", () => {
 
     let displayList = [];
 
-    if (showCurrent && currentMessageId && bannerVisible) {
+    if (showCurrent && currentMessageId) {
       const currentMsg = internalQueue.find(m => m.id === currentMessageId) ||
                          game.messages.get(currentMessageId);
       if (currentMsg) displayList.push({ msg: currentMsg, isCurrent: true });
@@ -253,60 +253,66 @@ Hooks.once("ready", () => {
     if (!content || content.startsWith("/ooc") || !message.speaker?.actor) return;
 
     internalQueue.push(message);
-
-    // If banner is hidden, the next message should become current when shown
-    if (!bannerVisible && internalQueue.length === 1) {
-      currentMessageId = message.id;
-    }
-
     rebuildWaitingBar();
   });
 
-  // Efficient observation: only watch the banner element itself
-  function startBannerObserver() {
+  // Watch for banner show/hide AND name changes
+  function startObservers() {
     const bannerEl = document.getElementById("vn-chat-banner");
-    if (!bannerEl) {
-      // Banner not created yet - retry in a bit
-      setTimeout(startBannerObserver, 500);
+    const nameEl = document.getElementById("vn-chat-name");
+
+    if (!bannerEl || !nameEl) {
+      setTimeout(startObservers, 500);
       return;
     }
 
-    const observer = new MutationObserver(() => {
+    // Observe banner visibility
+    const visibilityObserver = new MutationObserver(() => {
       const nowVisible = bannerEl.style.display !== "none";
 
-      if (nowVisible !== bannerVisible) {
-        bannerVisible = nowVisible;
+      if (nowVisible && internalQueue.length > 0) {
+        currentMessageId = internalQueue[0].id;
+      }
 
-        if (bannerVisible && internalQueue.length > 0) {
-          // Banner just appeared
-          currentMessageId = internalQueue[0].id;
-        } else if (!bannerVisible && internalQueue.length > 0) {
-          // Banner just hidden - advance queue
-          internalQueue.shift();
-          currentMessageId = internalQueue[0]?.id || null;
+      if (debounceTimer) clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(rebuildWaitingBar, 150);
+    });
+
+    visibilityObserver.observe(bannerEl, { attributes: true, attributeFilter: ["style"] });
+
+    // Observe name changes — this fires immediately when next message starts
+    const nameObserver = new MutationObserver((mutations) => {
+      for (const mutation of mutations) {
+        if (mutation.type === "childList" || mutation.type === "characterData") {
+          const newName = nameEl.textContent.trim();
+          if (newName && newName !== lastSpeakerName) {
+            lastSpeakerName = newName;
+
+            // Next message just started — advance queue
+            if (internalQueue.length > 0) {
+              internalQueue.shift();
+              currentMessageId = internalQueue[0]?.id || null;
+            }
+
+            if (debounceTimer) clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(rebuildWaitingBar, 100);
+            break;
+          }
         }
-
-        // Debounce rebuild to avoid rapid calls
-        if (debounceTimer) clearTimeout(debounceTimer);
-        debounceTimer = setTimeout(rebuildWaitingBar, 200);
       }
     });
 
-    observer.observe(bannerEl, {
-      attributes: true,
-      attributeFilter: ["style"]
-    });
+    nameObserver.observe(nameEl, { childList: true, characterData: true, subtree: true });
   }
 
-  // Start observing once everything is ready
-  startBannerObserver();
+  startObservers();
 
-  // Rebuild on setting changes
+  // Rebuild on settings
   Hooks.on("renderSettingsConfig", () => {
     if (debounceTimer) clearTimeout(debounceTimer);
     debounceTimer = setTimeout(rebuildWaitingBar, 100);
   });
 
-  // Initial rebuild
+  // Initial build
   rebuildWaitingBar();
 });
