@@ -309,7 +309,10 @@ game.settings.register("hearme-chat-notification", "vnNextIconAnimation", {
 
 Hooks.once("ready", () => {
   if (!game.settings.get("hearme-chat-notification", "vnEnabled")) return;
-
+  window.vnQueueMessage = queueMessage;
+  window.vnProcessNextMessage = processNextMessage;
+  window.vnShowBanner = showBanner;
+  
   let banner, nameEl, msgEl, portrait, nextIcon;
   let hideTimeout = null;
   let typing = false;
@@ -509,6 +512,7 @@ Hooks.once("ready", () => {
     setTimeout(() => {
       banner.style.display = "none";
       currentMessage = null;
+      Hooks.callAll("vnBannerHidden"); // Notify waiting bar
       processNextMessage();
     }, 250);
   }
@@ -610,4 +614,5 @@ Hooks.once("ready", () => {
     queueMessage(message);
   });
 });
+
 
