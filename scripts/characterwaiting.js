@@ -1,10 +1,11 @@
 // CharactersWaiting.js
-// Fixed version - fully working with your main script
+// Fully standalone "Characters Waiting" portrait bar
+// No dependency on main script variables or hooks
 
 Hooks.once("init", () => {
   game.settings.register("hearme-chat-notification", "vnWaitingBarEnabled", {
     name: "Enable Characters Waiting Bar",
-    hint: "Show a row of upcoming character portraits in the speaking queue.",
+    hint: "Show a horizontal row of upcoming speaker portraits.",
     scope: "world",
     config: true,
     type: Boolean,
@@ -13,7 +14,7 @@ Hooks.once("init", () => {
 
   game.settings.register("hearme-chat-notification", "vnWaitingMaxShown", {
     name: "Max Portraits Shown",
-    hint: "Maximum number of upcoming character portraits to display.",
+    hint: "Maximum number of upcoming portraits to display.",
     scope: "world",
     config: true,
     type: Number,
@@ -23,7 +24,7 @@ Hooks.once("init", () => {
 
   game.settings.register("hearme-chat-notification", "vnWaitingSizePct", {
     name: "Waiting Portrait Size (%)",
-    hint: "Size of each waiting portrait as % of screen width.",
+    hint: "Size of each portrait as % of screen width.",
     scope: "world",
     config: true,
     type: Number,
@@ -43,7 +44,7 @@ Hooks.once("init", () => {
 
   game.settings.register("hearme-chat-notification", "vnWaitingOffsetXPct", {
     name: "Waiting Bar Offset X (%)",
-    hint: "Distance from left edge of screen.",
+    hint: "Horizontal position (left edge = 0, right edge = 100).",
     scope: "world",
     config: true,
     type: Number,
@@ -53,7 +54,7 @@ Hooks.once("init", () => {
 
   game.settings.register("hearme-chat-notification", "vnWaitingOffsetYPct", {
     name: "Waiting Bar Offset Y (%)",
-    hint: "Distance from bottom edge of screen.",
+    hint: "Distance from bottom of screen.",
     scope: "world",
     config: true,
     type: Number,
@@ -62,8 +63,8 @@ Hooks.once("init", () => {
   });
 
   game.settings.register("hearme-chat-notification", "vnWaitingGrayscale", {
-    name: "Grayscale Non-Speaking Portraits",
-    hint: "Display waiting portraits in grayscale until they speak.",
+    name: "Grayscale Waiting Portraits",
+    hint: "Show waiting portraits in grayscale (next speaker in full color).",
     scope: "world",
     config: true,
     type: Boolean,
@@ -75,7 +76,9 @@ Hooks.once("ready", () => {
   if (!game.settings.get("hearme-chat-notification", "vnEnabled")) return;
 
   let waitingBar = null;
-  let waitingPortraits = []; // { imgEl, actorId }
+  let waitingPortraits = []; // Array of { imgEl, messageId }
+  let internalQueue = [];    // Our own copy of queued messages
+  let currentMessageId = null; // ID of currently displayed message
 
   function createWaitingBar() {
     if (waitingBar) return;
@@ -85,18 +88,19 @@ Hooks.once("ready", () => {
     waitingBar.style.position = "fixed";
     waitingBar.style.display = "flex";
     waitingBar.style.flexDirection = "row";
-    waitingBar.style.gap = "0px";
     waitingBar.style.pointerEvents = "none";
     waitingBar.style.zIndex = 998;
     waitingBar.style.opacity = "0";
-    waitingBar.style.transition = "opacity 0.3s ease";
+    waitingBar.style.transition = "opacity 0.4s ease";
+    waitingBar.style.transform = "translateX(-50%)";
 
     document.body.appendChild(waitingBar);
-    applyWaitingBarSettings();
-    window.addEventListener("resize", applyWaitingBarSettings);
+
+    applySettings();
+    window.addEventListener("resize", applySettings);
   }
 
-  function applyWaitingBarSettings() {
+  function applySettings() {
     if (!waitingBar) return;
 
     const vw = window.innerWidth;
@@ -110,17 +114,18 @@ Hooks.once("ready", () => {
     waitingBar.style.gap = `${gap}px`;
     waitingBar.style.left = `${left}px`;
     waitingBar.style.bottom = `${bottom}px`;
-    waitingBar.style.transform = "translateX(-50%)"; // Center around offset
 
-    waitingPortraits.forEach(port => {
+    waitingPortraits.forEach((port, index) => {
       port.imgEl.style.width = `${size}px`;
       port.imgEl.style.height = `${size}px`;
       port.imgEl.style.borderRadius = "50%";
       port.imgEl.style.objectFit = "cover";
       port.imgEl.style.boxShadow = "0 4px 12px rgba(0,0,0,0.6)";
       port.imgEl.style.transition = "all 0.4s ease";
+
+      const isNext = index === 0;
       if (game.settings.get("hearme-chat-notification", "vnWaitingGrayscale")) {
-        port.imgEl.style.filter = port.isNext ? "none" : "grayscale(100%)";
+        port.imgEl.style.filter = isNext ? "none" : "grayscale(100%)";
       } else {
         port.imgEl.style.filter = "none";
       }
@@ -135,20 +140,16 @@ Hooks.once("ready", () => {
     waitingBar.style.opacity = enabled && waitingPortraits.length > 0 ? "1" : "0";
   }
 
-  function getTokenImage(message) {
+  function getPortraitSrc(message) {
     if (message.speaker?.token) {
       const scene = game.scenes.active;
       const token = scene?.tokens.get(message.speaker.token);
-      return token?.texture.src || "";
+      return token?.texture.src || game.actors.get(message.speaker.actor)?.img || "";
     }
     return game.actors.get(message.speaker?.actor)?.img || "";
   }
 
-  function getActorId(message) {
-    return message.speaker?.actor || null;
-  }
-
-  function updateWaitingQueue() {
+  function rebuildWaitingBar() {
     if (!game.settings.get("hearme-chat-notification", "vnWaitingBarEnabled")) {
       waitingPortraits.forEach(p => p.imgEl.remove());
       waitingPortraits = [];
@@ -158,68 +159,87 @@ Hooks.once("ready", () => {
 
     createWaitingBar();
 
-    const maxShown = game.settings.get("hearme-chat-notification", "vnWaitingMaxShown");
-    const upcoming = messageQueue.slice(0, maxShown); // Access global messageQueue from main script
+    const max = game.settings.get("hearme-chat-notification", "vnWaitingMaxShown");
+    const upcoming = internalQueue.slice(0, max);
 
-    const currentActorId = currentMessage ? getActorId(currentMessage) : null;
-    const desired = upcoming.map(msg => getActorId(msg));
+    const currentIds = upcoming.map(m => m.id);
+    const toRemove = waitingPortraits.filter(p => !currentIds.includes(p.messageId));
 
-    // Remove old
-    waitingPortraits = waitingPortraits.filter(port => {
-      if (!desired.includes(port.actorId)) {
-        port.imgEl.style.transform = "translateX(100%)";
-        port.imgEl.style.opacity = "0";
-        setTimeout(() => port.imgEl.remove(), 400);
-        return false;
-      }
-      return true;
+    // Animate out removed portraits
+    toRemove.forEach(port => {
+      port.imgEl.style.transform = "translateX(100%)";
+      port.imgEl.style.opacity = "0";
+      setTimeout(() => port.imgEl.remove(), 400);
     });
 
-    // Add new
+    waitingPortraits = waitingPortraits.filter(p => currentIds.includes(p.messageId));
+
+    // Add new ones
     upcoming.forEach((msg, index) => {
-      const actorId = getActorId(msg);
-      if (!waitingPortraits.find(p => p.actorId === actorId)) {
+      if (!waitingPortraits.find(p => p.messageId === msg.id)) {
         const img = document.createElement("img");
-        img.src = getTokenImage(msg);
+        img.src = getPortraitSrc(msg);
         img.style.opacity = "0";
         img.style.transform = "translateX(50%)";
         waitingBar.appendChild(img);
 
-        img.offsetHeight; // reflow
+        img.offsetHeight; // force reflow
         img.style.opacity = "1";
         img.style.transform = "translateX(0)";
 
-        waitingPortraits.push({
-          imgEl: img,
-          actorId: actorId,
-          isNext: index === 0
-        });
+        waitingPortraits.push({ imgEl: img, messageId: msg.id });
       }
     });
 
-    // Reorder DOM
+    // Reorder to match queue
     upcoming.forEach((msg, index) => {
-      const actorId = getActorId(msg);
-      const port = waitingPortraits.find(p => p.actorId === actorId);
+      const port = waitingPortraits.find(p => p.messageId === msg.id);
       if (port && waitingBar.children[index] !== port.imgEl) {
         waitingBar.insertBefore(port.imgEl, waitingBar.children[index] || null);
       }
     });
 
-    applyWaitingBarSettings();
-    updateVisibility();
+    applySettings();
   }
 
-  // Hook into the main script's variables directly (they are in scope!)
-  Hooks.on("vnBannerReady", () => {
-    // Wait until main script has initialized banner, queue, etc.
-    updateWaitingQueue();
+  // Listen to chat messages that would trigger the VN banner
+  Hooks.on("createChatMessage", (message) => {
+    if (!message.visible) return;
+    if (message.isRoll) return;
+    if (message.type === CONST.CHAT_MESSAGE_TYPES.WHISPER) return;
+    const content = message.content?.trim();
+    if (!content || content.startsWith("/ooc") || !message.speaker?.actor) return;
+
+    // Add to our internal queue
+    internalQueue.push(message);
+    rebuildWaitingBar();
   });
 
-  // Update whenever queue changes
-  Hooks.on("createChatMessage", () => updateWaitingQueue());
-  Hooks.on("vnBannerHidden", () => updateWaitingQueue()); // We'll add this hook below
+  // When the banner hides (auto or skip), advance the queue
+  // We detect this by watching when the VN banner disappears
+  const observer = new MutationObserver(() => {
+    const bannerEl = document.getElementById("vn-chat-banner");
+    if (bannerEl && bannerEl.style.display === "none" && currentMessageId && internalQueue.length > 0) {
+      // First in queue just finished
+      if (internalQueue[0]?.id === currentMessageId) {
+        internalQueue.shift();
+        currentMessageId = internalQueue[0]?.id || null;
+        rebuildWaitingBar();
+      }
+    } else if (bannerEl && bannerEl.style.display !== "none") {
+      // Banner appeared - mark current
+      const visibleMessages = internalQueue.filter(m => m.id); // all have id
+      if (visibleMessages.length > 0) {
+        currentMessageId = visibleMessages[0].id;
+      }
+    }
+  });
 
-  // Initial call
-  updateWaitingQueue();
+  // Start observing once the body is ready
+  observer.observe(document.body, { attributes: true, childList: true, subtree: true });
+
+  // Also rebuild on setting changes
+  Hooks.on("renderSettingsConfig", () => {
+    rebuildWaitingBar();
+  });
 });
