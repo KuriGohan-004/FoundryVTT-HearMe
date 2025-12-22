@@ -1,10 +1,7 @@
 // CharactersWaiting.js
-// Standalone Characters Waiting portrait bar with enhanced options
+// Fixed version - no more freezing!
 
 Hooks.once("init", () => {
-  // -----------------------------
-  // Visual separator
-  // -----------------------------
   game.settings.register("hearme-chat-notification", "waitingQueueSeparator", {
     name: "=== HearMe Waiting Queue ===",
     scope: "world",
@@ -104,9 +101,11 @@ Hooks.once("ready", () => {
   if (!game.settings.get("hearme-chat-notification", "vnEnabled")) return;
 
   let waitingBar = null;
-  let waitingPortraits = []; // { imgEl, messageId, isCurrent }
-  let internalQueue = [];    // Messages waiting to be shown
+  let waitingPortraits = [];
+  let internalQueue = [];
   let currentMessageId = null;
+  let bannerVisible = false; // Track banner state manually
+  let debounceTimer = null;
 
   function createWaitingBar() {
     if (waitingBar) return;
@@ -151,7 +150,6 @@ Hooks.once("ready", () => {
       port.imgEl.style.borderRadius = "50%";
       port.imgEl.style.objectFit = "cover";
       port.imgEl.style.transition = "all 0.4s ease";
-      // Removed boxShadow completely
 
       const isCurrentOrNext = port.isCurrent || index === (port.isCurrent ? 1 : 0);
       if (game.settings.get("hearme-chat-notification", "vnWaitingGrayscale")) {
@@ -195,9 +193,9 @@ Hooks.once("ready", () => {
 
     let displayList = [];
 
-    if (showCurrent && currentMessageId) {
-      const currentMsg = internalQueue.find(m => m.id === currentMessageId) || 
-                         (currentMessageId ? game.messages.get(currentMessageId) : null);
+    if (showCurrent && currentMessageId && bannerVisible) {
+      const currentMsg = internalQueue.find(m => m.id === currentMessageId) ||
+                         game.messages.get(currentMessageId);
       if (currentMsg) displayList.push({ msg: currentMsg, isCurrent: true });
     }
 
@@ -206,7 +204,6 @@ Hooks.once("ready", () => {
 
     const desiredIds = displayList.map(item => item.msg.id);
 
-    // Remove portraits no longer needed
     const toRemove = waitingPortraits.filter(p => !desiredIds.includes(p.messageId));
     toRemove.forEach(port => {
       const direction = game.settings.get("hearme-chat-notification", "vnWaitingMirrorQueue") ? "-100%" : "100%";
@@ -216,7 +213,6 @@ Hooks.once("ready", () => {
     });
     waitingPortraits = waitingPortraits.filter(p => desiredIds.includes(p.messageId));
 
-    // Add new ones
     displayList.forEach((item, index) => {
       if (!waitingPortraits.find(p => p.messageId === item.msg.id)) {
         const img = document.createElement("img");
@@ -226,7 +222,7 @@ Hooks.once("ready", () => {
         img.style.transform = `translateX(${slideFrom})`;
         waitingBar.appendChild(img);
 
-        img.offsetHeight; // reflow
+        img.offsetHeight;
         img.style.opacity = "1";
         img.style.transform = "translateX(0)";
 
@@ -238,7 +234,6 @@ Hooks.once("ready", () => {
       }
     });
 
-    // Reorder
     displayList.forEach((item, index) => {
       const port = waitingPortraits.find(p => p.messageId === item.msg.id);
       if (port && waitingBar.children[index] !== port.imgEl) {
@@ -249,7 +244,7 @@ Hooks.once("ready", () => {
     applySettings();
   }
 
-  // Listen for qualifying chat messages
+  // Queue new messages
   Hooks.on("createChatMessage", (message) => {
     if (!message.visible) return;
     if (message.isRoll) return;
@@ -258,31 +253,60 @@ Hooks.once("ready", () => {
     if (!content || content.startsWith("/ooc") || !message.speaker?.actor) return;
 
     internalQueue.push(message);
-    rebuildWaitingBar();
-  });
 
-  // Observe banner visibility to detect current message changes
-  const observer = new MutationObserver(() => {
-    const bannerEl = document.getElementById("vn-chat-banner");
-
-    if (bannerEl && bannerEl.style.display !== "none") {
-      // Banner is visible → current message is the first in queue (or was just advanced)
-      if (internalQueue.length > 0) {
-        currentMessageId = internalQueue[0].id;
-      }
-    } else if (bannerEl && bannerEl.style.display === "none") {
-      // Banner hidden → message finished, remove from queue
-      if (internalQueue.length > 0 && internalQueue[0].id === currentMessageId) {
-        internalQueue.shift();
-        currentMessageId = internalQueue[0]?.id || null;
-      }
+    // If banner is hidden, the next message should become current when shown
+    if (!bannerVisible && internalQueue.length === 1) {
+      currentMessageId = message.id;
     }
 
     rebuildWaitingBar();
   });
 
-  observer.observe(document.body, { attributes: true, childList: true, subtree: true });
+  // Efficient observation: only watch the banner element itself
+  function startBannerObserver() {
+    const bannerEl = document.getElementById("vn-chat-banner");
+    if (!bannerEl) {
+      // Banner not created yet - retry in a bit
+      setTimeout(startBannerObserver, 500);
+      return;
+    }
 
-  // Rebuild on any setting change
-  Hooks.on("renderSettingsConfig", rebuildWaitingBar);
+    const observer = new MutationObserver(() => {
+      const nowVisible = bannerEl.style.display !== "none";
+
+      if (nowVisible !== bannerVisible) {
+        bannerVisible = nowVisible;
+
+        if (bannerVisible && internalQueue.length > 0) {
+          // Banner just appeared
+          currentMessageId = internalQueue[0].id;
+        } else if (!bannerVisible && internalQueue.length > 0) {
+          // Banner just hidden - advance queue
+          internalQueue.shift();
+          currentMessageId = internalQueue[0]?.id || null;
+        }
+
+        // Debounce rebuild to avoid rapid calls
+        if (debounceTimer) clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(rebuildWaitingBar, 200);
+      }
+    });
+
+    observer.observe(bannerEl, {
+      attributes: true,
+      attributeFilter: ["style"]
+    });
+  }
+
+  // Start observing once everything is ready
+  startBannerObserver();
+
+  // Rebuild on setting changes
+  Hooks.on("renderSettingsConfig", () => {
+    if (debounceTimer) clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(rebuildWaitingBar, 100);
+  });
+
+  // Initial rebuild
+  rebuildWaitingBar();
 });
