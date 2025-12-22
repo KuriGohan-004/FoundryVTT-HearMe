@@ -303,16 +303,11 @@ game.settings.register("hearme-chat-notification", "vnNextIconAnimation", {
   },
   default: "bob"
 });
-  
-  
 });
 
 Hooks.once("ready", () => {
   if (!game.settings.get("hearme-chat-notification", "vnEnabled")) return;
-  window.vnQueueMessage = queueMessage;
-  window.vnProcessNextMessage = processNextMessage;
-  window.vnShowBanner = showBanner;
-  
+
   let banner, nameEl, msgEl, portrait, nextIcon;
   let hideTimeout = null;
   let typing = false;
@@ -376,6 +371,9 @@ Hooks.once("ready", () => {
 
     applyBannerSettings();
     window.addEventListener("resize", applyBannerSettings);
+
+    // Notify the waiting bar that the main banner is fully ready
+    Hooks.callAll("vnBannerReady");
   }
 
   function applyBannerSettings() {
@@ -460,14 +458,14 @@ Hooks.once("ready", () => {
     style.textContent = `
       @keyframes vnSpin {
         from { transform: rotate(0deg); }
-        to   { transform: rotate(360deg); }
+        to { transform: rotate(360deg); }
       }
       @keyframes vnBob {
         0%, 100% { transform: translateY(0); }
-        50%      { transform: translateY(-6px); }
+        50% { transform: translateY(-6px); }
       }
       .vn-next-spin { animation: vnSpin 2s linear infinite; }
-      .vn-next-bob  { animation: vnBob 1.6s ease-in-out infinite; }
+      .vn-next-bob { animation: vnBob 1.6s ease-in-out infinite; }
 
       /* Hide scrollbar but keep functionality */
       #vn-chat-banner::-webkit-scrollbar { display: none; }
@@ -512,7 +510,7 @@ Hooks.once("ready", () => {
     setTimeout(() => {
       banner.style.display = "none";
       currentMessage = null;
-      Hooks.callAll("vnBannerHidden"); // Notify waiting bar
+      Hooks.callAll("vnBannerHidden"); // Notify waiting bar that current message finished
       processNextMessage();
     }, 250);
   }
@@ -605,6 +603,7 @@ Hooks.once("ready", () => {
   // Chat hook
   // -----------------------------
   createBannerDom();
+
   Hooks.on("createChatMessage", (message) => {
     if (!message.visible) return;
     if (message.isRoll) return;
@@ -614,5 +613,3 @@ Hooks.once("ready", () => {
     queueMessage(message);
   });
 });
-
-
