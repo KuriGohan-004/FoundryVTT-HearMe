@@ -1,82 +1,155 @@
-let depthRefreshQueued = false;
+/**
+ * token-depth-and-collision.js
+ * Foundry VTT v13+
+ * - Optional: Auto-sort token z-order by Y position (depth sorting)
+ * - Optional: Prevent tokens from occupying the same grid spaces (full multi-grid support)
+ * - Both features independently toggleable in module settings
+ */
 
-function queueDepthRefresh() {
-  if (depthRefreshQueued) return;
-  depthRefreshQueued = true;
-
-  requestAnimationFrame(() => {
-    depthRefreshQueued = false;
-    updateAllTokenSorts();
+Hooks.once("init", () => {
+  // Toggle depth auto-sorting
+  game.settings.register("hearme-chat-notification", "tokenDepthSortingEnabled", {
+    name: "Enable Token Depth Auto-Sorting",
+    hint: "Tokens are automatically sorted in z-order based on their Y position (lower Y = drawn on top).",
+    scope: "world",
+    config: true,
+    type: Boolean,
+    default: true
   });
-}
 
-function updateAllTokenSorts() {
-  if (!canvas?.tokens) return;
+  // Toggle collision blocking
+  game.settings.register("hearme-chat-notification", "tokenCollisionBlockingEnabled", {
+    name: "Enable Token Collision Blocking",
+    hint: "Prevents tokens from moving onto grid spaces already occupied by another token at the same elevation. Works for any token size (1x1, 2x2, etc.).",
+    scope: "world",
+    config: true,
+    type: Boolean,
+    default: true
+  });
+});
 
-  for (const token of canvas.tokens.placeables) {
-    // Only update client-side sort if the user can't update the token
-    if (token.document.isOwner) {
-      token.document.update(
-        { sort: Math.round(token.y) },
-        { diff: false, silent: true }
-      );
-    } else {
-      // For players without permission, just set the internal _sort
-      token.document._sort = Math.round(token.y);
-    }
+Hooks.once("ready", () => {
+  console.log("token-depth-and-collision | Module loaded: optional depth sorting + optional full-size collision blocking");
+
+  let depthRefreshQueued = false;
+
+  function queueDepthRefresh() {
+    if (!game.settings.get("hearme-chat-notification", "tokenDepthSortingEnabled")) return;
+    if (depthRefreshQueued) return;
+    depthRefreshQueued = true;
+    requestAnimationFrame(() => {
+      depthRefreshQueued = false;
+      updateAllTokenSorts();
+    });
   }
 
-  canvas.tokens.placeables.sort((a, b) => (a.document.sort ?? a.document._sort) - (b.document.sort ?? b.document._sort));
-  canvas.tokens.refresh();
-}
+  function updateAllTokenSorts() {
+    if (!canvas?.tokens?.placeables) return;
 
-Hooks.on("canvasReady", () => {
-  updateAllTokenSorts();
-});
+    for (const token of canvas.tokens.placeables) {
+      const newSort = Math.round(token.y);
 
-Hooks.on("updateToken", (doc, change) => {
-  if (change.y === undefined) return;
-  queueDepthRefresh();
-});
+      // Only update if owned, otherwise just set local _sort
+      if (token.document.isOwner) {
+        token.document.update(
+          { sort: newSort },
+          { diff: false, silent: true, noHook: true } // noHook to prevent recursion
+        );
+      } else {
+        token.document._sort = newSort;
+      }
+    }
 
-Hooks.on("controlToken", () => {
-  queueDepthRefresh();
-});
+    // Sort placeables visually
+    canvas.tokens.placeables.sort((a, b) => {
+      const sortA = a.document.sort ?? a.document._sort ?? 0;
+      const sortB = b.document.sort ?? b.document._sort ?? 0;
+      return sortA - sortB;
+    });
 
-Hooks.on("releaseToken", () => {
-  queueDepthRefresh();
+    canvas.tokens.refresh();
+  }
+
+  // Initial sort on canvas ready
+  if (game.settings.get("hearme-chat-notification", "tokenDepthSortingEnabled")) {
+    Hooks.on("canvasReady", () => {
+      updateAllTokenSorts();
+    });
+  }
+
+  // Refresh depth on relevant changes
+  Hooks.on("updateToken", (doc, change) => {
+    if (change.y !== undefined) queueDepthRefresh();
+  });
+
+  Hooks.on("controlToken", queueDepthRefresh);
+  Hooks.on("releaseToken", queueDepthRefresh);
+
+  // Optional: refresh on movement end (drag complete)
+  Hooks.on("updateToken", (doc, change) => {
+    if (change.x !== undefined || change.y !== undefined) {
+      queueDepthRefresh();
+    }
+  });
 });
 
 /* -------------------------------------------- */
-/* Prevent tokens from occupying same grid + elevation */
+/* Prevent tokens from occupying same grid spaces (full size support) */
 /* -------------------------------------------- */
 
-Hooks.on("preUpdateToken", (doc, change, options, userId) => {
+Hooks.on("preUpdateToken", (tokenDoc, change, options, userId) => {
+  // Only run if collision blocking is enabled
+  if (!game.settings.get("hearme-chat-notification", "tokenCollisionBlockingEnabled")) return;
+
   if (change.x === undefined && change.y === undefined && change.elevation === undefined) {
-    return;
+    return; // No position change
   }
 
-  const gridSize = canvas.grid.size;
+  const grid = canvas.grid;
+  const gridSize = grid.size;
 
-  const newX = change.x ?? doc.x;
-  const newY = change.y ?? doc.y;
-  const newElevation = change.elevation ?? doc.elevation;
+  const newX = change.x ?? tokenDoc.x;
+  const newY = change.y ?? tokenDoc.y;
+  const newElevation = change.elevation ?? tokenDoc.elevation;
 
-  const newGridX = Math.round(newX / gridSize);
-  const newGridY = Math.round(newY / gridSize);
+  // Get width and height in grid units
+  const tokenWidth = tokenDoc.width;
+  const tokenHeight = tokenDoc.height;
 
-  for (const token of canvas.tokens.placeables) {
-    if (token.document.id === doc.id) continue;
+  // Calculate all grid positions the token will occupy after move
+  const occupiedGridPositions = new Set();
 
-    const otherGridX = Math.round(token.x / gridSize);
-    const otherGridY = Math.round(token.y / gridSize);
-
-    if (
-      otherGridX === newGridX &&
-      otherGridY === newGridY &&
-      token.document.elevation === newElevation
-    ) {
-      return false; // ❌ Cancel the move
+  for (let gx = 0; gx < tokenWidth; gx++) {
+    for (let gy = 0; gy < tokenHeight; gy++) {
+      const gridX = Math.round((newX + gx * gridSize) / gridSize);
+      const gridY = Math.round((newY + gy * gridSize) / gridSize);
+      occupiedGridPositions.add(`${gridX},${gridY}`);
     }
   }
+
+  // Check against all other tokens
+  for (const otherToken of canvas.tokens.placeables) {
+    if (otherToken.id === tokenDoc.id) continue; // Skip self
+    if (otherToken.document.elevation !== newElevation) continue; // Different elevation = allowed overlap
+
+    const otherWidth = otherToken.document.width;
+    const otherHeight = otherToken.document.height;
+
+    for (let gx = 0; gx < otherWidth; gx++) {
+      for (let gy = 0; gy < otherHeight; gy++) {
+        const otherGridX = Math.round((otherToken.x + gx * gridSize) / gridSize);
+        const otherGridY = Math.round((otherToken.y + gy * gridSize) / gridSize);
+        const key = `${otherGridX},${otherGridY}`;
+
+        if (occupiedGridPositions.has(key)) {
+          // Collision detected!
+          ui.notifications.warn("Cannot move there: space is occupied by another token.");
+          return false; // Cancel the update
+        }
+      }
+    }
+  }
+
+  // No collision → allow move
+  return true;
 });
