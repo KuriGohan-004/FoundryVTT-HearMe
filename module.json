@@ -19,7 +19,7 @@
     "scripts/vn-dialogue.js",
     "scripts/vn-chatsounds.js",
     "scripts/vn-boxchatter.js",
-    "scripts/youtube-audio-player.js",
+    "scripts/characterwaiting.js",
     "scripts/z-order.js"
   ],
   "url": "https://github.com/KuriGohan-004/FoundryVTT-HearMe",
@@ -44,5 +44,6 @@
     }
   ]
 }
+
 
 
