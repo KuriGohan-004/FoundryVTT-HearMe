@@ -1,19 +1,37 @@
-<form class="hearme-actor-sounds">
-  <p>Assign custom sounds to specific actors. The first matching actor in the list will be used.</p>
-  <ol class="actor-list">
-    {{#each entries}}
-    <li class="flexrow" data-index="{{@index}}">
-      <div class="actor-name">{{actorName}}</div>
-      <input type="hidden" name="{{@index}}.actorId" value="{{actorId}}">
-      <input type="text" name="{{@index}}.sound" value="{{sound}}" data-dtype="String" placeholder="Sound path" />
-      <a class="file-picker" data-type="audio" data-target="{{@index}}.sound" title="Browse Files"><i class="fas fa-file-audio"></i></a>
-      <button type="button" class="remove-entry" data-idx="{{@index}}"><i class="fas fa-trash"></i></button>
+<form class="hearme-actor-groups">
+  <p>Define groups of actors that share the same notification sound. Actors can belong to multiple groups — the <strong>highest group in the list</strong> wins. Actors not in any group use the default sound.</p>
+
+  <ol class="groups-list">
+    {{#each groups}}
+    <li class="group flexcol" data-idx="{{@index}}">
+      <div class="group-header flexrow">
+        <i class="fas fa-grip-lines drag-handle"></i>
+        <input type="text" name="{{@index}}.name" value="{{name}}" placeholder="Group Name" />
+        <input type="text" name="{{@index}}.sound" value="{{sound}}" placeholder="Sound path" />
+        <a class="file-picker" data-type="audio" data-target="{{@index}}.sound" title="Browse"><i class="fas fa-file-audio"></i></a>
+        <button type="button" class="remove-group" data-idx="{{@index}}"><i class="fas fa-trash"></i></button>
+      </div>
+
+      <div class="group-actors flexrow" style="flex-wrap: wrap; gap: 4px; margin-top: 4px;">
+        {{#each members}}
+        <span class="tag" data-actor-id="{{id}}">{{name}}</span>
+        {{/each}}
+      </div>
     </li>
     {{/each}}
   </ol>
 
+  <div class="available-actors">
+    <h3>Drag actors here to add them to a group</h3>
+    <div class="actor-pool">
+      {{#each allActors}}
+      <span class="tag draggable" data-actor-id="{{id}}">{{name}}</span>
+      {{/each}}
+    </div>
+  </div>
+
   <footer class="sheet-footer flexrow">
-    <button type="button" class="add-entry"><i class="fas fa-plus"></i> Add Actor</button>
+    <button type="button" class="add-group"><i class="fas fa-plus"></i> Add Group</button>
     <button type="submit"><i class="fas fa-save"></i> Save Changes</button>
   </footer>
 </form>
