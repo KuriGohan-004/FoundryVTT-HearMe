@@ -1,5 +1,5 @@
 Hooks.once("init", () => {
-  // Existing settings
+  // Existing settings...
   game.settings.register("hearme-chat-notification", "pingSound", {
     name: "Chat Notification Sound (Normal)",
     hint: "Sound file to play when a regular chat message appears.",
@@ -29,7 +29,6 @@ Hooks.once("init", () => {
     default: true
   });
 
-  // New setting: array of groups { name: string, sound: string, actorIds: array }
   game.settings.register("hearme-chat-notification", "actorGroups", {
     name: "Actor Notification Groups",
     scope: "world",
@@ -38,7 +37,6 @@ Hooks.once("init", () => {
     default: []
   });
 
-  // Menu button
   game.settings.registerMenu("hearme-chat-notification", "actorGroupsMenu", {
     name: "Configure Actor Notification Groups",
     label: "Open Configuration",
@@ -49,9 +47,6 @@ Hooks.once("init", () => {
   });
 });
 
-/* =========================================================
- * CONFIG FORM
- * =======================================================*/
 class ActorGroupsConfig extends FormApplication {
   static get defaultOptions() {
     return mergeObject(super.defaultOptions, {
@@ -69,18 +64,15 @@ class ActorGroupsConfig extends FormApplication {
     const groups = game.settings.get("hearme-chat-notification", "actorGroups") || [];
     const allActors = game.actors.map(a => ({ id: a.id, name: a.name }));
 
-    const enrichedGroups = groups.map(group => {
-      const members = group.actorIds.map(id => {
+    const enrichedGroups = groups.map(group => ({
+      name: group.name || "Unnamed Group",
+      sound: group.sound || "",
+      actorIds: group.actorIds || [],
+      members: (group.actorIds || []).map(id => {
         const actor = game.actors.get(id);
-        return actor ? { id, name: actor.name } : { id, name: `(Missing: ${id})` };
-      });
-      return {
-        name: group.name || "Unnamed Group",
-        sound: group.sound || "",
-        actorIds: group.actorIds,
-        members
-      };
-    });
+        return { id, name: actor ? actor.name : `(Missing: ${id})` };
+      })
+    }));
 
     return { groups: enrichedGroups, allActors };
   }
@@ -105,7 +97,18 @@ class ActorGroupsConfig extends FormApplication {
       this.render(true);
     });
 
-    // Make groups sortable
+    // Remove actor from group
+    html.find("button.remove-actor").click(async (ev) => {
+      const groupIdx = parseInt(ev.currentTarget.closest(".group").dataset.idx);
+      const actorId = ev.currentTarget.dataset.actorId;
+      const groups = game.settings.get("hearme-chat-notification", "actorGroups") || [];
+      const idx = groups[groupIdx].actorIds.indexOf(actorId);
+      if (idx > -1) groups[groupIdx].actorIds.splice(idx, 1);
+      await game.settings.set("hearme-chat-notification", "actorGroups", groups);
+      this.render(true);
+    });
+
+    // Reorder groups
     new Sortable(html.find("ol.groups-list")[0], {
       animation: 150,
       handle: ".group-header",
@@ -114,40 +117,45 @@ class ActorGroupsConfig extends FormApplication {
         const moved = groups.splice(ev.oldIndex, 1)[0];
         groups.splice(ev.newIndex, 0, moved);
         await game.settings.set("hearme-chat-notification", "actorGroups", groups);
+        this.render(true);
       }
     });
+  }
 
-    // Make actor list inside each group sortable and allow drag from available actors
-    html.find(".group-actors").each((i, el) => {
-      new Sortable(el, {
-        group: "actors",
-        animation: 150,
-        onAdd: async (ev) => {
-          const groupIdx = parseInt(ev.to.closest(".group").dataset.idx);
-          const actorId = ev.item.dataset.actorId;
-          const groups = game.settings.get("hearme-chat-notification", "actorGroups") || [];
-          if (!groups[groupIdx].actorIds.includes(actorId)) {
-            groups[groupIdx].actorIds.push(actorId);
-            await game.settings.set("hearme-chat-notification", "actorGroups", groups);
-          }
-          ev.item.remove(); // remove from source list
-        },
-        onSort: async (ev) => {
-          // Reorder within group if needed (optional)
-        }
-      });
-    });
+  async _onDrop(event) {
+    event.preventDefault();
+    let data;
+    try {
+      data = JSON.parse(event.dataTransfer.getData("text/plain"));
+    } catch (err) {
+      return;
+    }
+
+    if (data.type !== "Actor") return;
+
+    const groupEl = event.target.closest(".group");
+    if (!groupEl) return;
+
+    const groupIdx = parseInt(groupEl.dataset.idx);
+    const groups = game.settings.get("hearme-chat-notification", "actorGroups") || [];
+    const actorId = data.id;
+
+    if (!groups[groupIdx].actorIds.includes(actorId)) {
+      groups[groupIdx].actorIds.push(actorId);
+      await game.settings.set("hearme-chat-notification", "actorGroups", groups);
+      this.render(true);
+    }
   }
 
   async _updateObject(event, formData) {
     const expanded = expandObject(formData);
     const newGroups = [];
     for (const [key, data] of Object.entries(expanded)) {
-      if (data.name && data.name.trim()) {
+      if (data.name?.trim()) {
         newGroups.push({
           name: data.name.trim(),
           sound: data.sound || "",
-          actorIds: data.actorIds || []
+          actorIds: Array.isArray(data.actorIds) ? data.actorIds : []
         });
       }
     }
@@ -157,9 +165,7 @@ class ActorGroupsConfig extends FormApplication {
   }
 }
 
-/* =========================================================
- * SOUND LOGIC
- * =======================================================*/
+/* Sound logic and chat hook remain unchanged */
 function playChatSound(src) {
   if (!game.settings.get("hearme-chat-notification", "soundEnabled")) return;
   if (!src) return;
@@ -167,9 +173,6 @@ function playChatSound(src) {
   AudioHelper.play({ src, volume: 0.8, autoplay: true, loop: false }, true);
 }
 
-/* =========================================================
- * CHAT HOOK
- * =======================================================*/
 Hooks.on("createChatMessage", (message) => {
   if (!message.visible) return;
   if (message.isRoll) return;
@@ -185,10 +188,8 @@ Hooks.on("createChatMessage", (message) => {
   if (message.speaker?.actor) {
     const actorId = message.speaker.actor;
     const groups = game.settings.get("hearme-chat-notification", "actorGroups") || [];
-
-    // First group that contains this actor wins
     const matchingGroup = groups.find(g => g.actorIds.includes(actorId));
-    if (matchingGroup && matchingGroup.sound) {
+    if (matchingGroup?.sound) {
       soundSrc = matchingGroup.sound;
     }
   }
