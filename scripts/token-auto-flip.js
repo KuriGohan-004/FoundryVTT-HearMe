@@ -1,21 +1,32 @@
 /**
  * token-auto-flip.js
- * Foundry VTT v13
- * - Flips tokens to face movement direction
- * - NO automatic movement when flipping
- * - Only moves if already facing the intended direction
- * - Adds "face target" hotkey (T)
+ * Foundry VTT v13+
+ * - Flips tokens to face movement direction (A/D or arrows)
+ * - Optional: Press T to make selected tokens face mouse cursor (with toggle on same row)
+ * - Configurable in module settings
  */
 
+Hooks.once("init", () => {
+  // Module setting to enable/disable the "Face Target with T" feature
+  game.settings.register("hearme-chat-notification", "tokenFaceTargetEnabled", {
+    name: "Enable Token Face Target (T Key)",
+    hint: "When enabled, pressing T makes selected tokens face the mouse cursor. If mouse is on the same vertical line, it toggles facing direction.",
+    scope: "world",
+    config: true,
+    type: Boolean,
+    default: true
+  });
+});
+
 Hooks.once("ready", () => {
-  console.log("token-auto-flip | flip without movement active");
+  console.log("token-auto-flip | Module loaded: auto-flip on movement + optional face target (T)");
 
   const FLIP_SPEED = { animate: false, diff: false, render: false };
   const FACE_KEY = "KeyT";
+  const VERTICAL_TOLERANCE = 20; // pixels – how close Y must be to count as "same row"
 
-  // --- Keyboard movement interception
+  // --- Auto-flip on horizontal movement (A/D or ArrowLeft/Right) ---
   window.addEventListener("keydown", async (event) => {
-    // Ignore if typing in chat/input
     const active = document.activeElement;
     if (active && (active.tagName === "INPUT" || active.tagName === "TEXTAREA" || active.isContentEditable)) return;
 
@@ -23,42 +34,43 @@ Hooks.once("ready", () => {
     if (!controlled?.length) return;
 
     const moveRightKeys = ["ArrowRight", "KeyD"];
-    const moveLeftKeys  = ["ArrowLeft", "KeyA"];
+    const moveLeftKeys = ["ArrowLeft", "KeyA"];
 
-    let wantMoveRight = moveRightKeys.includes(event.code);
-    let wantMoveLeft  = moveLeftKeys.includes(event.code);
+    const wantMoveRight = moveRightKeys.includes(event.code);
+    const wantMoveLeft = moveLeftKeys.includes(event.code);
 
-    // If key is not horizontal movement, ignore
     if (!wantMoveRight && !wantMoveLeft) return;
+
+    let flippedAny = false;
 
     for (const token of controlled) {
       const tokenDoc = token.document;
       const currentScaleX = tokenDoc.texture.scaleX ?? 1;
+      const facingRight = currentScaleX < 0; // negative scaleX = facing right (mirrored)
 
-      const facingRight = currentScaleX < 0;
-      const facingLeft  = currentScaleX > 0;
-
-      // Determine if flip is needed
       let needFlip = false;
-      if (wantMoveRight && facingLeft) needFlip = true;
-      if (wantMoveLeft && facingRight) needFlip = true;
+      if (wantMoveRight && currentScaleX > 0) needFlip = true;  // facing left, want right
+      if (wantMoveLeft && currentScaleX < 0) needFlip = true;   // facing right, want left
 
       if (needFlip) {
-        // Flip token
         const targetScaleX = wantMoveRight ? -Math.abs(currentScaleX) : Math.abs(currentScaleX);
         await tokenDoc.update({ "texture.scaleX": targetScaleX }, FLIP_SPEED);
-
-        // Prevent default movement
-        event.preventDefault();
-        event.stopImmediatePropagation();
-        return; // Only flip once
+        flippedAny = true;
       }
     }
-  }, true); // use capture phase to intercept before Foundry
 
-  // --- Face target hotkey
+    if (flippedAny) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+    }
+  }, true); // Capture phase to intercept before Foundry's movement
+
+  // --- Face Target Hotkey (T) ---
   window.addEventListener("keydown", async (event) => {
     if (event.code !== FACE_KEY) return;
+
+    // Check if feature is enabled
+    if (!game.settings.get("hearme-chat-notification", "tokenFaceTargetEnabled")) return;
 
     const active = document.activeElement;
     if (active && (active.tagName === "INPUT" || active.tagName === "TEXTAREA" || active.isContentEditable)) return;
@@ -66,20 +78,36 @@ Hooks.once("ready", () => {
     const controlled = canvas.tokens.controlled;
     if (!controlled?.length) return;
 
-    const mouse = canvas.app.renderer.plugins.interaction.mouse.getLocalPosition(canvas.tokens);
+    // Use reliable canvas.mousePosition (in stage coordinates)
+    const mouse = canvas.mousePosition;
     if (!mouse) return;
 
     for (const token of controlled) {
-      const centerX = token.center.x;
+      const center = token.center;
       const tokenDoc = token.document;
       const currentScaleX = tokenDoc.texture.scaleX ?? 1;
+      const currentlyFacingRight = currentScaleX < 0;
+
       let targetScaleX = currentScaleX;
 
-      if (mouse.x > centerX) targetScaleX = -Math.abs(currentScaleX);
-      else if (mouse.x < centerX) targetScaleX = Math.abs(currentScaleX);
+      const deltaX = mouse.x - center.x;
+      const deltaY = Math.abs(mouse.y - center.y);
 
-      if (targetScaleX !== currentScaleX)
+      if (deltaY <= VERTICAL_TOLERANCE) {
+        // Mouse is roughly on the same vertical line → toggle direction
+        targetScaleX = currentlyFacingRight ? Math.abs(currentScaleX) : -Math.abs(currentScaleX);
+      } else if (deltaX > 0) {
+        // Mouse to the right → face right
+        targetScaleX = -Math.abs(currentScaleX);
+      } else if (deltaX < 0) {
+        // Mouse to the left → face left
+        targetScaleX = Math.abs(currentScaleX);
+      }
+      // Else: exactly on center X and outside Y tolerance → no change
+
+      if (targetScaleX !== currentScaleX) {
         await tokenDoc.update({ "texture.scaleX": targetScaleX }, FLIP_SPEED);
+      }
     }
   });
 });
