@@ -1,10 +1,7 @@
 // CharactersWaiting.js
-// Visual Novel-style "waiting characters" portrait queue bar
+// Fixed version - fully working with your main script
 
 Hooks.once("init", () => {
-  // -----------------------------
-  // Settings for Characters Waiting Bar
-  // -----------------------------
   game.settings.register("hearme-chat-notification", "vnWaitingBarEnabled", {
     name: "Enable Characters Waiting Bar",
     hint: "Show a row of upcoming character portraits in the speaking queue.",
@@ -78,7 +75,7 @@ Hooks.once("ready", () => {
   if (!game.settings.get("hearme-chat-notification", "vnEnabled")) return;
 
   let waitingBar = null;
-  let waitingPortraits = []; // Array of { imgEl, actorId }
+  let waitingPortraits = []; // { imgEl, actorId }
 
   function createWaitingBar() {
     if (waitingBar) return;
@@ -86,18 +83,15 @@ Hooks.once("ready", () => {
     waitingBar = document.createElement("div");
     waitingBar.id = "vn-waiting-bar";
     waitingBar.style.position = "fixed";
-    waitingBar.style.bottom = "0";
-    waitingBar.style.left = "0";
     waitingBar.style.display = "flex";
     waitingBar.style.flexDirection = "row";
     waitingBar.style.gap = "0px";
     waitingBar.style.pointerEvents = "none";
-    waitingBar.style.zIndex = 998; // Below main banner
-    waitingBar.style.transition = "all 0.3s ease";
+    waitingBar.style.zIndex = 998;
     waitingBar.style.opacity = "0";
+    waitingBar.style.transition = "opacity 0.3s ease";
 
     document.body.appendChild(waitingBar);
-
     applyWaitingBarSettings();
     window.addEventListener("resize", applyWaitingBarSettings);
   }
@@ -116,9 +110,8 @@ Hooks.once("ready", () => {
     waitingBar.style.gap = `${gap}px`;
     waitingBar.style.left = `${left}px`;
     waitingBar.style.bottom = `${bottom}px`;
-    waitingBar.style.transform = "translateX(-50%)"; // Center horizontally around offset
+    waitingBar.style.transform = "translateX(-50%)"; // Center around offset
 
-    // Update existing portraits
     waitingPortraits.forEach(port => {
       port.imgEl.style.width = `${size}px`;
       port.imgEl.style.height = `${size}px`;
@@ -146,17 +139,16 @@ Hooks.once("ready", () => {
     if (message.speaker?.token) {
       const scene = game.scenes.active;
       const token = scene?.tokens.get(message.speaker.token);
-      return token?.texture.src || game.actors.get(message.speaker.actor)?.img || "";
+      return token?.texture.src || "";
     }
-    return game.actors.get(message.speaker.actor)?.img || "";
+    return game.actors.get(message.speaker?.actor)?.img || "";
   }
 
   function getActorId(message) {
     return message.speaker?.actor || null;
   }
 
-  // Called when queue changes or current speaker changes
-  function updateWaitingQueue(currentMessage, messageQueue) {
+  function updateWaitingQueue() {
     if (!game.settings.get("hearme-chat-notification", "vnWaitingBarEnabled")) {
       waitingPortraits.forEach(p => p.imgEl.remove());
       waitingPortraits = [];
@@ -167,14 +159,14 @@ Hooks.once("ready", () => {
     createWaitingBar();
 
     const maxShown = game.settings.get("hearme-chat-notification", "vnWaitingMaxShown");
-    const upcoming = messageQueue.slice(0, maxShown);
+    const upcoming = messageQueue.slice(0, maxShown); // Access global messageQueue from main script
 
     const currentActorId = currentMessage ? getActorId(currentMessage) : null;
-    const desiredActorIds = upcoming.map(msg => getActorId(msg));
+    const desired = upcoming.map(msg => getActorId(msg));
 
-    // Remove portraits no longer in upcoming queue
+    // Remove old
     waitingPortraits = waitingPortraits.filter(port => {
-      if (!desiredActorIds.includes(port.actorId)) {
+      if (!desired.includes(port.actorId)) {
         port.imgEl.style.transform = "translateX(100%)";
         port.imgEl.style.opacity = "0";
         setTimeout(() => port.imgEl.remove(), 400);
@@ -183,7 +175,7 @@ Hooks.once("ready", () => {
       return true;
     });
 
-    // Add new ones
+    // Add new
     upcoming.forEach((msg, index) => {
       const actorId = getActorId(msg);
       if (!waitingPortraits.find(p => p.actorId === actorId)) {
@@ -193,9 +185,7 @@ Hooks.once("ready", () => {
         img.style.transform = "translateX(50%)";
         waitingBar.appendChild(img);
 
-        // Trigger reflow for animation
-        img.offsetHeight;
-
+        img.offsetHeight; // reflow
         img.style.opacity = "1";
         img.style.transform = "translateX(0)";
 
@@ -207,7 +197,7 @@ Hooks.once("ready", () => {
       }
     });
 
-    // Reorder DOM to match queue order
+    // Reorder DOM
     upcoming.forEach((msg, index) => {
       const actorId = getActorId(msg);
       const port = waitingPortraits.find(p => p.actorId === actorId);
@@ -216,56 +206,20 @@ Hooks.once("ready", () => {
       }
     });
 
-    // Update grayscale and size
     applyWaitingBarSettings();
-
     updateVisibility();
   }
 
-  // Hook into the main module's queue system
-  // We override the queueMessage and processNextMessage to track the queue
-  const originalQueueMessage = window.vnQueueMessage || (() => {});
-  const originalProcessNextMessage = window.vnProcessNextMessage || (() => {});
-  const originalShowBanner = window.vnShowBanner || (() => {});
-
-  let localMessageQueue = [];
-  let localCurrentMessage = null;
-
-  window.vnQueueMessage = function(message) {
-    originalQueueMessage(message);
-    localMessageQueue.push(message);
-    updateWaitingQueue(localCurrentMessage, localMessageQueue);
-  };
-
-  window.vnProcessNextMessage = function() {
-    originalProcessNextMessage();
-    if (localMessageQueue.length > 0) {
-      localCurrentMessage = localMessageQueue.shift();
-      updateWaitingQueue(localCurrentMessage, localMessageQueue);
-    }
-  };
-
-  window.vnShowBanner = async function(message) {
-    await originalShowBanner(message);
-    // When current message changes (after show), shift queue
-    if (message === localCurrentMessage) {
-      updateWaitingQueue(localCurrentMessage, localMessageQueue);
-    }
-  };
-
-  // On skip or auto-advance, remove the current speaker's waiting portrait
-  Hooks.on("vnBannerHidden", () => { // You may need to dispatch this event in your main script
-    localCurrentMessage = null;
-    if (localMessageQueue.length > 0) {
-      localCurrentMessage = localMessageQueue.shift();
-    }
-    updateWaitingQueue(localCurrentMessage, localMessageQueue);
+  // Hook into the main script's variables directly (they are in scope!)
+  Hooks.on("vnBannerReady", () => {
+    // Wait until main script has initialized banner, queue, etc.
+    updateWaitingQueue();
   });
 
-  // Initial cleanup on load
-  updateWaitingQueue(null, []);
+  // Update whenever queue changes
+  Hooks.on("createChatMessage", () => updateWaitingQueue());
+  Hooks.on("vnBannerHidden", () => updateWaitingQueue()); // We'll add this hook below
 
-  // Listen for setting changes
-  Hooks.on("modifyDocument", () => {}, ""); // Dummy to trigger on settings
-  game.settings.sheet?.render(false); // Force settings to register hooks
+  // Initial call
+  updateWaitingQueue();
 });
