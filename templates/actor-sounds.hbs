@@ -1,0 +1,19 @@
+<form class="hearme-actor-sounds">
+  <p>Assign custom sounds to specific actors. The first matching actor in the list will be used.</p>
+  <ol class="actor-list">
+    {{#each entries}}
+    <li class="flexrow" data-index="{{@index}}">
+      <div class="actor-name">{{actorName}}</div>
+      <input type="hidden" name="{{@index}}.actorId" value="{{actorId}}">
+      <input type="text" name="{{@index}}.sound" value="{{sound}}" data-dtype="String" placeholder="Sound path" />
+      <a class="file-picker" data-type="audio" data-target="{{@index}}.sound" title="Browse Files"><i class="fas fa-file-audio"></i></a>
+      <button type="button" class="remove-entry" data-idx="{{@index}}"><i class="fas fa-trash"></i></button>
+    </li>
+    {{/each}}
+  </ol>
+
+  <footer class="sheet-footer flexrow">
+    <button type="button" class="add-entry"><i class="fas fa-plus"></i> Add Actor</button>
+    <button type="submit"><i class="fas fa-save"></i> Save Changes</button>
+  </footer>
+</form>
