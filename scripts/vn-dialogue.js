@@ -13,6 +13,7 @@ Hooks.once("init", () => {
 
   // -----------------------------
   // Core enable
+  // Checker Edits
   // -----------------------------
   game.settings.register("hearme-chat-notification", "vnEnabled", {
     name: "Enable VN Chat Banner",
@@ -585,3 +586,4 @@ Hooks.once("ready", () => {
     queueMessage(message);
   });
 });
+
