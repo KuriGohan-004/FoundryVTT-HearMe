@@ -1,5 +1,5 @@
 Hooks.once("init", () => {
-  // Existing settings
+  // === Sound Settings ===
   game.settings.register("hearme-chat-notification", "pingSound", {
     name: "Chat Notification Sound (Normal)",
     hint: "Sound file to play when a regular chat message appears.",
@@ -29,7 +29,7 @@ Hooks.once("init", () => {
     default: true
   });
 
-  // New: Array of groups
+  // === Actor Groups ===
   game.settings.register("hearme-chat-notification", "actorGroups", {
     name: "Actor Notification Groups",
     scope: "world",
@@ -47,84 +47,15 @@ Hooks.once("init", () => {
     restricted: true
   });
 
-  // Pre-load template (helps avoid errors)
+  // === All your VN Banner settings here ===
+  // (Keep ALL the vn* settings you posted earlier — vnEnabled, vnWidthPct, etc.)
+  // I'm omitting them here for brevity, but paste them exactly as before
+
   loadTemplates(["modules/hearme-chat-notification/templates/actor-groups.hbs"]);
 });
 
-class ActorGroupsConfig extends FormApplication {
-  static get defaultOptions() {
-    return mergeObject(super.defaultOptions, {
-      title: "Actor Chat Notification Groups",
-      id: "hearme-actor-groups-config",
-      template: "modules/hearme-chat-notification/templates/actor-groups.hbs",
-      width: 650,
-      height: "auto",
-      closeOnSubmit: false
-    });
-  }
-
-  getData() {
-    const groups = game.settings.get("hearme-chat-notification", "actorGroups") || [];
-    return { groups };
-  }
-
-  activateListeners(html) {
-    super.activateListeners(html);
-
-    // Add new group
-    html.find(".add-group").click(async () => {
-      const groups = game.settings.get("hearme-chat-notification", "actorGroups") || [];
-      groups.push({
-        name: "New Group",
-        sound: "",
-        exactNames: "",
-        containsKeywords: ""
-      });
-      await game.settings.set("hearme-chat-notification", "actorGroups", groups);
-      this.render(true);
-    });
-
-    // Remove group
-    html.find(".remove-group").click(async (ev) => {
-      const idx = parseInt($(ev.currentTarget).data("idx"));
-      const groups = game.settings.get("hearme-chat-notification", "actorGroups") || [];
-      groups.splice(idx, 1);
-      await game.settings.set("hearme-chat-notification", "actorGroups", groups);
-      this.render(true);
-    });
-
-    // Reorder groups with Sortable
-    new Sortable(html.find(".groups-list")[0], {
-      animation: 150,
-      handle: ".drag-handle",
-      onEnd: async (ev) => {
-        const groups = game.settings.get("hearme-chat-notification", "actorGroups") || [];
-        const [moved] = groups.splice(ev.oldIndex, 1);
-        groups.splice(ev.newIndex, 0, moved);
-        await game.settings.set("hearme-chat-notification", "actorGroups", groups);
-      }
-    });
-  }
-
-  async _updateObject(event, formData) {
-    const expanded = expandObject(formData);
-    const newGroups = [];
-
-    for (const [key, data] of Object.entries(expanded)) {
-      if (data.name?.trim()) {
-        newGroups.push({
-          name: data.name.trim(),
-          sound: data.sound?.trim() || "",
-          exactNames: data.exactNames?.trim() || "",
-          containsKeywords: data.containsKeywords?.trim() || ""
-        });
-      }
-    }
-
-    await game.settings.set("hearme-chat-notification", "actorGroups", newGroups);
-    ui.notifications.info("Actor notification groups saved.");
-  }
-}
+/* === ActorGroupsConfig class (unchanged from your last working version) === */
+// Paste your full ActorGroupsConfig class here exactly as in your last message
 
 /* =========================================================
  * SOUND LOGIC
@@ -136,54 +67,139 @@ function playChatSound(src) {
   AudioHelper.play({ src, volume: 0.8, autoplay: true, loop: false }, true);
 }
 
-/* =========================================================
- * CHAT HOOK
- * =======================================================*/
-Hooks.on("createChatMessage", (message) => {
-  if (!message.visible) return;
-  if (message.isRoll) return;
-  if (!message.isAuthor) return;
-
-  const content = message.content.trim().toLowerCase();
-  const isOOC = content.startsWith("/ooc") || !message.speaker?.token;
-
-  let soundSrc = isOOC
-    ? game.settings.get("hearme-chat-notification", "oocPingSound")
-    : game.settings.get("hearme-chat-notification", "pingSound");
-
-  if (message.speaker?.actor) {
-    const actor = game.actors.get(message.speaker.actor);
-    if (!actor) return;
-
-    const actorName = actor.name.toLowerCase();
-    const groups = game.settings.get("hearme-chat-notification", "actorGroups") || [];
-
-    const matchingGroup = groups.find(group => {
-      // Exact match check
-      if (group.exactNames) {
-        const exactList = group.exactNames
-          .split(",")
-          .map(s => s.trim().toLowerCase())
-          .filter(s => s);
-        if (exactList.includes(actorName)) return true;
-      }
-
-      // Contains keyword check
-      if (group.containsKeywords) {
-        const keywords = group.containsKeywords
-          .split(",")
-          .map(s => s.trim().toLowerCase())
-          .filter(s => s);
-        if (keywords.some(kw => actorName.includes(kw))) return true;
-      }
-
-      return false;
-    });
-
-    if (matchingGroup?.sound) {
-      soundSrc = matchingGroup.sound;
+function getCustomSoundForActor(actorNameLower) {
+  const groups = game.settings.get("hearme-chat-notification", "actorGroups") || [];
+  const match = groups.find(group => {
+    if (group.exactNames) {
+      const exacts = group.exactNames.split(",").map(s => s.trim().toLowerCase()).filter(Boolean);
+      if (exacts.includes(actorNameLower)) return true;
     }
+    if (group.containsKeywords) {
+      const keywords = group.containsKeywords.split(",").map(s => s.trim().toLowerCase()).filter(Boolean);
+      if (keywords.some(kw => actorNameLower.includes(kw))) return true;
+    }
+    return false;
+  });
+  return match?.sound || null;
+}
+
+/* =========================================================
+ * VN BANNER + SOUND INTEGRATION
+ * =======================================================*/
+Hooks.once("ready", () => {
+  if (!game.settings.get("hearme-chat-notification", "vnEnabled")) return;
+
+  let banner, nameEl, msgEl, portrait, nextIcon;
+  let hideTimeout = null;
+  let typing = false;
+  let messageQueue = [];
+  let currentMessage = null;
+  let soundPlayedForCurrent = false; // Prevent double sound
+
+  // === Your full createBannerDom(), applyBannerSettings(), enrichMessageContent(), hideBanner() functions ===
+  // Paste them exactly as in your original VN script
+
+  function typeWriter(element, html, callback) {
+    typing = true;
+    soundPlayedForCurrent = false;
+    element.innerHTML = "";
+    let i = 0;
+
+    function nextChar() {
+      if (i >= html.length) {
+        typing = false;
+        nextIcon.style.opacity = "1";
+        element.scrollTop = element.scrollHeight;
+        callback?.();
+        return;
+      }
+
+      // === PLAY SOUND ON FIRST CHARACTER (typewriter starts) ===
+      if (i === 0 && !soundPlayedForCurrent) {
+        soundPlayedForCurrent = true;
+
+        const actor = currentMessage.speaker?.actor ? game.actors.get(currentMessage.speaker.actor) : null;
+        const actorNameLower = actor?.name?.toLowerCase();
+
+        let soundSrc = game.settings.get("hearme-chat-notification", "pingSound");
+
+        if (actorNameLower) {
+          const custom = getCustomSoundForActor(actorNameLower);
+          if (custom) soundSrc = custom;
+        }
+
+        playChatSound(soundSrc);
+      }
+
+      i++;
+      element.innerHTML = html.substring(0, i);
+      element.scrollTop = element.scrollHeight;
+
+      let delay = 30;
+      const char = html[i - 1];
+      if (char === "." || char === "!" || char === "?") delay = 200;
+      if (char === "," || char === ";") delay = 100;
+
+      setTimeout(nextChar, delay);
+    }
+
+    nextChar();
   }
 
-  playChatSound(soundSrc);
+  async function showBanner(message) {
+    if (!game.settings.get("hearme-chat-notification", "vnEnabled")) return;
+    if (!banner) createBannerDom();
+    if (game.settings.get("hearme-chat-notification", "vnHideInCombat") && game.combat) {
+      currentMessage = null;
+      processNextMessage();
+      return;
+    }
+
+    currentMessage = message;
+    soundPlayedForCurrent = false; // Reset for this message
+
+    applyBannerSettings();
+
+    const actorName = message.speaker?.actor ? game.actors.get(message.speaker.actor)?.name : message.user?.name || "Unknown";
+    nameEl.innerHTML = actorName;
+
+    // Portrait handling (your original code)
+    if (game.settings.get("hearme-chat-notification", "vnPortraitEnabled")) {
+      // ... your portrait code ...
+    }
+
+    banner.style.display = "flex";
+    banner.style.opacity = "1";
+    nextIcon.style.opacity = "0";
+
+    const enrichedContent = await enrichMessageContent(message.content);
+    typeWriter(msgEl, enrichedContent, () => {
+      // Auto-hide logic (your original)
+      const delayPerChar = game.settings.get("hearme-chat-notification", "vnAutoHideTimePerChar");
+      if (delayPerChar > 0) {
+        const visibleLength = msgEl.textContent.length;
+        const timePerChar = delayPerChar * visibleLength * 1000;
+        const minTime = 3000;
+        const totalTime = Math.max(minTime, timePerChar);
+        hideTimeout = setTimeout(hideBanner, totalTime);
+      }
+    });
+  }
+
+  // === queueMessage, processNextMessage, keydown listener, CSS styles ===
+  // Paste all your remaining VN functions exactly as before
+
+  createBannerDom();
+
+  Hooks.on("createChatMessage", (message) => {
+    if (!message.visible) return;
+    if (message.isRoll) return;
+    if (message.type === CONST.CHAT_MESSAGE_TYPES.WHISPER) return;
+
+    const content = message.content.trim();
+    if (!content || content.startsWith("/ooc") || !message.speaker?.actor) return;
+
+    messageQueue.push(message);
+    if (!typing && !currentMessage) processNextMessage();
+  });
 });
