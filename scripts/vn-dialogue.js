@@ -277,7 +277,6 @@ Hooks.once("init", () => {
     default: "bob"
   });
 });
-
 Hooks.once("ready", () => {
   if (!game.settings.get("hearme-chat-notification", "vnEnabled")) return;
   let banner, nameEl, msgEl, portrait, nextIcon;
@@ -381,15 +380,22 @@ Hooks.once("ready", () => {
     } else if (anim === "bob") {
       nextIcon.classList.add("vn-next-bob");
     }
+    // === PORTRAIT SETTINGS - FIXED TO PRESERVE ASPECT RATIO ===
     if (game.settings.get("hearme-chat-notification", "vnPortraitEnabled")) {
       portrait.style.display = "block";
       const size = game.settings.get("hearme-chat-notification", "vnPortraitSizePct") / 100 * vw;
       const left = game.settings.get("hearme-chat-notification", "vnPortraitOffsetXPct") / 100 * vw;
       const bottom = game.settings.get("hearme-chat-notification", "vnPortraitOffsetYPct") / 100 * vh;
-      portrait.style.width = portrait.style.height = size + "px";
+
+      portrait.style.width = size + "px";
+      portrait.style.height = "auto";                // Preserve original aspect ratio
+      portrait.style.maxHeight = (vh * 0.8) + "px";   // Prevent overflow on tall images
+      portrait.style.objectFit = "contain";          // Ensure full image is visible
       portrait.style.left = left + "px";
       portrait.style.bottom = bottom + "px";
-    } else portrait.style.display = "none";
+    } else {
+      portrait.style.display = "none";
+    }
     // Padding and margin
     nameEl.style.paddingTop = `${game.settings.get("hearme-chat-notification", "vnNamePaddingTop")}px`;
     nameEl.style.marginLeft = `${game.settings.get("hearme-chat-notification", "vnNameMarginLeft")}px`;
@@ -430,7 +436,6 @@ Hooks.once("ready", () => {
   async function enrichMessageContent(content) {
     return await TextEditor.enrichHTML(content, { async: true });
   }
-
   /* =========================================================
    * MODIFIED TYPEWRITER — Sound plays when typing starts
    * ========================================================= */
@@ -439,7 +444,6 @@ Hooks.once("ready", () => {
     element.innerHTML = "";
     let i = 0;
     let soundPlayed = false;
-
     function nextChar() {
       if (i >= html.length) {
         typing = false;
@@ -448,17 +452,13 @@ Hooks.once("ready", () => {
         callback?.();
         return;
       }
-
       // Play sound on the very first character
       if (i === 0 && !soundPlayed) {
         soundPlayed = true;
-
         const actorId = currentMessage.speaker?.actor;
         const actor = actorId ? game.actors.get(actorId) : null;
         const actorNameLower = actor?.name?.toLowerCase();
-
         let soundSrc = game.settings.get("hearme-chat-notification", "pingSound");
-
         if (actorNameLower) {
           const groups = game.settings.get("hearme-chat-notification", "actorGroups") || [];
           const matchingGroup = groups.find(group => {
@@ -476,7 +476,6 @@ Hooks.once("ready", () => {
             soundSrc = matchingGroup.sound;
           }
         }
-
         if (game.settings.get("hearme-chat-notification", "soundEnabled") && soundSrc) {
           if (game.audio?.context?.state === "suspended") game.audio.context.resume();
           AudioHelper.play({
@@ -487,22 +486,17 @@ Hooks.once("ready", () => {
           }, true);
         }
       }
-
       i++;
       element.innerHTML = html.substring(0, i);
       element.scrollTop = element.scrollHeight;
-
       let delay = 30;
       const char = html[i - 1];
       if (char === "." || char === "!" || char === "?") delay = 200;
       if (char === "," || char === ";") delay = 100;
-
       setTimeout(nextChar, delay);
     }
-
     nextChar();
   }
-
   function hideBanner() {
     if (!banner) return;
     banner.style.opacity = "0";
